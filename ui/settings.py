@@ -25,10 +25,8 @@ class SettingsPage(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setStyleSheet("QScrollArea { background-color: #F6F6F2; }")
         inner = QWidget()
         inner.setObjectName("pageInner")
-        inner.setStyleSheet("QWidget#pageInner { background-color: #F6F6F2; }")
         lay = QVBoxLayout(inner)
         lay.setSpacing(20)
         lay.setContentsMargins(28, 28, 28, 28)
@@ -41,35 +39,24 @@ class SettingsPage(QWidget):
         shadow.setBlurRadius(20); shadow.setOffset(0, 4)
         shadow.setColor(QColor(0, 0, 0, 15))
         banner.setGraphicsEffect(shadow)
-        banner.setStyleSheet(
-            "QFrame#pageBanner { background: qlineargradient("
-            "x1:0, y1:0, x2:1, y2:0,"
-            "stop:0 #388087, stop:1 #6FB3B8);"
-            "border-radius: 12px; }"
-        )
         banner_lay = QHBoxLayout(banner)
         banner_lay.setContentsMargins(32, 20, 32, 20)
         title_col = QVBoxLayout()
         title_col.setSpacing(4)
         title = QLabel("Settings")
-        title.setStyleSheet("font-size: 22px; font-weight: bold; color: #FFFFFF; background: transparent;")
+        title.setObjectName("bannerTitle")
         sub = QLabel("Database maintenance and cleanup tools")
-        sub.setStyleSheet("font-size: 13px; color: rgba(255,255,255,0.8); background: transparent;")
+        sub.setObjectName("bannerSubtitle")
         title_col.addWidget(title)
         title_col.addWidget(sub)
         banner_lay.addLayout(title_col)
         banner_lay.addStretch()
 
         refresh_btn = QPushButton("\u21BB  Refresh")
+        refresh_btn.setObjectName("bannerBtn")
         refresh_btn.setMinimumHeight(42)
         refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         refresh_btn.clicked.connect(self._refresh_counts)
-        refresh_btn.setStyleSheet(
-            "QPushButton { background: rgba(255,255,255,0.2); color: #FFFFFF;"
-            "border: 1px solid rgba(255,255,255,0.4); border-radius: 8px;"
-            "padding: 8px 18px; font-size: 13px; font-weight: bold; }"
-            "QPushButton:hover { background: rgba(255,255,255,0.35); }"
-        )
         banner_lay.addWidget(refresh_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
         lay.addWidget(banner)
 
@@ -97,7 +84,7 @@ class SettingsPage(QWidget):
         c1.setContentsMargins(20, 16, 20, 16)
         c1.setSpacing(12)
         lbl1 = QLabel("Remove completed appointments before:")
-        lbl1.setStyleSheet("color: #2C3E50; font-size: 13px;")
+        lbl1.setObjectName("cleanupLabel")
         c1.addWidget(lbl1)
         self.cutoff_date = QDateEdit()
         self.cutoff_date.setCalendarPopup(True)
@@ -116,7 +103,7 @@ class SettingsPage(QWidget):
         c2.setContentsMargins(20, 16, 20, 16)
         c2.setSpacing(12)
         lbl2 = QLabel("Remove all cancelled appointments and linked records")
-        lbl2.setStyleSheet("color: #2C3E50; font-size: 13px;")
+        lbl2.setObjectName("cleanupLabel")
         c2.addWidget(lbl2, 1)
         btn2 = self._action_btn("Clean Up")
         btn2.clicked.connect(self._cleanup_cancelled)
@@ -129,7 +116,7 @@ class SettingsPage(QWidget):
         c3.setContentsMargins(20, 16, 20, 16)
         c3.setSpacing(12)
         lbl3 = QLabel("Remove inactive patients and all their linked data")
-        lbl3.setStyleSheet("color: #2C3E50; font-size: 13px;")
+        lbl3.setObjectName("cleanupLabel")
         c3.addWidget(lbl3, 1)
         btn3 = self._action_btn("Clean Up")
         btn3.clicked.connect(self._cleanup_inactive)
@@ -142,7 +129,7 @@ class SettingsPage(QWidget):
         c4.setContentsMargins(20, 16, 20, 16)
         c4.setSpacing(12)
         lbl4 = QLabel("Truncate (empty) table:")
-        lbl4.setStyleSheet("color: #2C3E50; font-size: 13px;")
+        lbl4.setObjectName("cleanupLabel")
         c4.addWidget(lbl4)
         self.trunc_combo = QComboBox()
         self.trunc_combo.setObjectName("formCombo")
@@ -171,15 +158,13 @@ class SettingsPage(QWidget):
     @staticmethod
     def _section(text: str) -> QLabel:
         lbl = QLabel(text)
-        lbl.setStyleSheet("font-size: 15px; font-weight: bold; color: #2C3E50; margin-top: 4px;")
+        lbl.setObjectName("sectionHeader")
         return lbl
 
     @staticmethod
     def _card() -> QFrame:
         f = QFrame()
-        f.setStyleSheet(
-            "QFrame { background: #FFFFFF; border-radius: 10px; }"
-        )
+        f.setObjectName("cleanupCard")
         shadow = QGraphicsDropShadowEffect()
         shadow.setBlurRadius(12); shadow.setOffset(0, 3)
         shadow.setColor(QColor(0, 0, 0, 10))
@@ -192,20 +177,7 @@ class SettingsPage(QWidget):
         btn.setMinimumHeight(38)
         btn.setMinimumWidth(110)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        if danger:
-            btn.setStyleSheet(
-                "QPushButton { background-color: #D9534F; color: #FFFFFF;"
-                "border-radius: 8px; font-size: 13px; font-weight: bold;"
-                "padding: 6px 16px; }"
-                "QPushButton:hover { background-color: #C9302C; }"
-            )
-        else:
-            btn.setStyleSheet(
-                "QPushButton { background-color: #388087; color: #FFFFFF;"
-                "border-radius: 8px; font-size: 13px; font-weight: bold;"
-                "padding: 6px 16px; }"
-                "QPushButton:hover { background-color: #2C6A70; }"
-            )
+        btn.setObjectName("truncateBtn" if danger else "cleanupBtn")
         return btn
 
     # ── Slots ──────────────────────────────────────────────────────────

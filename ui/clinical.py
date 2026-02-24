@@ -44,10 +44,6 @@ class QueueEditDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Edit Queue Entry")
         self.setMinimumWidth(480)
-        self.setStyleSheet(
-            "QDialog { background: #FFFFFF; }"
-            " QLabel { color: #2C3E50; font-size: 13px; }"
-        )
         form = QFormLayout(self)
         form.setSpacing(14)
         form.setContentsMargins(28, 28, 28, 28)
@@ -108,10 +104,6 @@ class ServiceEditDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Edit Service")
         self.setMinimumWidth(420)
-        self.setStyleSheet(
-            "QDialog { background: #FFFFFF; }"
-            " QLabel { color: #2C3E50; font-size: 13px; }"
-        )
         form = QFormLayout(self)
         form.setSpacing(14)
         form.setContentsMargins(28, 28, 28, 28)
@@ -143,7 +135,6 @@ class NewInvoiceDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Create Invoice")
         self.setMinimumWidth(500)
-        self.setStyleSheet("QDialog { background: #FFFFFF; } QLabel { color: #2C3E50; font-size: 13px; }")
 
         form = QFormLayout(self)
         form.setSpacing(14)
@@ -205,10 +196,8 @@ class ClinicalPage(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setStyleSheet("QScrollArea { background-color: #F6F6F2; }")
         inner = QWidget()
         inner.setObjectName("pageInner")
-        inner.setStyleSheet("QWidget#pageInner { background-color: #F6F6F2; }")
         lay = QVBoxLayout(inner)
         lay.setSpacing(20)
         lay.setContentsMargins(28, 28, 28, 28)
@@ -221,21 +210,15 @@ class ClinicalPage(QWidget):
         shadow.setBlurRadius(20); shadow.setOffset(0, 4)
         shadow.setColor(QColor(0, 0, 0, 15))
         banner.setGraphicsEffect(shadow)
-        banner.setStyleSheet(
-            "QFrame#pageBanner { background: qlineargradient("
-            "x1:0, y1:0, x2:1, y2:0,"
-            "stop:0 #388087, stop:1 #6FB3B8);"
-            "border-radius: 12px; }"
-        )
         banner_lay = QHBoxLayout(banner)
         banner_lay.setContentsMargins(32, 20, 32, 20)
         banner_lay.setSpacing(0)
         title_col = QVBoxLayout()
         title_col.setSpacing(4)
         title = QLabel("Clinical Workflow & Billing")
-        title.setStyleSheet("font-size: 22px; font-weight: bold; color: #FFFFFF; background: transparent;")
+        title.setObjectName("bannerTitle")
         sub = QLabel("Patient queue, consultations, and point-of-sale")
-        sub.setStyleSheet("font-size: 13px; color: rgba(255,255,255,0.8); background: transparent;")
+        sub.setObjectName("bannerSubtitle")
         title_col.addWidget(title)
         title_col.addWidget(sub)
         banner_lay.addLayout(title_col)

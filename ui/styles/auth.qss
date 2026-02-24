@@ -1,0 +1,126 @@
+/* ================================================================
+   CareCRUD – Authentication Window Stylesheet
+   ================================================================
+   Applied to the login screen (AuthWindow).
+   Uses the teal gradient background with a white card overlay.
+   ================================================================ */
+
+
+/* ── Auth background ────────────────────────────────────────────────
+   Full-window gradient that covers the QMainWindow and the
+   central widget (#authBg). Blends dark-teal → teal → accent.     */
+QMainWindow,
+QWidget#authBg {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:1,
+        stop:0   #2C6A70,
+        stop:0.5 #388087,
+        stop:1   #6FB3B8
+    );
+}
+
+
+/* ── Login card ─────────────────────────────────────────────────────
+   White rounded card that sits on top of the gradient background.  */
+QWidget#cardWidget {
+    background-color: #FFFFFF;
+    border-radius: 20px;
+}
+
+
+/* ── Typography ─────────────────────────────────────────────────────
+   Title / subtitle / switch-label used on the auth card.           */
+QLabel#titleLabel {
+    color: #388087;
+    font-size: 30px;
+    font-weight: bold;
+    font-family: 'Segoe UI', sans-serif;
+}
+
+QLabel#subtitleLabel {
+    color: #7F8C8D;
+    font-size: 14px;
+    font-family: 'Segoe UI', sans-serif;
+}
+
+QLabel#switchLabel {
+    color: #7F8C8D;
+    font-size: 13px;
+}
+
+
+/* ── Text inputs ────────────────────────────────────────────────────
+   Email and password fields inside the auth card.                  */
+QLineEdit {
+    padding: 14px 18px;
+    border: 2px solid #BADFE7;
+    border-radius: 12px;
+    font-size: 14px;
+    font-family: 'Segoe UI', sans-serif;
+    background-color: #F6F6F2;
+    color: #2C3E50;
+    selection-background-color: #388087;
+}
+
+/* Focused state – darker border, white background */
+QLineEdit:focus {
+    border: 2px solid #388087;
+    background-color: #FFFFFF;
+}
+
+/* Hovered state – accent border */
+QLineEdit:hover {
+    border: 2px solid #6FB3B8;
+}
+
+
+/* ── Primary button (Sign In) ───────────────────────────────────────
+   Gradient button that spans the full card width.                  */
+QPushButton#primaryBtn {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 #388087, stop:1 #6FB3B8
+    );
+    color: #FFFFFF;
+    border: none;
+    border-radius: 12px;
+    padding: 14px 28px;
+    font-size: 15px;
+    font-weight: bold;
+    font-family: 'Segoe UI', sans-serif;
+}
+
+QPushButton#primaryBtn:hover {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 #2C6A70, stop:1 #388087
+    );
+}
+
+QPushButton#primaryBtn:pressed {
+    background-color: #245558;
+}
+
+
+/* ── Link button ────────────────────────────────────────────────────
+   Text-only button used for "Forgot password?" style links.        */
+QPushButton#linkBtn {
+    background: none;
+    border: none;
+    color: #388087;
+    font-size: 13px;
+    font-weight: bold;
+    padding: 4px;
+}
+
+QPushButton#linkBtn:hover {
+    color: #2C6A70;
+}
+
+
+/* ── Separator line ─────────────────────────────────────────────────
+   Thin horizontal divider inside the card.                         */
+QFrame#separator {
+    background-color: #BADFE7;
+    max-height: 1px;
+}

@@ -79,10 +79,6 @@ class AppointmentDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setMinimumWidth(500)
-        self.setStyleSheet(
-            "QDialog { background: #FFFFFF; }"
-            "QLabel  { color: #2C3E50; font-size: 13px; }"
-        )
 
         form = QFormLayout(self)
         form.setSpacing(16)
@@ -218,10 +214,8 @@ class AppointmentsPage(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setStyleSheet("QScrollArea { background-color: #F6F6F2; }")
         inner = QWidget()
         inner.setObjectName("pageInner")
-        inner.setStyleSheet("QWidget#pageInner { background-color: #F6F6F2; }")
         lay = QVBoxLayout(inner)
         lay.setSpacing(16)
         lay.setContentsMargins(28, 28, 28, 28)
@@ -234,33 +228,23 @@ class AppointmentsPage(QWidget):
         shadow.setBlurRadius(20); shadow.setOffset(0, 4)
         shadow.setColor(QColor(0, 0, 0, 15))
         banner.setGraphicsEffect(shadow)
-        banner.setStyleSheet(
-            "QFrame#pageBanner { background: qlineargradient("
-            "x1:0,y1:0,x2:1,y2:0, stop:0 #388087, stop:1 #6FB3B8);"
-            "border-radius: 12px; }"
-        )
         banner_lay = QHBoxLayout(banner)
         banner_lay.setContentsMargins(32, 20, 32, 20)
         tc = QVBoxLayout(); tc.setSpacing(4)
         title = QLabel("Appointment Scheduling")
-        title.setStyleSheet("font-size: 22px; font-weight: bold; color: #FFFFFF; background: transparent;")
+        title.setObjectName("bannerTitle")
         sub = QLabel("View and manage all doctor-patient appointments")
-        sub.setStyleSheet("font-size: 13px; color: rgba(255,255,255,0.8); background: transparent;")
+        sub.setObjectName("bannerSubtitle")
         tc.addWidget(title); tc.addWidget(sub)
         banner_lay.addLayout(tc)
         banner_lay.addStretch()
 
         if self._role != "Nurse":
             add_btn = QPushButton("\uff0b  New Appointment")
+            add_btn.setObjectName("bannerBtn")
             add_btn.setMinimumHeight(42)
             add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             add_btn.clicked.connect(self._on_new)
-            add_btn.setStyleSheet(
-                "QPushButton { background: rgba(255,255,255,0.2); color: #FFF;"
-                "border: 1px solid rgba(255,255,255,0.4); border-radius: 8px;"
-                "padding: 8px 18px; font-size: 13px; font-weight: bold; }"
-                "QPushButton:hover { background: rgba(255,255,255,0.35); }"
-            )
             banner_lay.addWidget(add_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
         lay.addWidget(banner)
 

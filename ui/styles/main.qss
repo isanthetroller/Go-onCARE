@@ -1,0 +1,914 @@
+/* ================================================================
+   CareCRUD – Main Application Stylesheet
+   ================================================================
+   Applied to the main window after login (MainWindow).
+   Covers the sidebar, top bar, content pages, tables, forms,
+   buttons, badges, scrollbars, and all shared components.
+   ================================================================ */
+
+
+/* ================================================================
+   GLOBAL
+   ================================================================ */
+
+/* Default font for every widget */
+* {
+    font-family: 'Segoe UI', sans-serif;
+}
+
+/* Main window background */
+QMainWindow {
+    background-color: #F6F6F2;
+}
+
+
+/* ================================================================
+   TOP HEADER BAR
+   ================================================================
+   Fixed-height bar at the very top of the right-hand area.
+   Contains page title, search box, and user info.                 */
+
+QWidget#topBar {
+    background-color: #FFFFFF;
+    border-bottom: 1px solid #BADFE7;
+}
+
+/* Global search input in the top bar */
+QLineEdit#topSearch {
+    padding: 10px 16px 10px 38px;
+    border: 2px solid #BADFE7;
+    border-radius: 20px;
+    font-size: 13px;
+    background-color: #F6F6F2;
+    color: #2C3E50;
+    min-width: 280px;
+}
+
+QLineEdit#topSearch:focus {
+    border: 2px solid #388087;
+    background-color: #FFFFFF;
+}
+
+/* User name and email labels in the top bar */
+QLabel#topUserName {
+    color: #2C3E50;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+QLabel#topUserEmail {
+    color: #7F8C8D;
+    font-size: 11px;
+}
+
+/* Icon buttons (notifications, settings) in the top bar */
+QPushButton#topIconBtn {
+    background: transparent;
+    border: none;
+    border-radius: 20px;
+    padding: 8px;
+    font-size: 18px;
+    color: #7F8C8D;
+    min-width: 40px;
+    min-height: 40px;
+}
+
+QPushButton#topIconBtn:hover {
+    background-color: #BADFE7;
+    color: #388087;
+}
+
+
+/* ================================================================
+   SIDEBAR (light theme)
+   ================================================================
+   Left-hand navigation panel with logo, nav items, and user card. */
+
+/* Sidebar container */
+QWidget#sidebar {
+    background-color: #FFFFFF;
+    border-right: 1px solid #BADFE7;
+}
+
+/* Logo frame – rounded tinted background behind logo + brand */
+QWidget#logoFrame {
+    background-color: #BADFE7;
+    border-radius: 16px;
+}
+
+/* "CC" icon inside the logo frame */
+QLabel#logoIcon {
+    background-color: #388087;
+    color: #FFFFFF;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: bold;
+}
+
+/* Brand name */
+QLabel#brandLabel {
+    color: #388087;
+    font-size: 22px;
+    font-weight: bold;
+}
+
+/* Brand subtitle */
+QLabel#brandSubLabel {
+    color: #6FB3B8;
+    font-size: 11px;
+}
+
+/* Navigation button (idle state) */
+QPushButton#navBtn {
+    text-align: left;
+    padding: 11px 16px 11px 18px;
+    border: none;
+    border-radius: 10px;
+    color: #2C3E50;
+    font-size: 14px;
+    font-weight: 500;
+    background: transparent;
+    margin: 2px 0px;
+}
+
+QPushButton#navBtn:hover {
+    background-color: #BADFE7;
+    color: #2C3E50;
+}
+
+/* Navigation button (active / selected page) */
+QPushButton#navBtnActive {
+    text-align: left;
+    padding: 11px 16px;
+    border: none;
+    border-radius: 10px;
+    color: #2C3E50;
+    font-size: 14px;
+    font-weight: bold;
+    background-color: #BADFE7;
+    border-left: 3px solid #388087;
+    margin: 2px 0px;
+}
+
+/* Logout button (bordered, turns red on hover) */
+QPushButton#logoutBtn {
+    background-color: transparent;
+    color: #D9534F;
+    border: 1px solid #D9534F;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+QPushButton#logoutBtn:hover {
+    background-color: #D9534F;
+    color: #FFFFFF;
+}
+
+/* Section header ("MAIN MENU") */
+QLabel#sidebarSection {
+    color: #7F8C8D;
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+    padding-left: 4px;
+}
+
+
+/* ================================================================
+   CONTENT AREA
+   ================================================================ */
+
+QWidget#contentArea {
+    background-color: #F6F6F2;
+}
+
+
+/* ================================================================
+   CARDS
+   ================================================================
+   White rounded containers used throughout the dashboard
+   and detail pages.                                                */
+
+QWidget#card,
+QFrame#card {
+    background-color: #FFFFFF;
+    border-radius: 16px;
+    border: 1px solid #BADFE7;
+}
+
+
+/* ================================================================
+   STAT CARDS
+   ================================================================
+   Numeric KPI cards shown at the top of most pages.               */
+
+/* Large numeric value */
+QLabel#statValue {
+    font-size: 30px;
+    font-weight: bold;
+    color: #2C3E50;
+}
+
+/* Descriptive label below the value */
+QLabel#statLabel {
+    font-size: 13px;
+    color: #7F8C8D;
+    font-weight: 500;
+}
+
+
+/* ================================================================
+   SECTION HEADERS
+   ================================================================
+   Used for in-page section titles and subtitles.                  */
+
+QLabel#sectionTitle {
+    font-size: 18px;
+    font-weight: bold;
+    color: #2C3E50;
+}
+
+QLabel#sectionSubtitle {
+    font-size: 14px;
+    color: #7F8C8D;
+}
+
+QLabel#pageTitle {
+    font-size: 26px;
+    font-weight: bold;
+    color: #2C3E50;
+}
+
+QLabel#cardTitle {
+    font-size: 16px;
+    font-weight: bold;
+    color: #2C3E50;
+}
+
+
+/* ================================================================
+   TABLES
+   ================================================================
+   QTableWidget styling shared across patients, employees,
+   appointments, and other list views.                             */
+
+QTableWidget {
+    background-color: #FFFFFF;
+    alternate-background-color: #FFFFFF;
+    border: none;
+    border-radius: 0px;
+    gridline-color: #E8E8E4;
+    font-size: 13px;
+    color: #2C3E50;
+    outline: none;
+}
+
+/* Individual cell */
+QTableWidget::item {
+    padding: 10px 14px;
+    border-bottom: 1px solid #E8E8E4;
+}
+
+/* Selected cell */
+QTableWidget::item:selected {
+    background-color: #BADFE7;
+    color: #2C3E50;
+}
+
+/* Hovered cell */
+QTableWidget::item:hover {
+    background-color: #F6F6F2;
+}
+
+/* Column headers */
+QHeaderView::section {
+    background-color: #FFFFFF;
+    color: #7F8C8D;
+    font-weight: bold;
+    font-size: 12px;
+    padding: 12px 14px;
+    border: none;
+    border-bottom: 2px solid #BADFE7;
+}
+
+
+/* ================================================================
+   TABLE ACTION BUTTONS (compact, inside cells)
+   ================================================================ */
+
+/* Default action */
+QPushButton#tblActionBtn {
+    background-color: #BADFE7;
+    color: #2C3E50;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+QPushButton#tblActionBtn:hover {
+    background-color: #A8D4DE;
+}
+
+/* Danger action (delete, cancel) */
+QPushButton#tblDangerBtn {
+    background-color: #BADFE7;
+    color: #2C3E50;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+QPushButton#tblDangerBtn:hover {
+    background-color: #A8D4DE;
+}
+
+/* Success action (approve, complete) */
+QPushButton#tblSuccessBtn {
+    background-color: #BADFE7;
+    color: #2C3E50;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+QPushButton#tblSuccessBtn:hover {
+    background-color: #A8D4DE;
+}
+
+/* Secondary action */
+QPushButton#tblSecondaryBtn {
+    background-color: #BADFE7;
+    color: #2C3E50;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+QPushButton#tblSecondaryBtn:hover {
+    background-color: #A8D4DE;
+}
+
+
+/* ================================================================
+   ACTION BUTTONS (full-size, outside tables)
+   ================================================================ */
+
+/* Primary gradient button */
+QPushButton#actionBtn {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 #388087, stop:1 #6FB3B8
+    );
+    color: #FFFFFF;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 22px;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+QPushButton#actionBtn:hover {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 #2C6A70, stop:1 #388087
+    );
+}
+
+/* Secondary bordered button */
+QPushButton#secondaryBtn {
+    background-color: #BADFE7;
+    color: #388087;
+    border: 2px solid #6FB3B8;
+    border-radius: 10px;
+    padding: 10px 22px;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+QPushButton#secondaryBtn:hover {
+    background-color: #A8D4DE;
+    border-color: #388087;
+}
+
+/* Danger / destructive button */
+QPushButton#dangerBtn {
+    background-color: #FDECEA;
+    color: #D9534F;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 22px;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+QPushButton#dangerBtn:hover {
+    background-color: #F9D6D5;
+}
+
+/* Success / confirm button */
+QPushButton#successBtn {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 #4CAE4C, stop:1 #5CB85C
+    );
+    color: #FFFFFF;
+    border: none;
+    border-radius: 10px;
+    padding: 10px 22px;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+QPushButton#successBtn:hover {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 #3D9140, stop:1 #4CAE4C
+    );
+}
+
+/* View / outline button */
+QPushButton#viewBtn {
+    background-color: transparent;
+    color: #2C3E50;
+    border: 1px solid #BADFE7;
+    border-radius: 12px;
+    padding: 6px 16px;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+QPushButton#viewBtn:hover {
+    background-color: #BADFE7;
+    color: #2C3E50;
+}
+
+
+/* ================================================================
+   STATUS BADGES
+   ================================================================
+   Small pill-shaped labels for statuses (Pending, Complete, etc.) */
+
+/* Pending – amber tint */
+QLabel#badgePending {
+    background-color: #FFF3CD;
+    color: #856404;
+    border-radius: 10px;
+    padding: 4px 12px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+/* Complete – mint tint */
+QLabel#badgeComplete {
+    background-color: #C2EDCE;
+    color: #2D6A3F;
+    border-radius: 10px;
+    padding: 4px 12px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+/* Active – light-blue tint */
+QLabel#badgeActive {
+    background-color: #BADFE7;
+    color: #2C6A70;
+    border-radius: 10px;
+    padding: 4px 12px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+
+/* ================================================================
+   FORM INPUTS (content-area dialogs and pages)
+   ================================================================ */
+
+/* Line edits and text edits with the #formInput object name */
+QLineEdit#formInput,
+QTextEdit#formInput {
+    padding: 10px 14px;
+    border: 2px solid #BADFE7;
+    border-radius: 10px;
+    font-size: 13px;
+    background-color: #F6F6F2;
+    color: #2C3E50;
+}
+
+QLineEdit#formInput:focus,
+QTextEdit#formInput:focus {
+    border: 2px solid #388087;
+    background-color: #FFFFFF;
+}
+
+/* Combo boxes with the #formCombo object name */
+QComboBox#formCombo {
+    padding: 10px 14px;
+    border: 2px solid #BADFE7;
+    border-radius: 10px;
+    font-size: 13px;
+    background-color: #F6F6F2;
+    color: #2C3E50;
+}
+
+QComboBox#formCombo:focus {
+    border: 2px solid #388087;
+}
+
+QComboBox#formCombo::drop-down {
+    border: none;
+    width: 30px;
+}
+
+
+/* ================================================================
+   SEARCH BAR (in-page search fields)
+   ================================================================ */
+
+QLineEdit#searchBar {
+    padding: 12px 16px 12px 40px;
+    border: 2px solid #BADFE7;
+    border-radius: 12px;
+    font-size: 14px;
+    background-color: #FFFFFF;
+    color: #2C3E50;
+}
+
+QLineEdit#searchBar:focus {
+    border: 2px solid #388087;
+    background-color: #FFFFFF;
+}
+
+QLineEdit#searchBar:hover {
+    border: 2px solid #6FB3B8;
+}
+
+
+/* ================================================================
+   TAB WIDGET
+   ================================================================
+   Used on multi-tab pages like Clinical & POS.                    */
+
+QTabWidget::pane {
+    border: 1px solid #BADFE7;
+    border-radius: 12px;
+    background-color: #FFFFFF;
+    margin-top: -1px;
+}
+
+QTabBar::tab {
+    padding: 12px 28px;
+    font-size: 13px;
+    font-weight: bold;
+    color: #7F8C8D;
+    border: none;
+    border-bottom: 3px solid transparent;
+    background: transparent;
+    margin-right: 4px;
+}
+
+QTabBar::tab:selected {
+    color: #388087;
+    border-bottom: 3px solid #388087;
+}
+
+QTabBar::tab:hover {
+    color: #2C3E50;
+    background-color: #F6F6F2;
+}
+
+
+/* ================================================================
+   CALENDAR WIDGET
+   ================================================================ */
+
+QCalendarWidget {
+    background-color: #FFFFFF;
+    border: 1px solid #BADFE7;
+    border-radius: 12px;
+}
+
+QCalendarWidget QToolButton {
+    color: #2C3E50;
+    font-weight: bold;
+    font-size: 14px;
+    padding: 4px;
+}
+
+QCalendarWidget QAbstractItemView:enabled {
+    color: #2C3E50;
+    selection-background-color: #388087;
+    selection-color: #FFFFFF;
+}
+
+
+/* ================================================================
+   SCROLL BARS
+   ================================================================
+   Minimal, rounded scrollbars that match the accent colour.       */
+
+/* Vertical */
+QScrollBar:vertical {
+    background: transparent;
+    width: 6px;
+    border-radius: 3px;
+    margin: 4px 2px;
+}
+
+QScrollBar::handle:vertical {
+    background: #6FB3B8;
+    border-radius: 3px;
+    min-height: 40px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background: #388087;
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0;
+}
+
+/* Horizontal */
+QScrollBar:horizontal {
+    background: transparent;
+    height: 6px;
+    border-radius: 3px;
+}
+
+QScrollBar::handle:horizontal {
+    background: #6FB3B8;
+    border-radius: 3px;
+}
+
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+    width: 0;
+}
+
+
+/* ================================================================
+   TOOLTIPS
+   ================================================================ */
+
+QToolTip {
+    background-color: #2C3E50;
+    color: #FFFFFF;
+    border: none;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+}
+
+
+/* ================================================================
+   MESSAGE / NOTIFICATION CARD ITEMS
+   ================================================================ */
+
+QWidget#msgItem {
+    border-bottom: 1px solid #F6F6F2;
+}
+
+QLabel#msgName {
+    color: #2C3E50;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+QLabel#msgPreview {
+    color: #7F8C8D;
+    font-size: 12px;
+}
+
+QLabel#msgTime {
+    color: #7F8C8D;
+    font-size: 11px;
+}
+
+
+/* ================================================================
+   PAGE SCROLL AREA & INNER CONTAINER
+   ================================================================
+   Background for every scrollable page view.                      */
+
+QScrollArea {
+    background-color: #F6F6F2;
+    border: none;
+}
+
+QWidget#pageInner {
+    background-color: #F6F6F2;
+}
+
+
+/* ================================================================
+   PAGE BANNER (gradient header on each page)
+   ================================================================ */
+
+QFrame#pageBanner {
+    background: qlineargradient(
+        x1:0, y1:0, x2:1, y2:0,
+        stop:0 #388087, stop:1 #6FB3B8
+    );
+    border-radius: 12px;
+}
+
+/* Banner main title */
+QLabel#bannerTitle {
+    font-size: 22px;
+    font-weight: bold;
+    color: #FFFFFF;
+    background: transparent;
+}
+
+/* Banner subtitle / description */
+QLabel#bannerSubtitle {
+    font-size: 13px;
+    color: rgba(255,255,255,0.8);
+    background: transparent;
+}
+
+/* Translucent button placed inside the banner */
+QPushButton#bannerBtn {
+    background: rgba(255,255,255,0.2);
+    color: #FFFFFF;
+    border: 1px solid rgba(255,255,255,0.4);
+    border-radius: 8px;
+    padding: 8px 18px;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+QPushButton#bannerBtn:hover {
+    background: rgba(255,255,255,0.35);
+}
+
+
+/* ================================================================
+   FORM DIALOGS (pop-up edit / add forms)
+   ================================================================ */
+
+QDialog {
+    background: #FFFFFF;
+}
+
+QDialog QLabel {
+    color: #2C3E50;
+    font-size: 13px;
+}
+
+
+/* ================================================================
+   MUTED / SECONDARY TEXT
+   ================================================================ */
+
+QLabel#mutedSubtext {
+    color: #7F8C8D;
+    font-size: 12px;
+}
+
+
+/* ================================================================
+   SIDEBAR USER SECTION
+   ================================================================ */
+
+/* User avatar circle */
+QLabel#userAvatar {
+    background-color: #388087;
+    color: #FFFFFF;
+    border-radius: 18px;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+/* User info card container */
+QFrame#userCard {
+    background-color: #F6F6F2;
+    border-radius: 10px;
+}
+
+/* Display name */
+QLabel#userName {
+    color: #2C3E50;
+    font-size: 13px;
+    font-weight: bold;
+    background: transparent;
+}
+
+/* Email address */
+QLabel#userEmail {
+    color: #7F8C8D;
+    font-size: 11px;
+    background: transparent;
+}
+
+/* Role pill badge */
+QLabel#roleBadge {
+    color: #388087;
+    font-size: 10px;
+    font-weight: bold;
+    background-color: #BADFE7;
+    border-radius: 6px;
+    padding: 2px 8px;
+}
+
+/* Sidebar thin separator line */
+QFrame#sidebarSep {
+    background-color: #BADFE7;
+}
+
+/* Top-bar page title */
+QLabel#topTitle {
+    font-size: 20px;
+    font-weight: bold;
+    color: #2C3E50;
+}
+
+
+/* ================================================================
+   SETTINGS PAGE COMPONENTS
+   ================================================================ */
+
+/* Section header label */
+QLabel#sectionHeader {
+    font-size: 15px;
+    font-weight: bold;
+    color: #2C3E50;
+    margin-top: 4px;
+}
+
+/* Cleanup action card */
+QFrame#cleanupCard {
+    background: #FFFFFF;
+    border-radius: 10px;
+}
+
+/* Label inside a cleanup card */
+QLabel#cleanupLabel {
+    color: #2C3E50;
+    font-size: 13px;
+}
+
+/* Primary-teal cleanup button */
+QPushButton#cleanupBtn {
+    background-color: #388087;
+    color: #FFFFFF;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: bold;
+    padding: 6px 16px;
+}
+
+QPushButton#cleanupBtn:hover {
+    background-color: #2C6A70;
+}
+
+/* Danger-red truncate button */
+QPushButton#truncateBtn {
+    background-color: #D9534F;
+    color: #FFFFFF;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: bold;
+    padding: 6px 16px;
+}
+
+QPushButton#truncateBtn:hover {
+    background-color: #C9302C;
+}
+
+
+/* ================================================================
+   ANALYTICS & REPORTS TOTAL LABELS
+   ================================================================ */
+
+/* Large total (pie chart bottom) */
+QLabel#chartTotal {
+    font-size: 18px;
+    font-weight: bold;
+    color: #2C3E50;
+    padding: 6px 0 2px 0;
+}
+
+/* Standard total label */
+QLabel#totalLabel {
+    font-size: 16px;
+    font-weight: bold;
+    color: #388087;
+}
+
+/* Smaller total label (monthly) */
+QLabel#totalLabelSm {
+    font-size: 14px;
+    font-weight: bold;
+    color: #388087;
+}

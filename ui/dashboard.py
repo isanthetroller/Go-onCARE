@@ -91,29 +91,21 @@ class DashboardPage(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setStyleSheet("QScrollArea { background-color: #F6F6F2; }")
         inner = QWidget()
         inner.setObjectName("pageInner")
-        inner.setStyleSheet("QWidget#pageInner { background-color: #F6F6F2; }")
         lay = QVBoxLayout(inner)
         lay.setSpacing(20)
         lay.setContentsMargins(28, 28, 28, 28)
 
         # ── Greeting Banner ────────────────────────────────────────────
         banner = QFrame()
-        banner.setObjectName("card")
+        banner.setObjectName("pageBanner")
         banner.setMinimumHeight(120)
         shadow = QGraphicsDropShadowEffect()
         shadow.setBlurRadius(20)
         shadow.setOffset(0, 4)
         shadow.setColor(QColor(0, 0, 0, 15))
         banner.setGraphicsEffect(shadow)
-        banner.setStyleSheet(
-            "#card { background: qlineargradient("
-            "x1:0, y1:0, x2:1, y2:0,"
-            "stop:0 #388087, stop:1 #6FB3B8);"
-            "border-radius: 12px; }"
-        )
 
         banner_lay = QHBoxLayout(banner)
         banner_lay.setContentsMargins(32, 24, 32, 24)
@@ -280,7 +272,7 @@ class DashboardPage(QWidget):
         hdr_row.addWidget(title)
         hdr_row.addStretch()
         period = QLabel("Last 6 Months")
-        period.setStyleSheet("color: #7F8C8D; font-size: 12px;")
+        period.setObjectName("mutedSubtext")
         hdr_row.addWidget(period)
         vbox.addLayout(hdr_row)
 

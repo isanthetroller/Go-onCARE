@@ -16,6 +16,7 @@ from ui.clinical     import ClinicalPage
 from ui.employees    import EmployeesPage
 from ui.analytics    import AnalyticsPage
 from ui.settings     import SettingsPage
+from backend         import AuthBackend
 
 
 _ALL_NAV = [
@@ -51,12 +52,12 @@ class MainWindow(QMainWindow):
         self._user = user_email
         self._role = user_role
         self._user_name = user_name
+        self._backend = AuthBackend()
         self._nav_buttons: list[QPushButton] = []
         self._nav_map: list[tuple[str, int]] = []
 
         central = QWidget()
         central.setAutoFillBackground(True)
-        central.setStyleSheet("background-color: #F6F6F2;")
         self.setCentralWidget(central)
         root = QHBoxLayout(central)
         root.setContentsMargins(0, 0, 0, 0)
@@ -68,7 +69,6 @@ class MainWindow(QMainWindow):
         # Right side: top header + content
         right = QWidget()
         right.setAutoFillBackground(True)
-        right.setStyleSheet("background-color: #F6F6F2;")
         right_lay = QVBoxLayout(right)
         right_lay.setContentsMargins(0, 0, 0, 0)
         right_lay.setSpacing(0)
@@ -99,10 +99,6 @@ class MainWindow(QMainWindow):
         logo_icon.setObjectName("logoIcon")
         logo_icon.setFixedSize(44, 44)
         logo_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        logo_icon.setStyleSheet(
-            "background-color: #388087; color: #FFFFFF; border-radius: 12px;"
-            "font-size: 16px; font-weight: bold;"
-        )
         logo_lay.addWidget(logo_icon)
 
         brand_col = QVBoxLayout()
@@ -134,9 +130,6 @@ class MainWindow(QMainWindow):
             btn.setObjectName("navBtn")
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setMinimumHeight(44)
-            btn.setStyleSheet(
-                "QPushButton { font-size: 14px; padding-left: 18px; }"
-            )
             btn.clicked.connect(lambda checked, i=nav_idx: self._select_nav(i))
             self._nav_buttons.append(btn)
             lay.addWidget(btn)
@@ -145,16 +138,14 @@ class MainWindow(QMainWindow):
 
         # Separator
         sep = QFrame()
+        sep.setObjectName("sidebarSep")
         sep.setFixedHeight(1)
-        sep.setStyleSheet("background-color: #BADFE7;")
         lay.addWidget(sep)
         lay.addSpacing(12)
 
         # User section
         user_card = QFrame()
-        user_card.setStyleSheet(
-            "QFrame { background-color: #F6F6F2; border-radius: 10px; }"
-        )
+        user_card.setObjectName("userCard")
         user_card_lay = QVBoxLayout(user_card)
         user_card_lay.setContentsMargins(14, 14, 14, 14)
         user_card_lay.setSpacing(10)
@@ -165,32 +156,22 @@ class MainWindow(QMainWindow):
         _display_name = self._user_name
         _initials = "".join(w[0].upper() for w in _display_name.split()[:2])
         avatar = QLabel(_initials)
+        avatar.setObjectName("userAvatar")
         avatar.setFixedSize(36, 36)
         avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        avatar.setStyleSheet(
-            "background-color: #388087; color: #FFFFFF; border-radius: 18px;"
-            "font-size: 13px; font-weight: bold;"
-        )
         user_row.addWidget(avatar)
 
         user_col = QVBoxLayout()
         user_col.setSpacing(1)
         user_name = QLabel(_display_name)
-        user_name.setStyleSheet(
-            "color: #2C3E50; font-size: 13px; font-weight: bold; background: transparent;"
-        )
+        user_name.setObjectName("userName")
         user_email = QLabel(self._user)
-        user_email.setStyleSheet(
-            "color: #7F8C8D; font-size: 11px; background: transparent;"
-        )
+        user_email.setObjectName("userEmail")
         user_email.setWordWrap(True)
         user_col.addWidget(user_name)
         user_col.addWidget(user_email)
         role_badge = QLabel(self._role)
-        role_badge.setStyleSheet(
-            "color: #388087; font-size: 10px; font-weight: bold;"
-            "background-color: #BADFE7; border-radius: 6px; padding: 2px 8px;"
-        )
+        role_badge.setObjectName("roleBadge")
         user_col.addWidget(role_badge)
         user_row.addLayout(user_col)
         user_row.addStretch()
@@ -198,14 +179,9 @@ class MainWindow(QMainWindow):
 
         # Logout button
         logout_btn = QPushButton("Log Out")
+        logout_btn.setObjectName("logoutBtn")
         logout_btn.setMinimumHeight(36)
         logout_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        logout_btn.setStyleSheet(
-            "QPushButton { background-color: transparent; color: #D9534F;"
-            "  border: 1px solid #D9534F; border-radius: 8px;"
-            "  font-size: 13px; font-weight: bold; }"
-            "QPushButton:hover { background-color: #D9534F; color: #FFFFFF; }"
-        )
         logout_btn.clicked.connect(self.logout_requested.emit)
         user_card_lay.addWidget(logout_btn)
 
@@ -232,9 +208,7 @@ class MainWindow(QMainWindow):
 
         # Page title
         self._top_title = QLabel("Dashboard")
-        self._top_title.setStyleSheet(
-            "font-size: 20px; font-weight: bold; color: #2C3E50;"
-        )
+        self._top_title.setObjectName("topTitle")
         lay.addWidget(self._top_title)
         lay.addStretch()
 
@@ -267,7 +241,7 @@ class MainWindow(QMainWindow):
 
         self.stack.addWidget(ClinicalPage(role=self._role))
         self.stack.addWidget(AnalyticsPage(role=self._role))
-        self.stack.addWidget(EmployeesPage())
+        self.stack.addWidget(EmployeesPage(backend=self._backend, role=self._role))
         self.stack.addWidget(SettingsPage())
 
         lay.addWidget(self.stack)

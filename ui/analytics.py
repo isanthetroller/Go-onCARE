@@ -181,10 +181,8 @@ class AnalyticsPage(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setStyleSheet("QScrollArea { background-color: #F6F6F2; }")
         inner = QWidget()
         inner.setObjectName("pageInner")
-        inner.setStyleSheet("QWidget#pageInner { background-color: #F6F6F2; }")
         lay = QVBoxLayout(inner)
         lay.setSpacing(20)
         lay.setContentsMargins(28, 28, 28, 28)
@@ -197,21 +195,15 @@ class AnalyticsPage(QWidget):
         shadow.setBlurRadius(20); shadow.setOffset(0, 4)
         shadow.setColor(QColor(0, 0, 0, 15))
         banner.setGraphicsEffect(shadow)
-        banner.setStyleSheet(
-            "QFrame#pageBanner { background: qlineargradient("
-            "x1:0, y1:0, x2:1, y2:0,"
-            "stop:0 #388087, stop:1 #6FB3B8);"
-            "border-radius: 12px; }"
-        )
         banner_lay = QHBoxLayout(banner)
         banner_lay.setContentsMargins(32, 20, 32, 20)
         banner_lay.setSpacing(0)
         tc = QVBoxLayout()
         tc.setSpacing(4)
         title = QLabel("Data Analytics & Reports")
-        title.setStyleSheet("font-size: 22px; font-weight: bold; color: #FFFFFF; background: transparent;")
+        title.setObjectName("bannerTitle")
         sub = QLabel("Hospital performance overview, revenue, trends, and insights")
-        sub.setStyleSheet("font-size: 13px; color: rgba(255,255,255,0.8); background: transparent;")
+        sub.setObjectName("bannerSubtitle")
         tc.addWidget(title)
         tc.addWidget(sub)
         banner_lay.addLayout(tc)
@@ -219,14 +211,9 @@ class AnalyticsPage(QWidget):
 
         if self._role == "Admin":
             export_btn = QPushButton("Export Report")
+            export_btn.setObjectName("bannerBtn")
             export_btn.setMinimumHeight(42)
             export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            export_btn.setStyleSheet(
-                "QPushButton { background: rgba(255,255,255,0.2); color: #FFFFFF;"
-                "border: 1px solid rgba(255,255,255,0.4); border-radius: 8px;"
-                "padding: 8px 18px; font-size: 13px; font-weight: bold; }"
-                "QPushButton:hover { background: rgba(255,255,255,0.35); }"
-            )
             banner_lay.addWidget(export_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
         lay.addWidget(banner)
 
@@ -345,7 +332,7 @@ class AnalyticsPage(QWidget):
         t = QLabel(title_text)
         t.setObjectName("cardTitle")
         s = QLabel(subtitle_text)
-        s.setStyleSheet("color: #7F8C8D; font-size: 12px;")
+        s.setObjectName("mutedSubtext")
         vbox.addWidget(t)
         vbox.addWidget(s)
 
@@ -383,10 +370,7 @@ class AnalyticsPage(QWidget):
 
         # Total bar at bottom
         total_lbl = QLabel(f"Total:  {total:,}")
-        total_lbl.setStyleSheet(
-            "font-size: 18px; font-weight: bold; color: #2C3E50;"
-            "padding: 6px 0 2px 0;"
-        )
+        total_lbl.setObjectName("chartTotal")
         total_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         vbox.addWidget(total_lbl)
 
@@ -409,7 +393,7 @@ class AnalyticsPage(QWidget):
         t = QLabel("Doctor Performance")
         t.setObjectName("cardTitle")
         s = QLabel("Appointments, revenue, and patient satisfaction ratings")
-        s.setStyleSheet("color: #7F8C8D; font-size: 12px;")
+        s.setObjectName("mutedSubtext")
         vbox.addWidget(t)
         vbox.addWidget(s)
 
@@ -461,7 +445,7 @@ class AnalyticsPage(QWidget):
         t = QLabel("Top Services")
         t.setObjectName("cardTitle")
         s = QLabel("Most requested services and revenue contribution")
-        s.setStyleSheet("color: #7F8C8D; font-size: 12px;")
+        s.setObjectName("mutedSubtext")
         vbox.addWidget(t)
         vbox.addWidget(s)
 
@@ -503,7 +487,7 @@ class AnalyticsPage(QWidget):
         t = QLabel("Monthly Revenue Trend")
         t.setObjectName("cardTitle")
         s = QLabel("Revenue over the last 6 months")
-        s.setStyleSheet("color: #7F8C8D; font-size: 12px;")
+        s.setObjectName("mutedSubtext")
         vbox.addWidget(t)
         vbox.addWidget(s)
 
@@ -530,7 +514,7 @@ class AnalyticsPage(QWidget):
         total_row = QHBoxLayout()
         total_row.addStretch()
         tl = QLabel("Total (6 months):  ₱ 2,529,200")
-        tl.setStyleSheet("font-size: 14px; font-weight: bold; color: #388087;")
+        tl.setObjectName("totalLabelSm")
         total_row.addWidget(tl)
         vbox.addLayout(total_row)
 
@@ -555,7 +539,7 @@ class AnalyticsPage(QWidget):
         t = QLabel("Overall Summary")
         t.setObjectName("cardTitle")
         s = QLabel("Key metrics at a glance for the selected period")
-        s.setStyleSheet("color: #7F8C8D; font-size: 12px;")
+        s.setObjectName("mutedSubtext")
         title_col.addWidget(t)
         title_col.addWidget(s)
         hdr.addLayout(title_col)
