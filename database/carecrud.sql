@@ -1,7 +1,4 @@
--- ============================================================
--- CareCRUD Database Schema  –  MySQL / MariaDB (XAMPP)
--- Normalized to Third Normal Form (3NF)
--- ============================================================
+
 
 CREATE DATABASE IF NOT EXISTS carecrud_db;
 USE carecrud_db;
@@ -23,17 +20,25 @@ CREATE TABLE roles (
     role_name VARCHAR(50) NOT NULL UNIQUE
 );
 
--- Services offered by the hospital
+-- Services offered by the hospital (V2: category + active flag)
 CREATE TABLE services (
     service_id   INT AUTO_INCREMENT PRIMARY KEY,
     service_name VARCHAR(100) NOT NULL UNIQUE,
-    price        DECIMAL(10, 2) NOT NULL DEFAULT 0.00
+    price        DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    category     VARCHAR(60) DEFAULT 'General',
+    is_active    TINYINT(1) NOT NULL DEFAULT 1
 );
 
 -- Payment methods (eliminates repeating string values in invoices)
 CREATE TABLE payment_methods (
     method_id   INT AUTO_INCREMENT PRIMARY KEY,
     method_name VARCHAR(50) NOT NULL UNIQUE
+);
+
+-- Standard conditions master list (V2)
+CREATE TABLE standard_conditions (
+    condition_id   INT AUTO_INCREMENT PRIMARY KEY,
+    condition_name VARCHAR(100) NOT NULL UNIQUE
 );
 
 
@@ -53,7 +58,16 @@ CREATE TABLE users (
     FOREIGN KEY (role_id) REFERENCES roles(role_id)
 );
 
--- Employees / Staff
+-- User preferences (V2: dark mode, etc.)
+CREATE TABLE user_preferences (
+    pref_id    INT AUTO_INCREMENT PRIMARY KEY,
+    user_email VARCHAR(150) NOT NULL UNIQUE,
+    dark_mode  TINYINT(1) NOT NULL DEFAULT 0,
+    FOREIGN KEY (user_email) REFERENCES users(email)
+        ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+-- Employees / Staff (V2: leave_from, leave_until)
 CREATE TABLE employees (
     employee_id     INT AUTO_INCREMENT PRIMARY KEY,
     first_name      VARCHAR(50)  NOT NULL,
@@ -66,23 +80,27 @@ CREATE TABLE employees (
     hire_date       DATE         NOT NULL,
     status          ENUM('Active', 'On Leave', 'Inactive') NOT NULL DEFAULT 'Active',
     notes           TEXT,
+    leave_from      DATE DEFAULT NULL,
+    leave_until     DATE DEFAULT NULL,
 
     FOREIGN KEY (role_id)       REFERENCES roles(role_id),
     FOREIGN KEY (department_id) REFERENCES departments(department_id)
 );
 
--- Patients
+-- Patients (V2: emergency_contact, blood_type)
 CREATE TABLE patients (
-    patient_id    INT AUTO_INCREMENT PRIMARY KEY,
-    first_name    VARCHAR(50)  NOT NULL,
-    last_name     VARCHAR(50)  NOT NULL,
-    sex           ENUM('Male', 'Female') NOT NULL,
-    date_of_birth DATE,
-    phone         VARCHAR(20),
-    email         VARCHAR(150),
-    status        ENUM('Active', 'Inactive') NOT NULL DEFAULT 'Active',
-    notes         TEXT,
-    created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    patient_id        INT AUTO_INCREMENT PRIMARY KEY,
+    first_name        VARCHAR(50)  NOT NULL,
+    last_name         VARCHAR(50)  NOT NULL,
+    sex               ENUM('Male', 'Female') NOT NULL,
+    date_of_birth     DATE,
+    phone             VARCHAR(20),
+    email             VARCHAR(150),
+    emergency_contact VARCHAR(200) DEFAULT '',
+    blood_type        ENUM('A+','A-','B+','B-','AB+','AB-','O+','O-','Unknown') DEFAULT 'Unknown',
+    status            ENUM('Active', 'Inactive') NOT NULL DEFAULT 'Active',
+    notes             TEXT,
+    created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Patient medical conditions (3NF: multi-valued attribute separated)
@@ -100,17 +118,21 @@ CREATE TABLE patient_conditions (
 -- TRANSACTIONAL TABLES
 -- ────────────────────────────────────────────────────────────
 
--- Appointments
+-- Appointments (V2: cancellation/reschedule reasons, reminder, recurring)
 CREATE TABLE appointments (
-    appointment_id   INT AUTO_INCREMENT PRIMARY KEY,
-    patient_id       INT  NOT NULL,
-    doctor_id        INT  NOT NULL,
-    service_id       INT  NOT NULL,
-    appointment_date DATE NOT NULL,
-    appointment_time TIME NOT NULL,
-    status           ENUM('Pending', 'Confirmed', 'Cancelled', 'Completed') NOT NULL DEFAULT 'Pending',
-    notes            TEXT,
-    created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    appointment_id     INT AUTO_INCREMENT PRIMARY KEY,
+    patient_id         INT  NOT NULL,
+    doctor_id          INT  NOT NULL,
+    service_id         INT  NOT NULL,
+    appointment_date   DATE NOT NULL,
+    appointment_time   TIME NOT NULL,
+    status             ENUM('Pending', 'Confirmed', 'Cancelled', 'Completed') NOT NULL DEFAULT 'Pending',
+    notes              TEXT,
+    cancellation_reason TEXT,
+    reschedule_reason  TEXT,
+    reminder_sent      TINYINT(1) NOT NULL DEFAULT 0,
+    recurring_parent_id INT DEFAULT NULL,
+    created_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (patient_id) REFERENCES patients(patient_id),
     FOREIGN KEY (doctor_id)  REFERENCES employees(employee_id),
@@ -133,7 +155,7 @@ CREATE TABLE queue_entries (
     FOREIGN KEY (appointment_id) REFERENCES appointments(appointment_id)
 );
 
--- Invoices (billing header)
+-- Invoices (billing header) – V2: Voided status
 CREATE TABLE invoices (
     invoice_id       INT AUTO_INCREMENT PRIMARY KEY,
     patient_id       INT  NOT NULL,
@@ -142,7 +164,7 @@ CREATE TABLE invoices (
     discount_percent DECIMAL(5, 2) NOT NULL DEFAULT 0.00,
     total_amount     DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
     amount_paid      DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
-    status           ENUM('Paid', 'Unpaid', 'Partial') NOT NULL DEFAULT 'Unpaid',
+    status           ENUM('Paid', 'Unpaid', 'Partial', 'Voided') NOT NULL DEFAULT 'Unpaid',
     notes            TEXT,
     created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -165,6 +187,17 @@ CREATE TABLE invoice_items (
     FOREIGN KEY (service_id) REFERENCES services(service_id)
 );
 
+-- Activity log (V2: audit trail)
+CREATE TABLE activity_log (
+    log_id        INT AUTO_INCREMENT PRIMARY KEY,
+    user_email    VARCHAR(150) NOT NULL,
+    user_role     VARCHAR(50)  NOT NULL,
+    action        VARCHAR(50)  NOT NULL,
+    record_type   VARCHAR(50)  NOT NULL,
+    record_detail TEXT,
+    created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 
 -- ────────────────────────────────────────────────────────────
 -- INDEXES FOR PERFORMANCE
@@ -181,13 +214,14 @@ CREATE INDEX idx_patients_status       ON patients(status);
 CREATE INDEX idx_employees_role        ON employees(role_id);
 CREATE INDEX idx_employees_dept        ON employees(department_id);
 CREATE INDEX idx_employees_status      ON employees(status);
+CREATE INDEX idx_activity_log_date     ON activity_log(created_at);
+CREATE INDEX idx_activity_log_user     ON activity_log(user_email);
 
 
 -- ============================================================
--- SAMPLE DATA
+-- SEED DATA  (lookup tables only – see sample_data.sql for full test data)
 -- ============================================================
 
--- Lookup data
 INSERT INTO departments (department_name) VALUES
     ('General Medicine'),
     ('Cardiology'),
@@ -200,26 +234,26 @@ INSERT INTO departments (department_name) VALUES
 
 INSERT INTO roles (role_name) VALUES
     ('Doctor'),
-    ('Nurse'),
+    ('Cashier'),
     ('Receptionist'),
     ('Lab Tech'),
     ('Admin'),
     ('Pharmacist');
 
-INSERT INTO services (service_name, price) VALUES
-    ('General Checkup',          800.00),
-    ('Follow-up Visit',          500.00),
-    ('Lab Tests – CBC',         1200.00),
-    ('Lab Tests – Urinalysis',   600.00),
-    ('Dental Cleaning',         2500.00),
-    ('X-Ray',                   1500.00),
-    ('ECG',                     1000.00),
-    ('Physical Therapy Session', 1800.00),
-    ('Consultation',             500.00),
-    ('Blood Work',              1200.00),
-    ('Lab Results Review',       300.00),
-    ('X-Ray Review',             800.00),
-    ('Physical Exam',           1000.00);
+INSERT INTO services (service_name, price, category, is_active) VALUES
+    ('General Checkup',          800.00,  'Consultation', 1),
+    ('Follow-up Visit',          500.00,  'Consultation', 1),
+    ('Lab Tests – CBC',         1200.00,  'Lab',          1),
+    ('Lab Tests – Urinalysis',   600.00,  'Lab',          1),
+    ('Dental Cleaning',         2500.00,  'Dental',       1),
+    ('X-Ray',                   1500.00,  'Imaging',      1),
+    ('ECG',                     1000.00,  'Imaging',      1),
+    ('Physical Therapy Session', 1800.00, 'Therapy',      1),
+    ('Consultation',             500.00,  'Consultation', 1),
+    ('Blood Work',              1200.00,  'Lab',          1),
+    ('Lab Results Review',       300.00,  'Lab',          1),
+    ('X-Ray Review',             800.00,  'Imaging',      1),
+    ('Physical Exam',           1000.00,  'Consultation', 1);
 
 INSERT INTO payment_methods (method_name) VALUES
     ('Cash'),
@@ -228,15 +262,22 @@ INSERT INTO payment_methods (method_name) VALUES
     ('Maya'),
     ('Insurance');
 
+INSERT INTO standard_conditions (condition_name) VALUES
+    ('Hypertension'), ('Diabetes'), ('Asthma'), ('Heart Disease'),
+    ('Allergies'), ('Arthritis'), ('COPD'), ('Obesity'),
+    ('Thyroid Disorder'), ('Anemia'), ('Kidney Disease'),
+    ('Depression'), ('Anxiety'), ('Migraine'), ('Epilepsy'),
+    ('Cancer'), ('Stroke'), ('HIV/AIDS'), ('Tuberculosis'),
+    ('Hepatitis'), ('None');
+
 -- Default user accounts (one per role for testing)
--- Passwords are plain-text for development; hash in production
 INSERT INTO users (email, password, full_name, role_id) VALUES
     ('admin@carecrud.com',         'admin123',     'Carlo Santos',  5),
     ('ana.reyes@carecrud.com',     'doctor123',    'Ana Reyes',     1),
-    ('sofia.reyes@carecrud.com',   'nurse123',     'Sofia Reyes',   2),
+    ('sofia.reyes@carecrud.com',   'cashier123',   'Sofia Reyes',   2),
     ('james.cruz@carecrud.com',    'reception123', 'James Cruz',    3);
 
--- Employees
+-- Default employees
 INSERT INTO employees (first_name, last_name, role_id, department_id, employment_type, phone, email, hire_date, status) VALUES
     ('Ana',    'Reyes',   1, 2, 'Full-time', '09171234567', 'ana.reyes@carecrud.com',    '2020-06-15', 'Active'),
     ('Mark',   'Tan',     1, 1, 'Full-time', '09179876543', 'mark.tan@carecrud.com',     '2019-03-10', 'Active'),
@@ -247,22 +288,22 @@ INSERT INTO employees (first_name, last_name, role_id, department_id, employment
     ('Maria',  'Garcia',  4, 5, 'Full-time', '09173334455', 'maria.garcia@carecrud.com', '2020-11-15', 'On Leave'),
     ('Carlo',  'Santos',  5, 7, 'Full-time', '09176667788', 'carlo.santos@carecrud.com', '2019-01-05', 'Active');
 
--- Patients
-INSERT INTO patients (first_name, last_name, sex, date_of_birth, phone, email, status) VALUES
-    ('Maria',  'Santos',      'Female', '1994-05-12', '09171234567', 'maria@email.com',   'Active'),
-    ('Juan',   'Dela Cruz',   'Male',   '1981-08-23', '09179876543', 'juan@email.com',    'Active'),
-    ('Ana',    'Reyes',       'Female', '1998-02-14', '09171112233', 'ana@email.com',     'Active'),
-    ('Carlos', 'Garcia',      'Male',   '1966-11-30', '09174445566', 'carlos@email.com',  'Inactive'),
-    ('Lea',    'Mendoza',     'Female', '1989-07-19', '09177778899', 'lea@email.com',     'Active'),
-    ('Roberto','Cruz',        'Male',   '1974-03-08', '09173334455', 'roberto@email.com', 'Active'),
-    ('Isabel', 'Tan',         'Female', '1985-12-25', '09176667788', 'isabel@email.com',  'Active'),
-    ('Miguel', 'Lim',         'Male',   '1971-09-17', '09172223344', 'miguel@email.com',  'Inactive'),
-    ('Rosa',   'Mendoza',     'Female', '1990-06-01', '09175551234', 'rosa@email.com',    'Active'),
-    ('Pedro',  'Villanueva',  'Male',   '1988-10-10', '09175559876', 'pedro.v@email.com', 'Active'),
-    ('Luis',   'Garcia',      'Male',   '1975-04-22', '09175554321', 'luis@email.com',    'Active'),
-    ('Sofia',  'Reyes',       'Female', '1992-01-30', '09175556789', 'sofia.r@email.com', 'Active');
+-- Default patients (with V2 fields)
+INSERT INTO patients (first_name, last_name, sex, date_of_birth, phone, email, emergency_contact, blood_type, status) VALUES
+    ('Maria',  'Santos',      'Female', '1994-05-12', '09171234567', 'maria@email.com',   'Juan Santos – 09171234568',     'O+',      'Active'),
+    ('Juan',   'Dela Cruz',   'Male',   '1981-08-23', '09179876543', 'juan@email.com',    'Rosa Dela Cruz – 09179876544',  'A+',      'Active'),
+    ('Ana',    'Reyes',       'Female', '1998-02-14', '09171112233', 'ana@email.com',     '',                               'B+',      'Active'),
+    ('Carlos', 'Garcia',      'Male',   '1966-11-30', '09174445566', 'carlos@email.com',  'Elena Garcia – 09174445567',    'AB+',     'Inactive'),
+    ('Lea',    'Mendoza',     'Female', '1989-07-19', '09177778899', 'lea@email.com',     '',                               'O-',      'Active'),
+    ('Roberto','Cruz',        'Male',   '1974-03-08', '09173334455', 'roberto@email.com', 'Maria Cruz – 09173334456',      'A-',      'Active'),
+    ('Isabel', 'Tan',         'Female', '1985-12-25', '09176667788', 'isabel@email.com',  '',                               'Unknown', 'Active'),
+    ('Miguel', 'Lim',         'Male',   '1971-09-17', '09172223344', 'miguel@email.com',  '',                               'B-',      'Inactive'),
+    ('Rosa',   'Mendoza',     'Female', '1990-06-01', '09175551234', 'rosa@email.com',    '',                               'O+',      'Active'),
+    ('Pedro',  'Villanueva',  'Male',   '1988-10-10', '09175559876', 'pedro.v@email.com', '',                               'A+',      'Active'),
+    ('Luis',   'Garcia',      'Male',   '1975-04-22', '09175554321', 'luis@email.com',    '',                               'Unknown', 'Active'),
+    ('Sofia',  'Reyes',       'Female', '1992-01-30', '09175556789', 'sofia.r@email.com', '',                               'AB-',     'Active');
 
--- Patient conditions (3NF: separated from patient table)
+-- Patient conditions
 INSERT INTO patient_conditions (patient_id, condition_name) VALUES
     (1, 'Hypertension'),
     (2, 'Diabetes'),
@@ -272,43 +313,35 @@ INSERT INTO patient_conditions (patient_id, condition_name) VALUES
     (7, 'Allergies'),
     (8, 'Arthritis');
 
--- Appointments
--- doctor_id: 1=Dr. Reyes, 2=Dr. Tan, 3=Dr. Lim, 4=Dr. Santos
--- service_id references services table
+-- Sample appointments (today = Feb 25, 2026)
 INSERT INTO appointments (patient_id, doctor_id, service_id, appointment_date, appointment_time, status) VALUES
-    -- Today: Feb 22, 2026
-    (1,  1, 1,  '2026-02-22', '09:00:00', 'Confirmed'),
-    (2,  2, 2,  '2026-02-22', '09:30:00', 'Confirmed'),
-    (3,  1, 11, '2026-02-22', '10:00:00', 'Pending'),
-    (4,  3, 5,  '2026-02-22', '10:30:00', 'Confirmed'),
-    (5,  2, 9,  '2026-02-22', '11:00:00', 'Pending'),
-    -- Tomorrow: Feb 23
-    (6,  1, 10, '2026-02-23', '08:30:00', 'Confirmed'),
-    (7,  3, 12, '2026-02-23', '09:00:00', 'Pending'),
-    (12, 2, 9,  '2026-02-23', '10:00:00', 'Confirmed'),
-    -- Feb other days
-    (8,  2, 13, '2026-02-24', '10:00:00', 'Confirmed'),
+    (1,  1, 1,  '2026-02-25', '09:00:00', 'Confirmed'),
+    (2,  2, 2,  '2026-02-25', '09:30:00', 'Confirmed'),
+    (3,  1, 11, '2026-02-25', '10:00:00', 'Pending'),
+    (4,  3, 5,  '2026-02-25', '10:30:00', 'Confirmed'),
+    (5,  2, 9,  '2026-02-25', '11:00:00', 'Pending'),
+    (6,  1, 10, '2026-02-26', '08:30:00', 'Confirmed'),
+    (7,  3, 12, '2026-02-26', '09:00:00', 'Pending'),
+    (12, 2, 9,  '2026-02-26', '10:00:00', 'Confirmed'),
+    (8,  2, 13, '2026-02-27', '10:00:00', 'Confirmed'),
     (9,  1, 1,  '2026-02-18', '09:00:00', 'Completed'),
     (10, 3, 5,  '2026-02-15', '14:00:00', 'Completed'),
-    -- January 2026
     (11, 2, 2,  '2026-01-28', '10:00:00', 'Completed'),
     (1,  1, 11, '2026-01-22', '09:30:00', 'Completed'),
     (3,  3, 12, '2026-01-15', '11:00:00', 'Completed'),
     (4,  1, 10, '2026-01-10', '08:30:00', 'Completed'),
-    -- December 2025
     (2,  2, 13, '2025-12-18', '09:00:00', 'Completed'),
     (5,  1, 1,  '2025-12-10', '10:30:00', 'Completed'),
     (6,  3, 5,  '2025-12-05', '14:00:00', 'Completed'),
-    -- November 2025
     (7,  2, 9,  '2025-11-20', '09:30:00', 'Completed'),
     (8,  1, 2,  '2025-11-12', '10:00:00', 'Completed');
 
 -- Queue entries (today)
 INSERT INTO queue_entries (patient_id, doctor_id, appointment_id, queue_time, purpose, status, created_at) VALUES
-    (1, 1, 1, '09:00:00', 'General Checkup', 'Waiting',     '2026-02-22'),
-    (2, 2, 2, '09:30:00', 'Follow-up Visit',       'In Progress', '2026-02-22'),
-    (3, 1, 3, '10:00:00', 'Lab Results Review',    'Waiting',     '2026-02-22'),
-    (4, 3, 4, '10:30:00', 'Dental Cleaning',  'Waiting',     '2026-02-22');
+    (1, 1, 1, '09:00:00', 'General Checkup',    'Waiting',     '2026-02-25'),
+    (2, 2, 2, '09:30:00', 'Follow-up Visit',    'In Progress', '2026-02-25'),
+    (3, 1, 3, '10:00:00', 'Lab Results Review',  'Waiting',     '2026-02-25'),
+    (4, 3, 4, '10:30:00', 'Dental Cleaning',     'Waiting',     '2026-02-25');
 
 -- Invoices
 INSERT INTO invoices (patient_id, appointment_id, method_id, discount_percent, total_amount, amount_paid, status) VALUES
@@ -341,7 +374,9 @@ SELECT
     e.email,
     e.hire_date,
     e.status,
-    e.notes
+    e.notes,
+    e.leave_from,
+    e.leave_until
 FROM employees e
 INNER JOIN roles r       ON e.role_id       = r.role_id
 INNER JOIN departments d ON e.department_id = d.department_id;
@@ -356,6 +391,8 @@ SELECT
     TIMESTAMPDIFF(YEAR, p.date_of_birth, CURDATE()) AS age,
     p.phone,
     p.email,
+    p.emergency_contact,
+    p.blood_type,
     COALESCE(GROUP_CONCAT(pc.condition_name SEPARATOR ', '), 'None') AS conditions,
     p.status,
     p.notes
@@ -374,7 +411,10 @@ SELECT
     CONCAT(e.first_name, ' ', e.last_name)       AS doctor_name,
     s.service_name                                AS purpose,
     a.status,
-    a.notes
+    a.notes,
+    a.cancellation_reason,
+    a.reschedule_reason,
+    a.reminder_sent
 FROM appointments a
 INNER JOIN patients  p ON a.patient_id = p.patient_id
 INNER JOIN employees e ON a.doctor_id  = e.employee_id
@@ -470,46 +510,11 @@ CREATE VIEW vw_top_services AS
 SELECT
     s.service_id,
     s.service_name,
+    s.category,
+    s.is_active,
     COUNT(a.appointment_id) AS usage_count,
     SUM(s.price)             AS total_revenue
 FROM services s
 LEFT JOIN appointments a ON s.service_id = a.service_id
-GROUP BY s.service_id, s.service_name
+GROUP BY s.service_id, s.service_name, s.category, s.is_active
 ORDER BY usage_count DESC;
-
-
--- ============================================================
--- USEFUL QUERIES (examples for Python connector)
--- ============================================================
-
--- Get today's appointments
--- SELECT * FROM vw_today_appointments;
-
--- Get appointments for a specific month/year
--- SELECT * FROM vw_appointments
--- WHERE MONTH(appointment_date) = 2
---   AND YEAR(appointment_date) = 2026
--- ORDER BY appointment_date, appointment_time;
-
--- Get all active patients with conditions
--- SELECT * FROM vw_patients WHERE status = 'Active';
-
--- Get all active employees
--- SELECT * FROM vw_employees WHERE status = 'Active';
-
--- Get unpaid / partial invoices
--- SELECT * FROM vw_invoices WHERE status IN ('Unpaid', 'Partial');
-
--- Get doctor performance
--- SELECT * FROM vw_doctor_performance ORDER BY revenue_generated DESC;
-
--- Get appointments filtered by doctor and status
--- SELECT * FROM vw_appointments
--- WHERE doctor_name LIKE '%Reyes%'
---   AND status = 'Confirmed';
-
--- Dashboard quick stats
--- SELECT
---     (SELECT COUNT(*) FROM patients WHERE status = 'Active') AS total_patients,
---     (SELECT COUNT(*) FROM appointments WHERE appointment_date = CURDATE()) AS today_appointments,
---     (SELECT COALESCE(SUM(amount_paid), 0) FROM invoices WHERE status IN ('Paid', 'Partial')) AS total_revenue;

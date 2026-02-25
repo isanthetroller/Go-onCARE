@@ -1,0 +1,27 @@
+Section,Metric,Value
+Summary,period_revenue,71700.0
+Summary,total_appts,74
+Summary,completed,63
+Summary,cancelled,0
+Summary,total_patients,18
+Summary,today_appts,3
+Summary,avg_per_day,1
+Doctor,Mark Tan,Appts=27 Rev=24600.00
+Doctor,Lisa Lim,Appts=18 Rev=24000.00
+Doctor,Fritz ,Appts=29 Rev=23100.00
+Doctor,Pedro Santos,Appts=0 Rev=0.00
+Service,General Checkup,Count=11 Rev=7200.00
+Service,Consultation,Count=8 Rev=3000.00
+Service,Dental Cleaning,Count=8 Rev=15000.00
+Service,ECG,Count=7 Rev=6000.00
+Service,Lab Tests – CBC,Count=6 Rev=7200.00
+Service,X-Ray,Count=6 Rev=9000.00
+Service,Follow-up Visit,Count=6 Rev=2500.00
+Service,Blood Work,Count=5 Rev=4800.00
+Service,Physical Exam,Count=5 Rev=5000.00
+Service,Physical Therapy Session,Count=5 Rev=9000.00
+Service,X-Ray Review,Count=4 Rev=2400.00
+Service,Lab Results Review,Count=3 Rev=600.00
+Revenue,%M %Y,73500.00
+Retention,%M %Y,New=17 Return=12
+Cancellation,%M %Y,Rate=0.0%

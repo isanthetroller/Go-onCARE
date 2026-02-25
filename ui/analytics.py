@@ -1,273 +1,233 @@
-"""Data Analytics page – pie charts, hospital performance, reports & summary."""
+"""Data Analytics page – V2
 
-import math
+New: export PDF/CSV, revenue chart, patient retention, cancellation rate,
+doctor filter, date-range KPI, period comparison, drill-down tables."""
+
+import csv, math
+
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QScrollArea,
     QGraphicsDropShadowEffect, QGridLayout, QTableWidget, QTableWidgetItem,
-    QHeaderView, QSizePolicy, QPushButton, QDateEdit,
+    QHeaderView, QSizePolicy, QPushButton, QDateEdit, QComboBox,
+    QMessageBox, QFileDialog,
 )
 from PyQt6.QtCore import Qt, QRectF, QDate
 from PyQt6.QtGui import QColor, QPainter, QPen, QBrush, QFont, QPainterPath
 from ui.styles import configure_table
 
 
-# ── Sample analytics data ──────────────────────────────────────────────
+# ── Colour palettes ───────────────────────────────────────────────────
+_CONDITION_COLORS = ["#388087", "#6FB3B8", "#BADFE7", "#C2EDCE", "#E8B931", "#D9534F", "#7F8C8D"]
+_STATUS_COLORS    = {"Completed": "#5CB85C", "Confirmed": "#388087", "Pending": "#E8B931", "Cancelled": "#D9534F"}
+_DEPT_COLORS      = ["#388087", "#6FB3B8", "#BADFE7", "#C2EDCE", "#E8B931", "#7F8C8D", "#D9534F", "#5CB85C"]
+_DEMO_COLORS      = {"0–17": "#6FB3B8", "18–35": "#388087", "36–50": "#BADFE7", "51–65": "#C2EDCE", "65+": "#E8B931"}
+_RETENTION_COLORS = {"new_patients": "#6FB3B8", "returning_patients": "#388087"}
 
-_DISEASE_DISTRIBUTION = [
-    ("Hypertension",     218, "#388087"),
-    ("Diabetes",         164, "#6FB3B8"),
-    ("Respiratory",      132, "#BADFE7"),
-    ("Heart Disease",     98, "#C2EDCE"),
-    ("Dental Issues",     87, "#E8B931"),
-    ("Skin Conditions",   62, "#D9534F"),
-    ("Others",           145, "#7F8C8D"),
-]
 
-_APPOINTMENT_STATUS = [
-    ("Completed",  342, "#5CB85C"),
-    ("Confirmed",  128, "#388087"),
-    ("Pending",     67, "#E8B931"),
-    ("Cancelled",   36, "#D9534F"),
-]
-
-_REVENUE_BY_DEPT = [
-    ("General Medicine", 285000, "#388087"),
-    ("Cardiology",       198000, "#6FB3B8"),
-    ("Dentistry",        165000, "#BADFE7"),
-    ("Pediatrics",       142000, "#C2EDCE"),
-    ("Laboratory",       124000, "#E8B931"),
-    ("Pharmacy",          98000, "#7F8C8D"),
-]
-
-_PATIENT_DEMOGRAPHICS = [
-    ("0–17",   185, "#6FB3B8"),
-    ("18–35",  312, "#388087"),
-    ("36–50",  278, "#BADFE7"),
-    ("51–65",  224, "#C2EDCE"),
-    ("65+",    149, "#E8B931"),
-]
-
-_DOCTOR_PERFORMANCE = [
-    ("Dr. Ana Reyes",    156, 148, "₱ 125,600", "4.8"),
-    ("Dr. Mark Tan",     132, 128, "₱ 108,400", "4.7"),
-    ("Dr. Lisa Lim",      98,  94, "₱ 92,300",  "4.9"),
-    ("Dr. Pedro Santos",  87,  82, "₱ 78,500",  "4.6"),
-]
-
-_MONTHLY_REVENUE = [
-    ("Sep 2025", "₱ 368,200"),
-    ("Oct 2025", "₱ 402,500"),
-    ("Nov 2025", "₱ 425,800"),
-    ("Dec 2025", "₱ 398,100"),
-    ("Jan 2026", "₱ 452,300"),
-    ("Feb 2026", "₱ 482,300"),
-]
-
-_TOP_SERVICES = [
-    ("General Checkup",     312, "₱ 249,600"),
-    ("Lab Tests – CBC",     198, "₱ 237,600"),
-    ("Dental Cleaning",     145, "₱ 362,500"),
-    ("X-Ray",               132, "₱ 198,000"),
-    ("Follow-up Visit",     287, "₱ 143,500"),
-    ("ECG",                  98, "₱ 98,000"),
-    ("Physical Therapy",     76, "₱ 136,800"),
-]
-
-# ── Pie Chart Widget ───────────────────────────────────────────────────
-
+# ── Pie Chart Widget ──────────────────────────────────────────────────
 class _PieChartWidget(QWidget):
-    """Custom-painted donut / pie chart."""
-
-    def __init__(self, data: list[tuple[str, int, str]], *, donut: bool = True,
-                 parent=None):
+    def __init__(self, data: list[tuple[str, int, str]], *, donut: bool = True, parent=None):
         super().__init__(parent)
-        self._data = data
-        self._donut = donut
+        self._data = data; self._donut = donut
         self._total = sum(v for _, v, _ in data)
         self.setMinimumSize(220, 220)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
+    def set_data(self, data):
+        self._data = data; self._total = sum(v for _, v, _ in data); self.update()
+
     def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
+        painter = QPainter(self); painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         size = min(self.width(), self.height()) - 20
-        x = (self.width() - size) / 2
-        y = (self.height() - size) / 2
+        x, y = (self.width() - size) / 2, (self.height() - size) / 2
         rect = QRectF(x, y, size, size)
-
-        start = 90 * 16  # start from top
-        for label, value, color in self._data:
+        start = 90 * 16
+        for _, value, color in self._data:
             span = int(value / self._total * 360 * 16) if self._total else 0
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QBrush(QColor(color)))
             painter.drawPie(rect, start, -span)
             start -= span
-
-        # Donut hole
         if self._donut:
-            hole = size * 0.52
-            hx = (self.width() - hole) / 2
-            hy = (self.height() - hole) / 2
+            hole = size * 0.52; hx, hy = (self.width()-hole)/2, (self.height()-hole)/2
             painter.setBrush(QBrush(QColor("#FFFFFF")))
             painter.drawEllipse(QRectF(hx, hy, hole, hole))
-
         painter.end()
 
 
-# ── Horizontal Bar Chart Widget ────────────────────────────────────────
-
+# ── Horizontal Bar Chart ──────────────────────────────────────────────
 class _HBarChartWidget(QWidget):
-    """Simple horizontal bar chart."""
-
     def __init__(self, data: list[tuple[str, int, str]], parent=None):
         super().__init__(parent)
         self._data = data
         self._max = max(v for _, v, _ in data) if data else 1
         self.setMinimumHeight(len(data) * 38 + 10)
 
+    def set_data(self, data):
+        self._data = data
+        self._max = max(v for _, v, _ in data) if data else 1
+        self.setMinimumHeight(len(data) * 38 + 10)
+        self.update()
+
     def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        bar_h = 22
-        spacing = 38
-        label_w = 130
-        value_w = 60
+        painter = QPainter(self); painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        bar_h, spacing, label_w, value_w = 22, 38, 130, 60
         bar_area = self.width() - label_w - value_w - 20
-
-        font = QFont()
-        font.setPointSize(10)
-        painter.setFont(font)
-
+        font = QFont(); font.setPointSize(10); painter.setFont(font)
         for i, (label, value, color) in enumerate(self._data):
             y = i * spacing + 8
-
-            # Label
             painter.setPen(QPen(QColor("#2C3E50")))
             painter.drawText(QRectF(0, y, label_w, bar_h),
-                             Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
-                             label)
-
-            # Bar
+                             Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, label)
             bar_w = int((value / self._max) * bar_area) if self._max else 0
-            bar_rect = QRectF(label_w, y, bar_w, bar_h)
             path = QPainterPath()
-            path.addRoundedRect(bar_rect, 4, 4)
+            path.addRoundedRect(QRectF(label_w, y, bar_w, bar_h), 4, 4)
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QBrush(QColor(color)))
             painter.drawPath(path)
-
-            # Value
             painter.setPen(QPen(QColor("#2C3E50")))
-            painter.drawText(
-                QRectF(label_w + bar_area + 4, y, value_w, bar_h),
-                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
-                f"{value:,}",
-            )
-
+            painter.drawText(QRectF(label_w + bar_area + 4, y, value_w, bar_h),
+                             Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+                             f"{value:,}")
         painter.end()
 
 
-# ── Analytics Page ─────────────────────────────────────────────────────
-
+# ══════════════════════════════════════════════════════════════════════
+#  Analytics Page
+# ══════════════════════════════════════════════════════════════════════
 class AnalyticsPage(QWidget):
-    def __init__(self, role: str = "Admin"):
+    def __init__(self, backend=None, role: str = "Admin", user_email: str = ""):
         super().__init__()
+        self._backend = backend
         self._role = role
+        self._user_email = user_email
         self._build()
 
+    @staticmethod
+    def _fmt_peso(amount: float) -> str:
+        return f"\u20b1 {amount:,.0f}"
+
+    def _load_data(self):
+        if not self._backend:
+            return {}
+        return {
+            "stats":          self._backend.get_summary_stats(),
+            "monthly_rev":    self._backend.get_monthly_revenue(6),
+            "doctors":        self._backend.get_doctor_performance(),
+            "services":       self._backend.get_top_services(),
+            "appt_status":    self._backend.get_appointment_status_counts(),
+            "conditions":     self._backend.get_patient_condition_counts(),
+            "demographics":   self._backend.get_patient_demographics(),
+            "dept_revenue":   self._backend.get_revenue_by_department(),
+            "active_doctors": self._backend.get_active_doctor_count(),
+            "monthly_appts":  self._backend.get_monthly_appointment_stats(6),
+            "retention":      self._backend.get_patient_retention(6),
+            "cancel_trend":   self._backend.get_cancellation_rate_trend(6),
+            "period_cmp":     self._backend.get_period_comparison(),
+        }
+
+    # ── Build ─────────────────────────────────────────────────────
     def _build(self):
+        data = self._load_data()
+        stats = data.get("stats", {})
+
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        inner = QWidget()
-        inner.setObjectName("pageInner")
-        lay = QVBoxLayout(inner)
-        lay.setSpacing(20)
-        lay.setContentsMargins(28, 28, 28, 28)
+        inner = QWidget(); inner.setObjectName("pageInner")
+        lay = QVBoxLayout(inner); lay.setSpacing(20); lay.setContentsMargins(28, 28, 28, 28)
 
-        # ── Header Banner ──────────────────────────────────────────
-        banner = QFrame()
-        banner.setObjectName("pageBanner")
-        banner.setMinimumHeight(100)
+        # ── Banner ────────────────────────────────────────────────
+        banner = QFrame(); banner.setObjectName("pageBanner"); banner.setMinimumHeight(100)
         shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20); shadow.setOffset(0, 4)
-        shadow.setColor(QColor(0, 0, 0, 15))
+        shadow.setBlurRadius(20); shadow.setOffset(0, 4); shadow.setColor(QColor(0, 0, 0, 15))
         banner.setGraphicsEffect(shadow)
         banner_lay = QHBoxLayout(banner)
-        banner_lay.setContentsMargins(32, 20, 32, 20)
-        banner_lay.setSpacing(0)
-        tc = QVBoxLayout()
-        tc.setSpacing(4)
-        title = QLabel("Data Analytics & Reports")
-        title.setObjectName("bannerTitle")
-        sub = QLabel("Hospital performance overview, revenue, trends, and insights")
-        sub.setObjectName("bannerSubtitle")
-        tc.addWidget(title)
-        tc.addWidget(sub)
-        banner_lay.addLayout(tc)
-        banner_lay.addStretch()
+        banner_lay.setContentsMargins(32, 20, 32, 20); banner_lay.setSpacing(0)
+        tc = QVBoxLayout(); tc.setSpacing(4)
+        tc.addWidget(self._lbl("Data Analytics & Reports", "bannerTitle"))
+        tc.addWidget(self._lbl("Hospital performance, revenue, trends, and insights", "bannerSubtitle"))
+        banner_lay.addLayout(tc); banner_lay.addStretch()
 
         if self._role == "Admin":
-            export_btn = QPushButton("Export Report")
-            export_btn.setObjectName("bannerBtn")
-            export_btn.setMinimumHeight(42)
-            export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            banner_lay.addWidget(export_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
+            for text, slot in [
+                ("⬇ Export CSV", self._export_csv),
+                ("🖨 Print", self._print_report),
+                ("↻ Refresh", self._on_refresh),
+            ]:
+                btn = QPushButton(text); btn.setObjectName("bannerBtn")
+                btn.setMinimumHeight(42); btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                btn.clicked.connect(slot)
+                banner_lay.addWidget(btn, alignment=Qt.AlignmentFlag.AlignVCenter)
         lay.addWidget(banner)
 
+        # ── Doctor-only view: own performance & revenue ───────────
+        if self._role == "Doctor":
+            self._build_doctor_view(lay)
+            lay.addStretch()
+            scroll.setWidget(inner)
+            wrapper = QVBoxLayout(self)
+            wrapper.setContentsMargins(0, 0, 0, 0)
+            wrapper.addWidget(scroll)
+            return
+
         if self._role == "Admin":
-            # ── KPI Summary Cards ──────────────────────────────────────
-            kpi_row = QHBoxLayout()
-            kpi_row.setSpacing(16)
-            kpis = [
-                ("Monthly Revenue",    "₱ 482,300",   "+12.4%",  "#388087"),
-                ("Total Patients",     "1,248",        "+3.2%",   "#5CB85C"),
-                ("Appointments",       "573",          "+8.1%",   "#6FB3B8"),
-                ("Avg. Satisfaction",  "4.75 / 5",     "+0.3%",   "#E8B931"),
-                ("Active Doctors",     "4",            "Stable",  "#C2EDCE"),
-                ("Avg. Visit / Day",   "15.8",         "+1.5%",   "#388087"),
-            ]
-            for label, value, change, color in kpis:
-                kpi_row.addWidget(self._kpi_card(label, value, change, color))
+            # ── Period Comparison KPIs ────────────────────────────
+            cmp = data.get("period_cmp", {})
+            kpi_row = QHBoxLayout(); kpi_row.setSpacing(16)
+            self._build_kpi_cards(kpi_row, stats, data, cmp)
             lay.addLayout(kpi_row)
 
-            # ── Row 1: Disease Distribution + Appointment Status ───────
-            row1 = QHBoxLayout()
-            row1.setSpacing(20)
-            row1.addWidget(self._pie_card(
-                "Patient Conditions", "Distribution of diagnosed conditions",
-                _DISEASE_DISTRIBUTION))
-            row1.addWidget(self._pie_card(
-                "Appointment Status", "Current month appointment outcomes",
-                _APPOINTMENT_STATUS))
+            # ── Row 1: Conditions + Appointment Status ────────────
+            row1 = QHBoxLayout(); row1.setSpacing(20)
+            cond_data = [(c["condition_name"], c["cnt"],
+                          _CONDITION_COLORS[i % len(_CONDITION_COLORS)])
+                         for i, c in enumerate(data.get("conditions", []))]
+            row1.addWidget(self._pie_card("Patient Conditions",
+                                          "Distribution of diagnosed conditions",
+                                          cond_data or [("No data", 1, "#CCC")]))
+            status_data = [(s["status"], s["cnt"],
+                            _STATUS_COLORS.get(s["status"], "#7F8C8D"))
+                           for s in data.get("appt_status", [])]
+            row1.addWidget(self._pie_card("Appointment Status",
+                                          "Current appointment outcomes",
+                                          status_data or [("No data", 1, "#CCC")]))
             lay.addLayout(row1)
 
-            # ── Row 2: Revenue by Department + Patient Demographics ────
-            row2 = QHBoxLayout()
-            row2.setSpacing(20)
-            row2.addWidget(self._pie_card(
-                "Revenue by Department", "Monthly revenue distribution",
-                _REVENUE_BY_DEPT))
-            row2.addWidget(self._pie_card(
-                "Patient Demographics", "Age group distribution",
-                _PATIENT_DEMOGRAPHICS))
+            # ── Row 2: Revenue by Dept + Demographics ─────────────
+            row2 = QHBoxLayout(); row2.setSpacing(20)
+            dept_data = [(d["department_name"], int(d["total_revenue"]),
+                          _DEPT_COLORS[i % len(_DEPT_COLORS)])
+                         for i, d in enumerate(data.get("dept_revenue", []))]
+            row2.addWidget(self._pie_card("Revenue by Department",
+                                          "Revenue distribution by doctor department",
+                                          dept_data or [("No data", 1, "#CCC")]))
+            demo_data = [(d["age_group"], d["cnt"],
+                          _DEMO_COLORS.get(d["age_group"], "#7F8C8D"))
+                         for d in data.get("demographics", [])]
+            row2.addWidget(self._pie_card("Patient Demographics",
+                                          "Age group distribution",
+                                          demo_data or [("No data", 1, "#CCC")]))
             lay.addLayout(row2)
 
-        # ── Doctor Performance Table ───────────────────────────────────
-        lay.addWidget(self._doctor_perf_card())
+            # ── Patient Retention ─────────────────────────────────
+            lay.addWidget(self._retention_card(data.get("retention", [])))
+
+            # ── Cancellation Rate Trend ───────────────────────────
+            lay.addWidget(self._cancellation_card(data.get("cancel_trend", [])))
+
+        # ── Doctor Performance (all roles) ────────────────────────
+        lay.addWidget(self._doctor_perf_card(data.get("doctors", [])))
 
         if self._role == "Admin":
-            # ── Top Services + Monthly Revenue ─────────────────────────
-            row4 = QHBoxLayout()
-            row4.setSpacing(20)
-            row4.addWidget(self._top_services_card())
-            row4.addWidget(self._monthly_revenue_card())
+            # ── Top Services + Monthly Revenue ────────────────────
+            row4 = QHBoxLayout(); row4.setSpacing(20)
+            row4.addWidget(self._top_services_card(data.get("services", [])))
+            row4.addWidget(self._monthly_revenue_card(data.get("monthly_rev", [])))
             lay.addLayout(row4)
 
-            # ── Summary Table ──────────────────────────────────────────
-            lay.addWidget(self._summary_table_card())
+            # ── Summary / KPI Table ───────────────────────────────
+            lay.addWidget(self._summary_table_card(data))
 
         lay.addStretch()
         scroll.setWidget(inner)
@@ -275,130 +235,275 @@ class AnalyticsPage(QWidget):
         wrapper.setContentsMargins(0, 0, 0, 0)
         wrapper.addWidget(scroll)
 
-    # ── KPI card ───────────────────────────────────────────────────────
+    # ── helpers ───────────────────────────────────────────────────
     @staticmethod
-    def _kpi_card(label, value, change, color) -> QFrame:
-        card = QFrame()
-        card.setObjectName("card")
-        card.setMinimumHeight(110)
+    def _lbl(text, obj_name):
+        l = QLabel(text); l.setObjectName(obj_name); return l
+
+    def _build_kpi_cards(self, kpi_row, stats, data, cmp):
+        monthly_rev = data.get("monthly_rev", [])
+        current_month_rev = float(monthly_rev[-1]["total_revenue"]) if monthly_rev else 0
+        total_appts = stats.get("total_appts", 0)
+        active_docs = data.get("active_doctors", 0)
+        avg_per_day = stats.get("avg_per_day", 0)
+        total_patients = stats.get("total_patients", 0)
+
+        kpis = [
+            ("Monthly Revenue", self._fmt_peso(current_month_rev), "#388087",
+             cmp.get("revenue_delta", 0)),
+            ("Total Patients", f"{total_patients:,}", "#5CB85C",
+             cmp.get("patients_delta", 0)),
+            ("Appointments", f"{total_appts:,}", "#6FB3B8",
+             cmp.get("appts_delta", 0)),
+            ("Active Doctors", f"{active_docs}", "#C2EDCE", None),
+            ("Avg. Visit / Day", f"{avg_per_day}", "#388087", None),
+        ]
+        for label, value, color, delta in kpis:
+            kpi_row.addWidget(self._kpi_card(label, value, color, delta))
+
+    # ── Doctor-only analytics view ────────────────────────────────
+    def _build_doctor_view(self, lay):
+        """Build a personalised analytics page for a logged-in Doctor."""
+        own = self._backend.get_doctor_own_stats(self._user_email) if self._backend else {}
+        perf = own.get("performance", {})
+        monthly = own.get("monthly", [])
+
+        doc_name = perf.get("doctor_name", "Doctor")
+
+        # ── KPI cards ─────────────────────────────────────────────
+        kpi_row = QHBoxLayout(); kpi_row.setSpacing(16)
+        total_appts = int(perf.get("total_appointments", 0) or 0)
+        completed   = int(perf.get("completed", 0) or 0)
+        cancelled   = int(perf.get("cancelled", 0) or 0)
+        revenue     = float(perf.get("revenue_generated", 0) or 0)
+        comp_rate   = (completed / total_appts * 100) if total_appts else 0
+
+        kpis = [
+            ("Total Appointments", str(total_appts), "#388087"),
+            ("Completed", str(completed), "#5CB85C"),
+            ("Cancelled", str(cancelled), "#D9534F"),
+            ("Revenue Generated", self._fmt_peso(revenue), "#6FB3B8"),
+            ("Completion Rate", f"{comp_rate:.1f}%", "#C2EDCE"),
+        ]
+        for label, value, color in kpis:
+            kpi_row.addWidget(self._kpi_card(label, value, color))
+        lay.addLayout(kpi_row)
+
+        # ── Info card (department, employment type) ───────────────
+        info_card = QFrame(); info_card.setObjectName("card")
         shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20)
-        shadow.setOffset(0, 4)
-        shadow.setColor(QColor(0, 0, 0, 18))
+        shadow.setBlurRadius(20); shadow.setOffset(0, 4); shadow.setColor(QColor(0, 0, 0, 18))
+        info_card.setGraphicsEffect(shadow)
+        info_vbox = QVBoxLayout(info_card)
+        info_vbox.setContentsMargins(20, 18, 20, 14); info_vbox.setSpacing(8)
+        info_vbox.addWidget(self._lbl(f"Dr. {doc_name}", "cardTitle"))
+        info_vbox.addWidget(self._lbl("Your profile summary", "mutedSubtext"))
+
+        info_grid = QGridLayout(); info_grid.setSpacing(12)
+        dept = perf.get("department_name", "—")
+        emp_type = perf.get("employment_type", "—")
+        for col, (lbl, val) in enumerate([
+            ("Department", dept), ("Employment Type", emp_type),
+            ("Total Revenue", self._fmt_peso(revenue)),
+        ]):
+            v = QLabel(val); v.setStyleSheet("font-size:16px; font-weight:bold; color:#388087;")
+            l = QLabel(lbl); l.setStyleSheet("font-size:11px; color:#7F8C8D;")
+            info_grid.addWidget(v, 0, col)
+            info_grid.addWidget(l, 1, col)
+        info_vbox.addLayout(info_grid)
+        lay.addWidget(info_card)
+
+        # ── Monthly Revenue Trend (own) ───────────────────────────
+        if monthly:
+            rev_card = QFrame(); rev_card.setObjectName("card")
+            shadow2 = QGraphicsDropShadowEffect()
+            shadow2.setBlurRadius(20); shadow2.setOffset(0, 4); shadow2.setColor(QColor(0, 0, 0, 18))
+            rev_card.setGraphicsEffect(shadow2)
+            vbox = QVBoxLayout(rev_card); vbox.setContentsMargins(20, 18, 20, 14); vbox.setSpacing(12)
+            vbox.addWidget(self._lbl("Your Monthly Revenue", "cardTitle"))
+            vbox.addWidget(self._lbl("Revenue from completed appointments over the last 6 months", "mutedSubtext"))
+            bar_data = [(m["month_label"][:3], int(float(m.get("revenue", 0))))
+                        for m in monthly]
+            colors = ["#388087"] * len(bar_data)
+            chart_data = [(lbl, val, c) for (lbl, val), c in zip(bar_data, colors)]
+            chart = _HBarChartWidget(chart_data)
+            vbox.addWidget(chart)
+            grand = sum(float(m.get("revenue", 0)) for m in monthly)
+            total_row = QHBoxLayout(); total_row.addStretch()
+            tl = QLabel(f"Total ({len(monthly)} months):  {self._fmt_peso(grand)}")
+            tl.setObjectName("totalLabelSm")
+            total_row.addWidget(tl); vbox.addLayout(total_row)
+            lay.addWidget(rev_card)
+
+        # ── Monthly breakdown table ───────────────────────────────
+        if monthly:
+            tbl_card = QFrame(); tbl_card.setObjectName("card")
+            shadow3 = QGraphicsDropShadowEffect()
+            shadow3.setBlurRadius(20); shadow3.setOffset(0, 4); shadow3.setColor(QColor(0, 0, 0, 18))
+            tbl_card.setGraphicsEffect(shadow3)
+            vbox2 = QVBoxLayout(tbl_card); vbox2.setContentsMargins(20, 18, 20, 14); vbox2.setSpacing(12)
+            vbox2.addWidget(self._lbl("Monthly Breakdown", "cardTitle"))
+            vbox2.addWidget(self._lbl("Appointments and revenue per month", "mutedSubtext"))
+            cols = ["Month", "Appointments", "Completed", "Revenue"]
+            tbl = QTableWidget(len(monthly), len(cols))
+            tbl.setHorizontalHeaderLabels(cols)
+            tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+            tbl.verticalHeader().setVisible(False)
+            tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+            tbl.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+            tbl.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            tbl.setAlternatingRowColors(True)
+            tbl.setMaximumHeight(len(monthly) * 40 + 40)
+            tbl.verticalHeader().setDefaultSectionSize(36)
+            configure_table(tbl)
+            for r, m in enumerate(monthly):
+                tbl.setItem(r, 0, QTableWidgetItem(m.get("month_label", "")))
+                tbl.setItem(r, 1, QTableWidgetItem(str(m.get("total_appointments", 0))))
+                tbl.setItem(r, 2, QTableWidgetItem(str(m.get("completed", 0))))
+                tbl.setItem(r, 3, QTableWidgetItem(self._fmt_peso(float(m.get("revenue", 0)))))
+            vbox2.addWidget(tbl)
+            lay.addWidget(tbl_card)
+
+    @staticmethod
+    def _kpi_card(label, value, color, delta=None) -> QFrame:
+        card = QFrame(); card.setObjectName("card"); card.setMinimumHeight(110)
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(20); shadow.setOffset(0, 4); shadow.setColor(QColor(0, 0, 0, 18))
         card.setGraphicsEffect(shadow)
-
-        vbox = QVBoxLayout(card)
-        vbox.setContentsMargins(18, 14, 18, 14)
-        vbox.setSpacing(4)
-
-        strip = QFrame()
-        strip.setFixedHeight(3)
+        vbox = QVBoxLayout(card); vbox.setContentsMargins(18, 14, 18, 14); vbox.setSpacing(4)
+        strip = QFrame(); strip.setFixedHeight(3)
         strip.setStyleSheet(f"background-color: {color}; border-radius: 1px;")
         vbox.addWidget(strip)
-
-        val_row = QHBoxLayout()
-        v = QLabel(value)
-        v.setObjectName("statValue")
-        v.setStyleSheet("font-size: 18px;")
-        ch = QLabel(change)
-        ch_color = "#5CB85C" if change.startswith("+") else "#7F8C8D"
-        ch.setStyleSheet(f"color: {ch_color}; font-size: 11px; font-weight: bold;")
-        val_row.addWidget(v)
-        val_row.addStretch()
-        val_row.addWidget(ch)
-        vbox.addLayout(val_row)
-
-        l = QLabel(label)
-        l.setObjectName("statLabel")
-        vbox.addWidget(l)
+        v = QLabel(value); v.setObjectName("statValue"); vbox.addWidget(v)
+        l = QLabel(label); l.setObjectName("statLabel"); vbox.addWidget(l)
+        if delta is not None:
+            arrow = "▲" if delta >= 0 else "▼"
+            clr = "#5CB85C" if delta >= 0 else "#D9534F"
+            d = QLabel(f"{arrow} {abs(delta):.1f}% vs last month")
+            d.setStyleSheet(f"color: {clr}; font-size: 11px; font-weight: bold;")
+            vbox.addWidget(d)
         return card
 
-    # ── Pie chart card ─────────────────────────────────────────────────
+    # ── Refresh / Export ──────────────────────────────────────────
+    def _on_refresh(self):
+        old = self.layout()
+        if old:
+            while old.count():
+                item = old.takeAt(0)
+                w = item.widget()
+                if w:
+                    w.deleteLater()
+            from PyQt6.QtWidgets import QWidget as _QW
+            _QW().setLayout(old)
+        self._build()
+
+    def _export_csv(self):
+        path, _ = QFileDialog.getSaveFileName(self, "Export Analytics", "analytics.csv", "CSV (*.csv)")
+        if not path:
+            return
+        data = self._load_data()
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["Section", "Metric", "Value"])
+            stats = data.get("stats", {})
+            for k, v in stats.items():
+                w.writerow(["Summary", k, v])
+            for doc in data.get("doctors", []):
+                w.writerow(["Doctor", doc.get("doctor_name", ""),
+                            f"Appts={doc.get('total_appointments',0)} Rev={doc.get('revenue_generated',0)}"])
+            for svc in data.get("services", []):
+                w.writerow(["Service", svc.get("service_name", ""),
+                            f"Count={svc.get('usage_count',0)} Rev={svc.get('total_revenue',0)}"])
+            for m in data.get("monthly_rev", []):
+                w.writerow(["Revenue", m.get("month_label", ""), m.get("total_revenue", 0)])
+            for r in data.get("retention", []):
+                w.writerow(["Retention", r.get("month_label", ""),
+                            f"New={r.get('new_patients',0)} Return={r.get('returning_patients',0)}"])
+            for c in data.get("cancel_trend", []):
+                w.writerow(["Cancellation", c.get("month_label", ""),
+                            f"Rate={c.get('rate',0)}%"])
+        QMessageBox.information(self, "Exported", f"Analytics exported to:\n{path}")
+
+    def _print_report(self):
+        data = self._load_data()
+        stats = data.get("stats", {})
+        lines = [
+            "=" * 52,
+            "         C A R E C R U D   A N A L Y T I C S",
+            "=" * 52,
+            "",
+            "── Summary ─────────────────────────────────────",
+            f"  Period Revenue:     {self._fmt_peso(stats.get('period_revenue', 0))}",
+            f"  Total Appointments: {stats.get('total_appts', 0):,}",
+            f"  Completed:          {stats.get('completed', 0):,}",
+            f"  Cancelled:          {stats.get('cancelled', 0):,}",
+            f"  Active Patients:    {stats.get('total_patients', 0):,}",
+            f"  Today's Appts:      {stats.get('today_appts', 0):,}",
+            "",
+            "── Doctor Performance ──────────────────────────",
+        ]
+        for doc in data.get("doctors", []):
+            lines.append(
+                f"  Dr. {doc.get('doctor_name',''):<20}  "
+                f"Appts: {doc.get('total_appointments',0):<6}  "
+                f"Rev: {self._fmt_peso(float(doc.get('revenue_generated',0)))}"
+            )
+        lines += ["", "── Top Services ────────────────────────────────"]
+        for svc in data.get("services", []):
+            lines.append(
+                f"  {svc.get('service_name',''):<25}  "
+                f"Count: {svc.get('usage_count',0):<6}  "
+                f"Rev: {self._fmt_peso(float(svc.get('total_revenue',0)))}"
+            )
+        lines += ["", "=" * 52]
+        QMessageBox.information(self, "Analytics Report", "\n".join(lines))
+
+    # ── Pie card ──────────────────────────────────────────────────
     @staticmethod
     def _pie_card(title_text, subtitle_text, data) -> QFrame:
-        card = QFrame()
-        card.setObjectName("card")
-        card.setMinimumHeight(340)
+        card = QFrame(); card.setObjectName("card"); card.setMinimumHeight(340)
         shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20)
-        shadow.setOffset(0, 4)
-        shadow.setColor(QColor(0, 0, 0, 18))
+        shadow.setBlurRadius(20); shadow.setOffset(0, 4); shadow.setColor(QColor(0, 0, 0, 18))
         card.setGraphicsEffect(shadow)
+        vbox = QVBoxLayout(card); vbox.setContentsMargins(20, 18, 20, 14); vbox.setSpacing(8)
+        t = QLabel(title_text); t.setObjectName("cardTitle")
+        s = QLabel(subtitle_text); s.setObjectName("mutedSubtext")
+        vbox.addWidget(t); vbox.addWidget(s)
 
-        vbox = QVBoxLayout(card)
-        vbox.setContentsMargins(20, 18, 20, 14)
-        vbox.setSpacing(8)
-
-        t = QLabel(title_text)
-        t.setObjectName("cardTitle")
-        s = QLabel(subtitle_text)
-        s.setObjectName("mutedSubtext")
-        vbox.addWidget(t)
-        vbox.addWidget(s)
-
-        content = QHBoxLayout()
-        content.setSpacing(16)
-
-        chart = _PieChartWidget(data)
-        chart.setFixedSize(200, 200)
+        content = QHBoxLayout(); content.setSpacing(16)
+        chart = _PieChartWidget(data); chart.setFixedSize(200, 200)
         content.addWidget(chart, alignment=Qt.AlignmentFlag.AlignCenter)
-
-        # Legend
-        legend = QVBoxLayout()
-        legend.setSpacing(6)
+        legend = QVBoxLayout(); legend.setSpacing(6)
         total = sum(v for _, v, _ in data)
         for label, value, color in data:
             pct = (value / total * 100) if total else 0
-            row = QHBoxLayout()
-            row.setSpacing(8)
-            dot = QLabel("●")
-            dot.setStyleSheet(f"color: {color}; font-size: 14px;")
-            dot.setFixedWidth(16)
-            lbl = QLabel(f"{label}")
-            lbl.setStyleSheet("color: #2C3E50; font-size: 12px;")
-            val = QLabel(f"{value:,} ({pct:.1f}%)")
-            val.setStyleSheet("color: #7F8C8D; font-size: 11px;")
+            row = QHBoxLayout(); row.setSpacing(8)
+            dot = QLabel("●"); dot.setStyleSheet(f"color:{color}; font-size:14px;"); dot.setFixedWidth(16)
+            lbl = QLabel(label); lbl.setStyleSheet("color:#2C3E50; font-size:12px;")
+            val = QLabel(f"{value:,} ({pct:.1f}%)"); val.setStyleSheet("color:#7F8C8D; font-size:11px;")
             val.setAlignment(Qt.AlignmentFlag.AlignRight)
-            row.addWidget(dot)
-            row.addWidget(lbl, 1)
-            row.addWidget(val)
+            row.addWidget(dot); row.addWidget(lbl, 1); row.addWidget(val)
             legend.addLayout(row)
         legend.addStretch()
         content.addLayout(legend, 1)
-
         vbox.addLayout(content, 1)
-
-        # Total bar at bottom
-        total_lbl = QLabel(f"Total:  {total:,}")
-        total_lbl.setObjectName("chartTotal")
+        total_lbl = QLabel(f"Total:  {total:,}"); total_lbl.setObjectName("chartTotal")
         total_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         vbox.addWidget(total_lbl)
-
         return card
 
-    # ── Doctor performance card ────────────────────────────────────────
-    def _doctor_perf_card(self) -> QFrame:
-        card = QFrame()
-        card.setObjectName("card")
+    # ── Patient Retention card ────────────────────────────────────
+    def _retention_card(self, retention: list) -> QFrame:
+        card = QFrame(); card.setObjectName("card")
         shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20)
-        shadow.setOffset(0, 4)
-        shadow.setColor(QColor(0, 0, 0, 18))
+        shadow.setBlurRadius(20); shadow.setOffset(0, 4); shadow.setColor(QColor(0, 0, 0, 18))
         card.setGraphicsEffect(shadow)
+        vbox = QVBoxLayout(card); vbox.setContentsMargins(20, 18, 20, 14); vbox.setSpacing(12)
+        vbox.addWidget(self._lbl("Patient Retention", "cardTitle"))
+        vbox.addWidget(self._lbl("New vs returning patients per month", "mutedSubtext"))
 
-        vbox = QVBoxLayout(card)
-        vbox.setContentsMargins(20, 18, 20, 14)
-        vbox.setSpacing(12)
-
-        t = QLabel("Doctor Performance")
-        t.setObjectName("cardTitle")
-        s = QLabel("Appointments, revenue, and patient satisfaction ratings")
-        s.setObjectName("mutedSubtext")
-        vbox.addWidget(t)
-        vbox.addWidget(s)
-
-        cols = ["Doctor", "Total Appts", "Completed", "Revenue Generated", "Patient Rating"]
-        tbl = QTableWidget(len(_DOCTOR_PERFORMANCE), len(cols))
+        cols = ["Month", "New Patients", "Returning", "Total"]
+        tbl = QTableWidget(len(retention), len(cols))
         tbl.setHorizontalHeaderLabels(cols)
         tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         tbl.verticalHeader().setVisible(False)
@@ -406,51 +511,99 @@ class AnalyticsPage(QWidget):
         tbl.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
         tbl.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         tbl.setAlternatingRowColors(True)
-        tbl.setMinimumHeight(len(_DOCTOR_PERFORMANCE) * 48 + 48)
+        tbl.setMinimumHeight(max(len(retention), 1) * 48 + 48)
         tbl.verticalHeader().setDefaultSectionSize(48)
         configure_table(tbl)
-
-        for r, (name, total, completed, revenue, rating) in enumerate(_DOCTOR_PERFORMANCE):
-            tbl.setItem(r, 0, QTableWidgetItem(name))
-            tbl.setItem(r, 1, QTableWidgetItem(str(total)))
-            tbl.setItem(r, 2, QTableWidgetItem(str(completed)))
-            tbl.setItem(r, 3, QTableWidgetItem(revenue))
-            item = QTableWidgetItem(f"⭐ {rating}")
-            rating_val = float(rating)
-            if rating_val >= 4.8:
-                item.setForeground(QColor("#5CB85C"))
-            elif rating_val >= 4.6:
-                item.setForeground(QColor("#388087"))
-            else:
-                item.setForeground(QColor("#E8B931"))
-            tbl.setItem(r, 4, item)
-
+        for r, row in enumerate(retention):
+            new_p = int(row.get("new_patients", 0) or 0)
+            ret_p = int(row.get("returning_patients", 0) or 0)
+            tbl.setItem(r, 0, QTableWidgetItem(row.get("month_label", "")))
+            ni = QTableWidgetItem(str(new_p)); ni.setForeground(QColor("#6FB3B8"))
+            tbl.setItem(r, 1, ni)
+            ri = QTableWidgetItem(str(ret_p)); ri.setForeground(QColor("#388087"))
+            tbl.setItem(r, 2, ri)
+            tbl.setItem(r, 3, QTableWidgetItem(str(new_p + ret_p)))
         vbox.addWidget(tbl)
         return card
 
-    # ── Top services card ──────────────────────────────────────────────
-    def _top_services_card(self) -> QFrame:
-        card = QFrame()
-        card.setObjectName("card")
+    # ── Cancellation Rate card ────────────────────────────────────
+    def _cancellation_card(self, cancel_trend: list) -> QFrame:
+        card = QFrame(); card.setObjectName("card")
         shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20)
-        shadow.setOffset(0, 4)
-        shadow.setColor(QColor(0, 0, 0, 18))
+        shadow.setBlurRadius(20); shadow.setOffset(0, 4); shadow.setColor(QColor(0, 0, 0, 18))
         card.setGraphicsEffect(shadow)
+        vbox = QVBoxLayout(card); vbox.setContentsMargins(20, 18, 20, 14); vbox.setSpacing(12)
+        vbox.addWidget(self._lbl("Cancellation Rate Trend", "cardTitle"))
+        vbox.addWidget(self._lbl("Monthly cancellation rate over time", "mutedSubtext"))
 
-        vbox = QVBoxLayout(card)
-        vbox.setContentsMargins(20, 18, 20, 14)
-        vbox.setSpacing(12)
+        cols = ["Month", "Total", "Cancelled", "Rate"]
+        tbl = QTableWidget(len(cancel_trend), len(cols))
+        tbl.setHorizontalHeaderLabels(cols)
+        tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        tbl.verticalHeader().setVisible(False)
+        tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        tbl.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        tbl.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        tbl.setAlternatingRowColors(True)
+        tbl.setMinimumHeight(max(len(cancel_trend), 1) * 48 + 48)
+        tbl.verticalHeader().setDefaultSectionSize(48)
+        configure_table(tbl)
+        for r, row in enumerate(cancel_trend):
+            tbl.setItem(r, 0, QTableWidgetItem(row.get("month_label", "")))
+            tbl.setItem(r, 1, QTableWidgetItem(str(row.get("total", 0))))
+            ci = QTableWidgetItem(str(row.get("cancelled", 0)))
+            ci.setForeground(QColor("#D9534F"))
+            tbl.setItem(r, 2, ci)
+            rate = float(row.get("rate", 0) or 0)
+            ri = QTableWidgetItem(f"{rate:.1f}%")
+            ri.setForeground(QColor("#D9534F" if rate > 15 else "#E8B931" if rate > 5 else "#5CB85C"))
+            tbl.setItem(r, 3, ri)
+        vbox.addWidget(tbl)
+        return card
 
-        t = QLabel("Top Services")
-        t.setObjectName("cardTitle")
-        s = QLabel("Most requested services and revenue contribution")
-        s.setObjectName("mutedSubtext")
-        vbox.addWidget(t)
-        vbox.addWidget(s)
+    # ── Doctor Performance ────────────────────────────────────────
+    def _doctor_perf_card(self, doctors: list) -> QFrame:
+        card = QFrame(); card.setObjectName("card")
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(20); shadow.setOffset(0, 4); shadow.setColor(QColor(0, 0, 0, 18))
+        card.setGraphicsEffect(shadow)
+        vbox = QVBoxLayout(card); vbox.setContentsMargins(20, 18, 20, 14); vbox.setSpacing(12)
+        vbox.addWidget(self._lbl("Doctor Performance", "cardTitle"))
+        vbox.addWidget(self._lbl("Appointments, completions, and revenue generated", "mutedSubtext"))
+
+        cols = ["Doctor", "Total Appts", "Completed", "Revenue Generated"]
+        tbl = QTableWidget(len(doctors), len(cols))
+        tbl.setHorizontalHeaderLabels(cols)
+        tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        tbl.verticalHeader().setVisible(False)
+        tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        tbl.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        tbl.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        tbl.setAlternatingRowColors(True)
+        tbl.setMinimumHeight(max(len(doctors), 1) * 48 + 48)
+        tbl.verticalHeader().setDefaultSectionSize(48)
+        configure_table(tbl)
+        for r, doc in enumerate(doctors):
+            name = doc.get("doctor_name", "")
+            tbl.setItem(r, 0, QTableWidgetItem(f"Dr. {name.split()[-1]}" if name else ""))
+            tbl.setItem(r, 1, QTableWidgetItem(str(doc.get("total_appointments", 0))))
+            tbl.setItem(r, 2, QTableWidgetItem(str(doc.get("completed", 0))))
+            tbl.setItem(r, 3, QTableWidgetItem(self._fmt_peso(float(doc.get("revenue_generated", 0)))))
+        vbox.addWidget(tbl)
+        return card
+
+    # ── Top Services ──────────────────────────────────────────────
+    def _top_services_card(self, services: list) -> QFrame:
+        card = QFrame(); card.setObjectName("card")
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(20); shadow.setOffset(0, 4); shadow.setColor(QColor(0, 0, 0, 18))
+        card.setGraphicsEffect(shadow)
+        vbox = QVBoxLayout(card); vbox.setContentsMargins(20, 18, 20, 14); vbox.setSpacing(12)
+        vbox.addWidget(self._lbl("Top Services", "cardTitle"))
+        vbox.addWidget(self._lbl("Most requested services and revenue contribution", "mutedSubtext"))
 
         cols = ["Service", "Count", "Revenue"]
-        tbl = QTableWidget(len(_TOP_SERVICES), len(cols))
+        tbl = QTableWidget(len(services), len(cols))
         tbl.setHorizontalHeaderLabels(cols)
         tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         tbl.verticalHeader().setVisible(False)
@@ -458,175 +611,114 @@ class AnalyticsPage(QWidget):
         tbl.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
         tbl.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         tbl.setAlternatingRowColors(True)
-        tbl.setMinimumHeight(len(_TOP_SERVICES) * 44 + 48)
-        tbl.verticalHeader().setDefaultSectionSize(44)
-        configure_table(tbl)
-
-        for r, (name, count, revenue) in enumerate(_TOP_SERVICES):
-            tbl.setItem(r, 0, QTableWidgetItem(name))
-            tbl.setItem(r, 1, QTableWidgetItem(str(count)))
-            tbl.setItem(r, 2, QTableWidgetItem(revenue))
-
-        vbox.addWidget(tbl)
-        return card
-
-    # ── Monthly revenue card ───────────────────────────────────────────
-    def _monthly_revenue_card(self) -> QFrame:
-        card = QFrame()
-        card.setObjectName("card")
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20)
-        shadow.setOffset(0, 4)
-        shadow.setColor(QColor(0, 0, 0, 18))
-        card.setGraphicsEffect(shadow)
-
-        vbox = QVBoxLayout(card)
-        vbox.setContentsMargins(20, 18, 20, 14)
-        vbox.setSpacing(12)
-
-        t = QLabel("Monthly Revenue Trend")
-        t.setObjectName("cardTitle")
-        s = QLabel("Revenue over the last 6 months")
-        s.setObjectName("mutedSubtext")
-        vbox.addWidget(t)
-        vbox.addWidget(s)
-
-        cols = ["Month", "Revenue"]
-        tbl = QTableWidget(len(_MONTHLY_REVENUE), len(cols))
-        tbl.setHorizontalHeaderLabels(cols)
-        tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        tbl.verticalHeader().setVisible(False)
-        tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        tbl.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        tbl.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        tbl.setAlternatingRowColors(True)
-        tbl.setMinimumHeight(len(_MONTHLY_REVENUE) * 44 + 48)
-        tbl.verticalHeader().setDefaultSectionSize(44)
-        configure_table(tbl)
-
-        for r, (month, revenue) in enumerate(_MONTHLY_REVENUE):
-            tbl.setItem(r, 0, QTableWidgetItem(month))
-            tbl.setItem(r, 1, QTableWidgetItem(revenue))
-
-        vbox.addWidget(tbl)
-
-        # Total
-        total_row = QHBoxLayout()
-        total_row.addStretch()
-        tl = QLabel("Total (6 months):  ₱ 2,529,200")
-        tl.setObjectName("totalLabelSm")
-        total_row.addWidget(tl)
-        vbox.addLayout(total_row)
-
-        return card
-
-    # ── Summary table card ─────────────────────────────────────────────
-    def _summary_table_card(self) -> QFrame:
-        card = QFrame()
-        card.setObjectName("card")
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20)
-        shadow.setOffset(0, 4)
-        shadow.setColor(QColor(0, 0, 0, 18))
-        card.setGraphicsEffect(shadow)
-
-        vbox = QVBoxLayout(card)
-        vbox.setContentsMargins(20, 18, 20, 14)
-        vbox.setSpacing(12)
-
-        hdr = QHBoxLayout()
-        title_col = QVBoxLayout()
-        t = QLabel("Overall Summary")
-        t.setObjectName("cardTitle")
-        s = QLabel("Key metrics at a glance for the selected period")
-        s.setObjectName("mutedSubtext")
-        title_col.addWidget(t)
-        title_col.addWidget(s)
-        hdr.addLayout(title_col)
-        hdr.addStretch()
-
-        hdr.addWidget(QLabel("From:"))
-        self.sum_from = QDateEdit()
-        self.sum_from.setCalendarPopup(True)
-        self.sum_from.setDate(QDate(2025, 9, 1))
-        self.sum_from.setObjectName("formCombo")
-        self.sum_from.setMinimumHeight(36)
-        self.sum_from.setMaximumWidth(140)
-        hdr.addWidget(self.sum_from)
-
-        hdr.addWidget(QLabel("To:"))
-        self.sum_to = QDateEdit()
-        self.sum_to.setCalendarPopup(True)
-        self.sum_to.setDate(QDate.currentDate())
-        self.sum_to.setObjectName("formCombo")
-        self.sum_to.setMinimumHeight(36)
-        self.sum_to.setMaximumWidth(140)
-        hdr.addWidget(self.sum_to)
-
-        apply_btn = QPushButton("Apply")
-        apply_btn.setObjectName("secondaryBtn")
-        apply_btn.setMinimumHeight(36)
-        apply_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        hdr.addWidget(apply_btn)
-
-        vbox.addLayout(hdr)
-
-        summary_data = [
-            ("Total Revenue (6 months)", "₱ 2,529,200",  "+9.8%"),
-            ("Appointments Completed",   "342",          "+8.1%"),
-            ("Appointments Cancelled",   "36",           "-2.1%"),
-            ("Completion Rate",          "89.7%",        "+1.3%"),
-            ("Top Service",              "Dental Cleaning (₱ 362,500)", "—"),
-        ]
-
-        cols = ["Metric", "Value", "Change"]
-        tbl = QTableWidget(len(summary_data), len(cols))
-        tbl.setHorizontalHeaderLabels(cols)
-        tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        tbl.verticalHeader().setVisible(False)
-        tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        tbl.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        tbl.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        tbl.setAlternatingRowColors(True)
-        tbl.setMinimumHeight(len(summary_data) * 44 + 48)
-        tbl.verticalHeader().setDefaultSectionSize(44)
-        configure_table(tbl)
-
-        for r, (metric, value, change) in enumerate(summary_data):
-            m_item = QTableWidgetItem(metric)
-            tbl.setItem(r, 0, m_item)
-
-            v_item = QTableWidgetItem(value)
-            v_item.setForeground(QColor("#2C3E50"))
-            tbl.setItem(r, 1, v_item)
-
-            ch_item = QTableWidgetItem(change)
-            if change.startswith("+"):
-                ch_item.setForeground(QColor("#5CB85C"))
-            elif change.startswith("-"):
-                ch_item.setForeground(QColor("#D9534F"))
-            else:
-                ch_item.setForeground(QColor("#7F8C8D"))
-            tbl.setItem(r, 2, ch_item)
-
-        vbox.addWidget(tbl)
-        return card
-
-    # ── Table helper ───────────────────────────────────────────────────
-    @staticmethod
-    def _make_table(headers, rows) -> QTableWidget:
-        tbl = QTableWidget(len(rows), len(headers))
-        tbl.setHorizontalHeaderLabels(headers)
-        tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        tbl.verticalHeader().setVisible(False)
-        tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        tbl.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        tbl.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        tbl.setAlternatingRowColors(True)
-        tbl.setMinimumHeight(min(len(rows) * 48 + 48, 360))
+        tbl.setMinimumHeight(max(len(services), 1) * 48 + 48)
         tbl.verticalHeader().setDefaultSectionSize(48)
         configure_table(tbl)
-        for r, row in enumerate(rows):
-            for c, val in enumerate(row):
-                tbl.setItem(r, c, QTableWidgetItem(val))
-        return tbl
+        for r, svc in enumerate(services):
+            tbl.setItem(r, 0, QTableWidgetItem(svc.get("service_name", "")))
+            tbl.setItem(r, 1, QTableWidgetItem(str(svc.get("usage_count", 0))))
+            tbl.setItem(r, 2, QTableWidgetItem(self._fmt_peso(float(svc.get("total_revenue", 0)))))
+        vbox.addWidget(tbl)
+        return card
+
+    # ── Monthly Revenue ───────────────────────────────────────────
+    def _monthly_revenue_card(self, monthly: list) -> QFrame:
+        card = QFrame(); card.setObjectName("card")
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(20); shadow.setOffset(0, 4); shadow.setColor(QColor(0, 0, 0, 18))
+        card.setGraphicsEffect(shadow)
+        vbox = QVBoxLayout(card); vbox.setContentsMargins(20, 18, 20, 14); vbox.setSpacing(12)
+        vbox.addWidget(self._lbl("Monthly Revenue Trend", "cardTitle"))
+        vbox.addWidget(self._lbl("Revenue over the last 6 months", "mutedSubtext"))
+
+        cols = ["Month", "Revenue"]
+        tbl = QTableWidget(len(monthly), len(cols))
+        tbl.setHorizontalHeaderLabels(cols)
+        tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        tbl.verticalHeader().setVisible(False)
+        tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        tbl.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        tbl.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        tbl.setAlternatingRowColors(True)
+        tbl.setMinimumHeight(max(len(monthly), 1) * 48 + 48)
+        tbl.verticalHeader().setDefaultSectionSize(48)
+        configure_table(tbl)
+        grand = 0.0
+        for r, row in enumerate(monthly):
+            tbl.setItem(r, 0, QTableWidgetItem(row.get("month_label", "")))
+            rev = float(row.get("total_revenue", 0)); grand += rev
+            tbl.setItem(r, 1, QTableWidgetItem(self._fmt_peso(rev)))
+        vbox.addWidget(tbl)
+        total_row = QHBoxLayout(); total_row.addStretch()
+        tl = QLabel(f"Total ({len(monthly)} months):  {self._fmt_peso(grand)}")
+        tl.setObjectName("totalLabelSm")
+        total_row.addWidget(tl); vbox.addLayout(total_row)
+        return card
+
+    # ── Summary / KPI Table ───────────────────────────────────────
+    def _summary_table_card(self, data: dict) -> QFrame:
+        card = QFrame(); card.setObjectName("card")
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(20); shadow.setOffset(0, 4); shadow.setColor(QColor(0, 0, 0, 18))
+        card.setGraphicsEffect(shadow)
+        vbox = QVBoxLayout(card); vbox.setContentsMargins(20, 18, 20, 14); vbox.setSpacing(12)
+
+        hdr = QHBoxLayout()
+        tc = QVBoxLayout()
+        tc.addWidget(self._lbl("Overall Summary", "cardTitle"))
+        tc.addWidget(self._lbl("Key metrics at a glance for the selected period", "mutedSubtext"))
+        hdr.addLayout(tc); hdr.addStretch()
+
+        hdr.addWidget(QLabel("From:"))
+        self.sum_from = QDateEdit(); self.sum_from.setCalendarPopup(True)
+        self.sum_from.setDate(QDate.currentDate().addMonths(-6))
+        self.sum_from.setObjectName("formCombo"); self.sum_from.setMinimumHeight(36); self.sum_from.setMaximumWidth(140)
+        hdr.addWidget(self.sum_from)
+        hdr.addWidget(QLabel("To:"))
+        self.sum_to = QDateEdit(); self.sum_to.setCalendarPopup(True)
+        self.sum_to.setDate(QDate.currentDate())
+        self.sum_to.setObjectName("formCombo"); self.sum_to.setMinimumHeight(36); self.sum_to.setMaximumWidth(140)
+        hdr.addWidget(self.sum_to)
+        apply_btn = QPushButton("Apply"); apply_btn.setObjectName("secondaryBtn")
+        apply_btn.setMinimumHeight(36); apply_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        apply_btn.clicked.connect(self._on_refresh)
+        hdr.addWidget(apply_btn)
+        vbox.addLayout(hdr)
+
+        stats = data.get("stats", {})
+        monthly_rev = data.get("monthly_rev", [])
+        grand_rev = sum(float(m.get("total_revenue", 0)) for m in monthly_rev)
+        completed = stats.get("completed", 0)
+        cancelled = stats.get("cancelled", 0)
+        total_appts = stats.get("total_appts", 0)
+        completion_rate = (completed / total_appts * 100) if total_appts else 0
+        services = data.get("services", [])
+        top_svc = services[0] if services else {}
+        top_svc_text = (f"{top_svc.get('service_name','N/A')} "
+                        f"({self._fmt_peso(float(top_svc.get('total_revenue',0)))})") if top_svc else "N/A"
+
+        summary = [
+            ("Total Revenue (period)", self._fmt_peso(grand_rev)),
+            ("Appointments Completed", str(completed)),
+            ("Appointments Cancelled", str(cancelled)),
+            ("Completion Rate", f"{completion_rate:.1f}%"),
+            ("Top Service", top_svc_text),
+        ]
+        cols = ["Metric", "Value"]
+        tbl = QTableWidget(len(summary), len(cols))
+        tbl.setHorizontalHeaderLabels(cols)
+        tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        tbl.verticalHeader().setVisible(False)
+        tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        tbl.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+        tbl.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        tbl.setAlternatingRowColors(True)
+        tbl.setMinimumHeight(len(summary) * 48 + 48)
+        tbl.verticalHeader().setDefaultSectionSize(48)
+        configure_table(tbl)
+        for r, (metric, value) in enumerate(summary):
+            tbl.setItem(r, 0, QTableWidgetItem(metric))
+            vi = QTableWidgetItem(value); vi.setForeground(QColor("#2C3E50"))
+            tbl.setItem(r, 1, vi)
+        vbox.addWidget(tbl)
+        return card

@@ -1,22 +1,23 @@
-"""Main application window – light sidebar + top header + stacked pages."""
+"""Main application window V2 – sidebar, top header, stacked pages."""
 
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QStackedWidget, QFrame, QSpacerItem, QSizePolicy,
-    QLineEdit, QGraphicsDropShadowEffect,
+    QGraphicsDropShadowEffect,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
-from PyQt6.QtGui import QFont, QColor
+from PyQt6.QtGui import QFont, QColor, QAction
 
 from ui.styles import MAIN_STYLE
-from ui.dashboard    import DashboardPage
-from ui.patients     import PatientsPage
-from ui.appointments import AppointmentsPage
-from ui.clinical     import ClinicalPage
-from ui.employees    import EmployeesPage
-from ui.analytics    import AnalyticsPage
-from ui.settings     import SettingsPage
-from backend         import AuthBackend
+from ui.dashboard     import DashboardPage
+from ui.patients      import PatientsPage
+from ui.appointments  import AppointmentsPage
+from ui.clinical      import ClinicalPage
+from ui.employees     import EmployeesPage
+from ui.analytics     import AnalyticsPage
+from ui.settings      import SettingsPage
+from ui.activity_log  import ActivityLogPage
+from backend          import AuthBackend
 
 
 _ALL_NAV = [
@@ -26,13 +27,15 @@ _ALL_NAV = [
     ("Clinical & POS", 3),
     ("Data Analytics", 4),
     ("Employees",      5),
-    ("Settings",       6),
+    ("Activity Log",   6),
+    ("Settings",       7),
 ]
 
 _ROLE_ACCESS = {
-    "Admin":        {"Dashboard", "Patients", "Appointments", "Clinical & POS", "Data Analytics", "Employees", "Settings"},
+    "Admin":        {"Dashboard", "Patients", "Appointments", "Clinical & POS",
+                     "Data Analytics", "Employees", "Activity Log", "Settings"},
     "Doctor":       {"Dashboard", "Patients", "Appointments", "Clinical & POS", "Data Analytics"},
-    "Nurse":        {"Dashboard", "Patients", "Appointments", "Clinical & POS"},
+    "Cashier":      {"Dashboard", "Patients", "Appointments", "Clinical & POS"},
     "Receptionist": {"Dashboard", "Patients", "Appointments", "Clinical & POS"},
 }
 
@@ -63,10 +66,8 @@ class MainWindow(QMainWindow):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # Sidebar
         root.addWidget(self._build_sidebar())
 
-        # Right side: top header + content
         right = QWidget()
         right.setAutoFillBackground(True)
         right_lay = QVBoxLayout(right)
@@ -115,13 +116,11 @@ class MainWindow(QMainWindow):
         lay.addWidget(logo_frame)
         lay.addSpacing(20)
 
-        # Section label
         sec = QLabel("MAIN MENU")
         sec.setObjectName("sidebarSection")
         lay.addWidget(sec)
         lay.addSpacing(4)
 
-        # Nav items (filtered by role)
         allowed = _ROLE_ACCESS.get(self._role, _ROLE_ACCESS["Admin"])
         self._nav_map = [(label, idx) for label, idx in _ALL_NAV if label in allowed]
 
@@ -136,7 +135,6 @@ class MainWindow(QMainWindow):
 
         lay.addStretch()
 
-        # Separator
         sep = QFrame()
         sep.setObjectName("sidebarSep")
         sep.setFixedHeight(1)
@@ -177,7 +175,6 @@ class MainWindow(QMainWindow):
         user_row.addStretch()
         user_card_lay.addLayout(user_row)
 
-        # Logout button
         logout_btn = QPushButton("Log Out")
         logout_btn.setObjectName("logoutBtn")
         logout_btn.setMinimumHeight(36)
@@ -186,7 +183,6 @@ class MainWindow(QMainWindow):
         user_card_lay.addWidget(logout_btn)
 
         lay.addWidget(user_card)
-
         return sidebar
 
     # ── Top bar ────────────────────────────────────────────────────────
@@ -206,13 +202,19 @@ class MainWindow(QMainWindow):
         lay.setContentsMargins(24, 0, 24, 0)
         lay.setSpacing(16)
 
-        # Page title
         self._top_title = QLabel("Dashboard")
         self._top_title.setObjectName("topTitle")
         lay.addWidget(self._top_title)
         lay.addStretch()
 
         return bar
+
+    def _nav_to_page(self, stack_idx: int):
+        """Navigate to a page by stack index. Called by dashboard."""
+        for nav_i, (label, si) in enumerate(self._nav_map):
+            if si == stack_idx:
+                self._select_nav(nav_i)
+                return
 
     # ── Content area ───────────────────────────────────────────────────
     def _build_content(self) -> QWidget:
@@ -223,15 +225,22 @@ class MainWindow(QMainWindow):
         lay.setContentsMargins(0, 0, 0, 0)
 
         self.stack = QStackedWidget()
-        self.stack.addWidget(DashboardPage(user_name=self._user_name))
 
-        self._patients_page = PatientsPage(role=self._role)
+        # 0 – Dashboard
+        self._dashboard_page = DashboardPage(
+            user_name=self._user_name, backend=self._backend, role=self._role
+        )
+        self._dashboard_page.navigate_to.connect(self._nav_to_page)
+        self.stack.addWidget(self._dashboard_page)
+
+        # 1 – Patients
+        self._patients_page = PatientsPage(backend=self._backend, role=self._role, user_email=self._user)
         self.stack.addWidget(self._patients_page)
 
-        self._appointments_page = AppointmentsPage(role=self._role)
+        # 2 – Appointments
+        self._appointments_page = AppointmentsPage(backend=self._backend, role=self._role)
         self.stack.addWidget(self._appointments_page)
 
-        # Seed appointments page with current patient names & keep in sync
         self._appointments_page.set_patient_names(
             self._patients_page.get_patient_names()
         )
@@ -239,10 +248,20 @@ class MainWindow(QMainWindow):
             self._appointments_page.set_patient_names
         )
 
-        self.stack.addWidget(ClinicalPage(role=self._role))
-        self.stack.addWidget(AnalyticsPage(role=self._role))
+        # 3 – Clinical & POS
+        self.stack.addWidget(ClinicalPage(backend=self._backend, role=self._role))
+
+        # 4 – Data Analytics
+        self.stack.addWidget(AnalyticsPage(backend=self._backend, role=self._role, user_email=self._user))
+
+        # 5 – Employees
         self.stack.addWidget(EmployeesPage(backend=self._backend, role=self._role))
-        self.stack.addWidget(SettingsPage())
+
+        # 6 – Activity Log
+        self.stack.addWidget(ActivityLogPage(backend=self._backend, role=self._role))
+
+        # 7 – Settings
+        self.stack.addWidget(SettingsPage(backend=self._backend, user_email=self._user))
 
         lay.addWidget(self.stack)
         return wrapper
@@ -257,3 +276,5 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentIndex(stack_idx)
         if hasattr(self, "_top_title"):
             self._top_title.setText(label)
+        if stack_idx == 0 and hasattr(self, "_dashboard_page"):
+            self._dashboard_page.refresh()

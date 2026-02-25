@@ -1,45 +1,47 @@
-"""Reporting & Analytics page with summary cards and tables."""
+"""Reporting page – revenue details, patient stats, doctor performance.
+
+All data is pulled live from the database via the backend so that
+reports update in real-time when records change."""
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QFrame, QScrollArea,
-    QComboBox, QTabWidget, QGraphicsDropShadowEffect, QDateEdit,
+    QTabWidget, QGraphicsDropShadowEffect, QDateEdit,
 )
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QColor
 from ui.styles import configure_table
 
 
-_REVENUE_DATA = [
-    ("2026-02-22", "General Checkup",  "Maria Santos",   "Dr. Reyes", "Cash",        "₱ 800.00"),
-    ("2026-02-22", "Follow-up Visit",  "Juan Dela Cruz", "Dr. Tan",   "GCash",       "₱ 500.00"),
-    ("2026-02-21", "Lab Tests (CBC)",  "Ana Reyes",      "Dr. Reyes", "Credit Card", "₱ 1,200.00"),
-    ("2026-02-21", "Dental Cleaning",  "Carlos Garcia",  "Dr. Lim",   "Insurance",   "₱ 2,500.00"),
-    ("2026-02-20", "X-Ray",            "Roberto Cruz",   "Dr. Reyes", "Cash",        "₱ 1,500.00"),
-    ("2026-02-20", "Physical Therapy", "Lea Mendoza",    "Dr. Tan",   "Maya",        "₱ 1,800.00"),
-]
-
-_PATIENT_STATS = [
-    ("January 2026",  "42",  "38",  "4",  "90.5%"),
-    ("February 2026", "34",  "30",  "4",  "88.2%"),
-    ("December 2025", "55",  "50",  "5",  "90.9%"),
-    ("November 2025", "48",  "44",  "4",  "91.7%"),
-]
-
-_DOCTOR_PERF = [
-    ("Dr. Reyes",  "156", "148", "₱ 125,600", "4.8 / 5"),
-    ("Dr. Tan",    "132", "128", "₱ 108,400", "4.7 / 5"),
-    ("Dr. Lim",    "98",  "94",  "₱ 92,300",  "4.9 / 5"),
-    ("Dr. Santos", "87",  "82",  "₱ 78,500",  "4.6 / 5"),
-]
-
-
 class ReportsPage(QWidget):
-    def __init__(self):
+    def __init__(self, backend=None, role: str = "Admin"):
         super().__init__()
+        self._backend = backend
+        self._role = role
         self._build()
 
+    # ── helpers ─────────────────────────────────────────────────────
+    @staticmethod
+    def _fmt_peso(amount) -> str:
+        return f"\u20b1 {float(amount):,.0f}"
+
+    def _load_data(self):
+        if not self._backend:
+            return {}
+        from_d = self.from_date.date().toString("yyyy-MM-dd") if hasattr(self, "from_date") else None
+        to_d = self.to_date.date().toString("yyyy-MM-dd") if hasattr(self, "to_date") else None
+        return {
+            "stats":       self._backend.get_summary_stats(from_d, to_d),
+            "revenue":     self._backend.get_revenue_detail(from_d, to_d),
+            "monthly":     self._backend.get_monthly_appointment_stats(6),
+            "doctors":     self._backend.get_doctor_performance(),
+        }
+
+    # ── build ──────────────────────────────────────────────────────
     def _build(self):
+        data = self._load_data()
+        stats = data.get("stats", {})
+
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -49,7 +51,7 @@ class ReportsPage(QWidget):
         lay.setSpacing(20)
         lay.setContentsMargins(28, 28, 28, 28)
 
-        # ── Header ─────────────────────────────────────────────────────
+        # ── Header ─────────────────────────────────────────────────
         hdr = QHBoxLayout()
         tc = QVBoxLayout()
         title = QLabel("Reports & Analytics")
@@ -59,39 +61,46 @@ class ReportsPage(QWidget):
         tc.addWidget(title); tc.addWidget(sub)
         hdr.addLayout(tc); hdr.addStretch()
 
-        export_btn = QPushButton("Export Report")
-        export_btn.setObjectName("secondaryBtn")
-        export_btn.setMinimumHeight(42)
-        export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        hdr.addWidget(export_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
+        refresh_btn = QPushButton("\u21bb  Refresh")
+        refresh_btn.setObjectName("secondaryBtn")
+        refresh_btn.setMinimumHeight(42)
+        refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        refresh_btn.clicked.connect(self._on_refresh)
+        hdr.addWidget(refresh_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
         lay.addLayout(hdr)
 
-        # ── Summary cards ──────────────────────────────────────────────
+        # ── Summary cards from live data ───────────────────────────
         cards_row = QHBoxLayout()
         cards_row.setSpacing(16)
+        total_rev = float(stats.get("total_revenue", 0))
+        total_patients = stats.get("total_patients", 0)
+        total_appts = stats.get("total_appts", 0)
+        avg_per_day = stats.get("avg_per_day", 0)
         summaries = [
-            ("Monthly Revenue",   "₱ 482,300",  "+12.4%", "#388087"),
-            ("Total Patients",    "1,248",       "+3.2%",  "#5CB85C"),
-            ("Appointments",      "473",         "+8.1%",  "#6FB3B8"),
-            ("Avg. Visit / Day",  "15.8",        "+1.5%",  "#388087"),
+            ("Total Revenue",    self._fmt_peso(total_rev),      "#388087"),
+            ("Total Patients",   f"{total_patients:,}",          "#5CB85C"),
+            ("Appointments",     f"{total_appts:,}",             "#6FB3B8"),
+            ("Avg. Visit / Day", f"{avg_per_day}",               "#388087"),
         ]
-        for label, value, change, color in summaries:
-            cards_row.addWidget(self._summary_card(label, value, change, color))
+        for label, value, color in summaries:
+            cards_row.addWidget(self._summary_card(label, value, color))
         lay.addLayout(cards_row)
 
-        # ── Date range filter ──────────────────────────────────────────
+        # ── Date range filter ──────────────────────────────────────
         range_bar = QHBoxLayout()
         range_bar.addWidget(QLabel("From:"))
-        self.from_date = QDateEdit()
-        self.from_date.setCalendarPopup(True)
-        self.from_date.setDate(QDate(2026, 2, 1))
+        if not hasattr(self, "from_date"):
+            self.from_date = QDateEdit()
+            self.from_date.setCalendarPopup(True)
+            self.from_date.setDate(QDate.currentDate().addMonths(-6))
         self.from_date.setObjectName("formCombo")
         self.from_date.setMinimumHeight(38)
         range_bar.addWidget(self.from_date)
         range_bar.addWidget(QLabel("To:"))
-        self.to_date = QDateEdit()
-        self.to_date.setCalendarPopup(True)
-        self.to_date.setDate(QDate.currentDate())
+        if not hasattr(self, "to_date"):
+            self.to_date = QDateEdit()
+            self.to_date.setCalendarPopup(True)
+            self.to_date.setDate(QDate.currentDate())
         self.to_date.setObjectName("formCombo")
         self.to_date.setMinimumHeight(38)
         range_bar.addWidget(self.to_date)
@@ -99,86 +108,133 @@ class ReportsPage(QWidget):
         apply_btn.setObjectName("secondaryBtn")
         apply_btn.setMinimumHeight(38)
         apply_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        apply_btn.clicked.connect(self._on_refresh)
         range_bar.addWidget(apply_btn)
         range_bar.addStretch()
         lay.addLayout(range_bar)
 
-        # ── Tabs ───────────────────────────────────────────────────────
+        # ── Tabs ───────────────────────────────────────────────────
         tabs = QTabWidget()
-        tabs.addTab(self._revenue_tab(),  "Revenue")
-        tabs.addTab(self._patient_tab(),  "Patient Stats")
-        tabs.addTab(self._doctor_tab(),   "Doctor Performance")
+        tabs.addTab(self._revenue_tab(data.get("revenue", [])),   "Revenue")
+        tabs.addTab(self._patient_tab(data.get("monthly", [])),   "Patient Stats")
+        tabs.addTab(self._doctor_tab(data.get("doctors", [])),    "Doctor Performance")
         lay.addWidget(tabs)
 
         lay.addStretch()
         scroll.setWidget(inner)
-        wrapper = QVBoxLayout(self)
+
+        wrapper = QVBoxLayout(self) if not self.layout() else self.layout()
+        # clear existing layout contents
+        while wrapper.count():
+            item = wrapper.takeAt(0)
+            w = item.widget()
+            if w:
+                w.deleteLater()
         wrapper.setContentsMargins(0, 0, 0, 0)
         wrapper.addWidget(scroll)
 
-    # ── Summary card ───────────────────────────────────────────────────
+    # ── Refresh handler ────────────────────────────────────────────
+    def _on_refresh(self):
+        self._build()
+
+    # ── Summary card (no hardcoded change %) ───────────────────────
     @staticmethod
-    def _summary_card(label, value, change, color) -> QFrame:
-        card = QFrame(); card.setObjectName("card"); card.setMinimumHeight(120)
+    def _summary_card(label, value, color) -> QFrame:
+        card = QFrame(); card.setObjectName("card"); card.setMinimumHeight(110)
         shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20); shadow.setOffset(0, 4); shadow.setColor(QColor(0, 0, 0, 18))
+        shadow.setBlurRadius(20); shadow.setOffset(0, 4)
+        shadow.setColor(QColor(0, 0, 0, 18))
         card.setGraphicsEffect(shadow)
 
         vbox = QVBoxLayout(card)
-        vbox.setContentsMargins(20, 18, 20, 18); vbox.setSpacing(4)
-        strip = QFrame(); strip.setFixedHeight(4)
-        strip.setStyleSheet(f"background-color: {color}; border-radius: 2px;")
+        vbox.setContentsMargins(18, 14, 18, 14); vbox.setSpacing(4)
+        strip = QFrame(); strip.setFixedHeight(3)
+        strip.setStyleSheet(f"background-color: {color}; border-radius: 1px;")
         vbox.addWidget(strip)
 
-        val_row = QHBoxLayout()
         v = QLabel(value); v.setObjectName("statValue")
-        ch = QLabel(change)
-        ch_color = "#5CB85C" if change.startswith("+") else "#D9534F"
-        ch.setStyleSheet(f"color: {ch_color}; font-size: 13px; font-weight: bold;")
-        val_row.addWidget(v); val_row.addStretch(); val_row.addWidget(ch)
-        vbox.addLayout(val_row)
+        vbox.addWidget(v)
 
         l = QLabel(label); l.setObjectName("statLabel")
         vbox.addWidget(l)
         return card
 
-    # ── Revenue tab ────────────────────────────────────────────────────
-    def _revenue_tab(self) -> QWidget:
+    # ── Revenue tab (live) ─────────────────────────────────────────
+    def _revenue_tab(self, revenue_data: list[dict]) -> QWidget:
         page = QWidget()
         lay = QVBoxLayout(page); lay.setSpacing(12); lay.setContentsMargins(16, 16, 16, 16)
 
         cols = ["Date", "Service", "Patient", "Doctor", "Payment", "Amount"]
-        tbl = self._make_table(cols, _REVENUE_DATA)
+        rows = []
+        grand = 0.0
+        for r in revenue_data:
+            amt = float(r.get("amount", 0))
+            grand += amt
+            rows.append((
+                str(r.get("invoice_date", "")),
+                r.get("service_name", ""),
+                r.get("patient_name", ""),
+                r.get("doctor_name", ""),
+                r.get("payment_method", ""),
+                self._fmt_peso(amt),
+            ))
+
+        tbl = self._make_table(cols, rows)
         lay.addWidget(tbl)
 
-        # Total row
         total_row = QHBoxLayout()
         total_row.addStretch()
-        tl = QLabel("Total Revenue:  ₱ 8,300.00")
+        tl = QLabel(f"Total Revenue:  {self._fmt_peso(grand)}")
         tl.setObjectName("totalLabel")
         total_row.addWidget(tl)
         lay.addLayout(total_row)
         return page
 
-    # ── Patient stats tab ──────────────────────────────────────────────
-    def _patient_tab(self) -> QWidget:
+    # ── Patient stats tab (live) ───────────────────────────────────
+    def _patient_tab(self, monthly: list[dict]) -> QWidget:
         page = QWidget()
         lay = QVBoxLayout(page); lay.setSpacing(12); lay.setContentsMargins(16, 16, 16, 16)
+
         cols = ["Month", "Total Visits", "Completed", "Cancelled", "Completion Rate"]
-        tbl = self._make_table(cols, _PATIENT_STATS)
+        rows = []
+        for m in monthly:
+            total = m.get("total_appointments", 0)
+            completed = m.get("completed", 0)
+            cancelled = m.get("cancelled", 0)
+            rate = f"{(completed / total * 100):.1f}%" if total else "0.0%"
+            rows.append((
+                m.get("month_label", ""),
+                str(total),
+                str(completed),
+                str(cancelled),
+                rate,
+            ))
+
+        tbl = self._make_table(cols, rows)
         lay.addWidget(tbl)
         return page
 
-    # ── Doctor performance tab ─────────────────────────────────────────
-    def _doctor_tab(self) -> QWidget:
+    # ── Doctor performance tab (live) ──────────────────────────────
+    def _doctor_tab(self, doctors: list[dict]) -> QWidget:
         page = QWidget()
         lay = QVBoxLayout(page); lay.setSpacing(12); lay.setContentsMargins(16, 16, 16, 16)
-        cols = ["Doctor", "Total Appts", "Completed", "Revenue", "Rating"]
-        tbl = self._make_table(cols, _DOCTOR_PERF)
+
+        cols = ["Doctor", "Total Appts", "Completed", "Revenue"]
+        rows = []
+        for d in doctors:
+            name = d.get("doctor_name", "")
+            rows.append((
+                f"Dr. {name.split()[-1]}" if name else "",
+                str(d.get("total_appointments", 0)),
+                str(d.get("completed", 0)),
+                self._fmt_peso(float(d.get("revenue_generated", 0))),
+            ))
+
+        tbl = self._make_table(cols, rows)
         lay.addWidget(tbl)
         return page
 
-    # ── Table helper ───────────────────────────────────────────────────
+    # ── Table helper ───────────────────────────────────────────────
     @staticmethod
     def _make_table(headers, rows) -> QTableWidget:
         tbl = QTableWidget(len(rows), len(headers))
@@ -188,7 +244,7 @@ class ReportsPage(QWidget):
         tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         tbl.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         tbl.setAlternatingRowColors(True)
-        tbl.setMinimumHeight(min(len(rows) * 48 + 48, 360))
+        tbl.setMinimumHeight(min(max(len(rows), 1) * 48 + 48, 360))
         tbl.verticalHeader().setDefaultSectionSize(48)
         configure_table(tbl)
         for r, row in enumerate(rows):

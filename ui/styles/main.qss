@@ -205,7 +205,7 @@ QFrame#card {
 
 /* Large numeric value */
 QLabel#statValue {
-    font-size: 30px;
+    font-size: 22px;
     font-weight: bold;
     color: #2C3E50;
 }
@@ -230,12 +230,12 @@ QLabel#sectionTitle {
 }
 
 QLabel#sectionSubtitle {
-    font-size: 14px;
+    font-size: 13px;
     color: #7F8C8D;
 }
 
 QLabel#pageTitle {
-    font-size: 26px;
+    font-size: 22px;
     font-weight: bold;
     color: #2C3E50;
 }
@@ -303,9 +303,10 @@ QPushButton#tblActionBtn {
     color: #2C3E50;
     border: none;
     border-radius: 6px;
-    padding: 5px 12px;
-    font-size: 11px;
+    padding: 6px 18px;
+    font-size: 12px;
     font-weight: bold;
+    min-width: 58px;
 }
 
 QPushButton#tblActionBtn:hover {
@@ -318,9 +319,10 @@ QPushButton#tblDangerBtn {
     color: #2C3E50;
     border: none;
     border-radius: 6px;
-    padding: 5px 12px;
-    font-size: 11px;
+    padding: 6px 18px;
+    font-size: 12px;
     font-weight: bold;
+    min-width: 58px;
 }
 
 QPushButton#tblDangerBtn:hover {
@@ -333,9 +335,10 @@ QPushButton#tblSuccessBtn {
     color: #2C3E50;
     border: none;
     border-radius: 6px;
-    padding: 5px 12px;
-    font-size: 11px;
+    padding: 6px 18px;
+    font-size: 12px;
     font-weight: bold;
+    min-width: 58px;
 }
 
 QPushButton#tblSuccessBtn:hover {
@@ -348,9 +351,10 @@ QPushButton#tblSecondaryBtn {
     color: #2C3E50;
     border: none;
     border-radius: 6px;
-    padding: 5px 12px;
-    font-size: 11px;
+    padding: 6px 18px;
+    font-size: 12px;
     font-weight: bold;
+    min-width: 58px;
 }
 
 QPushButton#tblSecondaryBtn:hover {
@@ -362,12 +366,9 @@ QPushButton#tblSecondaryBtn:hover {
    ACTION BUTTONS (full-size, outside tables)
    ================================================================ */
 
-/* Primary gradient button */
+/* Primary flat button */
 QPushButton#actionBtn {
-    background: qlineargradient(
-        x1:0, y1:0, x2:1, y2:0,
-        stop:0 #388087, stop:1 #6FB3B8
-    );
+    background-color: #388087;
     color: #FFFFFF;
     border: none;
     border-radius: 10px;
@@ -377,10 +378,7 @@ QPushButton#actionBtn {
 }
 
 QPushButton#actionBtn:hover {
-    background: qlineargradient(
-        x1:0, y1:0, x2:1, y2:0,
-        stop:0 #2C6A70, stop:1 #388087
-    );
+    background-color: #2C6A70;
 }
 
 /* Secondary bordered button */
@@ -416,10 +414,7 @@ QPushButton#dangerBtn:hover {
 
 /* Success / confirm button */
 QPushButton#successBtn {
-    background: qlineargradient(
-        x1:0, y1:0, x2:1, y2:0,
-        stop:0 #4CAE4C, stop:1 #5CB85C
-    );
+    background-color: #5CB85C;
     color: #FFFFFF;
     border: none;
     border-radius: 10px;
@@ -429,10 +424,7 @@ QPushButton#successBtn {
 }
 
 QPushButton#successBtn:hover {
-    background: qlineargradient(
-        x1:0, y1:0, x2:1, y2:0,
-        stop:0 #3D9140, stop:1 #4CAE4C
-    );
+    background-color: #4CAE4C;
 }
 
 /* View / outline button */
@@ -526,6 +518,38 @@ QComboBox#formCombo:focus {
 QComboBox#formCombo::drop-down {
     border: none;
     width: 30px;
+}
+
+/* Date-edit fields with the #formCombo object name */
+QDateEdit#formCombo {
+    padding: 10px 14px;
+    border: 2px solid #BADFE7;
+    border-radius: 10px;
+    font-size: 13px;
+    background-color: #F6F6F2;
+    color: #2C3E50;
+}
+
+QDateEdit#formCombo:focus {
+    border: 2px solid #388087;
+}
+
+QDateEdit#formCombo::drop-down {
+    border: none;
+    width: 30px;
+}
+
+QDateEdit#formCombo::down-arrow {
+    image: none;
+    width: 14px;
+    height: 14px;
+}
+
+QDateEdit::up-button,
+QDateEdit::down-button {
+    border: none;
+    background: transparent;
+    width: 20px;
 }
 
 
@@ -715,10 +739,7 @@ QWidget#pageInner {
    ================================================================ */
 
 QFrame#pageBanner {
-    background: qlineargradient(
-        x1:0, y1:0, x2:1, y2:0,
-        stop:0 #388087, stop:1 #6FB3B8
-    );
+    background-color: #388087;
     border-radius: 12px;
 }
 
@@ -764,6 +785,61 @@ QDialog {
 QDialog QLabel {
     color: #2C3E50;
     font-size: 13px;
+}
+
+/* Save / Ok button inside dialog button-box */
+QPushButton#dialogSaveBtn {
+    background-color: #388087;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 8px;
+    padding: 7px 22px;
+    font-size: 12px;
+    font-weight: bold;
+    min-height: 32px;
+}
+
+QPushButton#dialogSaveBtn:hover {
+    background-color: #2C6A70;
+}
+
+QPushButton#dialogSaveBtn:pressed {
+    background-color: #245558;
+}
+
+/* Cancel button inside dialog button-box */
+QPushButton#dialogCancelBtn {
+    background-color: transparent;
+    color: #2C3E50;
+    border: 2px solid #BADFE7;
+    border-radius: 8px;
+    padding: 7px 22px;
+    font-size: 12px;
+    font-weight: bold;
+    min-height: 32px;
+}
+
+QPushButton#dialogCancelBtn:hover {
+    background-color: #F6F6F2;
+    border-color: #388087;
+    color: #388087;
+}
+
+/* Danger / Fire button inside dialogs */
+QPushButton#dialogDangerBtn {
+    background-color: #FDECEA;
+    color: #D9534F;
+    border: none;
+    border-radius: 8px;
+    padding: 7px 22px;
+    font-size: 12px;
+    font-weight: bold;
+    min-height: 32px;
+}
+
+QPushButton#dialogDangerBtn:hover {
+    background-color: #D9534F;
+    color: #FFFFFF;
 }
 
 
@@ -840,7 +916,7 @@ QLabel#topTitle {
 
 /* Section header label */
 QLabel#sectionHeader {
-    font-size: 15px;
+    font-size: 16px;
     font-weight: bold;
     color: #2C3E50;
     margin-top: 4px;

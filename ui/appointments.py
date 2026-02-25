@@ -1,5 +1,6 @@
-"""Appointment Scheduling page – single-table view with quick-filter tabs."""
+"""Appointment Scheduling page – V2 with conflict detection, recurring, reschedule, export."""
 
+import csv
 from datetime import date, datetime, timedelta
 
 from PyQt6.QtWidgets import (
@@ -7,36 +8,12 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QFrame, QScrollArea,
     QComboBox, QDialog, QFormLayout, QDialogButtonBox, QMessageBox,
     QTimeEdit, QDateEdit, QTextEdit, QGraphicsDropShadowEffect,
+    QSpinBox, QCheckBox, QFileDialog,
 )
 from PyQt6.QtCore import Qt, QDate, QTime
 from PyQt6.QtGui import QColor, QFont
-from ui.styles import configure_table, make_table_btn
+from ui.styles import configure_table, make_table_btn, style_dialog_btns
 
-
-# ── In-memory appointment store ───────────────────────────────────────
-_APPOINTMENTS: list[tuple] = [
-    # (date_str, time_str, patient, doctor, purpose, status)
-    ("2026-02-23", "09:00 AM", "Maria Santos",     "Dr. Reyes", "General Checkup",    "Confirmed"),
-    ("2026-02-23", "09:30 AM", "Juan Dela Cruz",   "Dr. Tan",   "Follow-up Visit",    "Confirmed"),
-    ("2026-02-23", "10:00 AM", "Ana Reyes",        "Dr. Reyes", "Lab Results Review",  "Pending"),
-    ("2026-02-23", "10:30 AM", "Carlos Garcia",    "Dr. Lim",   "Dental Cleaning",    "Confirmed"),
-    ("2026-02-23", "11:00 AM", "Lea Mendoza",      "Dr. Tan",   "Consultation",       "Pending"),
-    ("2026-02-24", "08:30 AM", "Roberto Cruz",     "Dr. Reyes", "Blood Work",         "Confirmed"),
-    ("2026-02-24", "09:00 AM", "Isabel Tan",       "Dr. Lim",   "X-Ray Review",       "Pending"),
-    ("2026-02-24", "10:00 AM", "Sofia Reyes",      "Dr. Tan",   "Consultation",       "Confirmed"),
-    ("2026-02-25", "10:00 AM", "Miguel Lim",       "Dr. Tan",   "Physical Exam",      "Confirmed"),
-    ("2026-02-18", "09:00 AM", "Rosa Mendoza",     "Dr. Reyes", "General Checkup",    "Completed"),
-    ("2026-02-15", "02:00 PM", "Pedro Villanueva", "Dr. Lim",   "Dental Cleaning",    "Completed"),
-    ("2026-01-28", "10:00 AM", "Luis Garcia",      "Dr. Tan",   "Follow-up Visit",    "Completed"),
-    ("2026-01-22", "09:30 AM", "Maria Santos",     "Dr. Reyes", "Lab Results Review",  "Completed"),
-    ("2026-01-15", "11:00 AM", "Ana Reyes",        "Dr. Lim",   "X-Ray Review",       "Completed"),
-    ("2026-01-10", "08:30 AM", "Carlos Garcia",    "Dr. Reyes", "Blood Work",         "Completed"),
-    ("2025-12-18", "09:00 AM", "Juan Dela Cruz",   "Dr. Tan",   "Physical Exam",      "Completed"),
-    ("2025-12-10", "10:30 AM", "Lea Mendoza",      "Dr. Reyes", "General Checkup",    "Completed"),
-    ("2025-12-05", "02:00 PM", "Roberto Cruz",     "Dr. Lim",   "Dental Cleaning",    "Completed"),
-    ("2025-11-20", "09:30 AM", "Isabel Tan",       "Dr. Tan",   "Consultation",       "Completed"),
-    ("2025-11-12", "10:00 AM", "Miguel Lim",       "Dr. Reyes", "Follow-up Visit",    "Completed"),
-]
 
 _DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 _MONTH_NAMES = [
@@ -46,7 +23,6 @@ _MONTH_NAMES = [
 
 
 def _pretty_date(iso: str) -> str:
-    """Convert '2026-02-23' → 'Monday, February 23, 2026'."""
     try:
         d = datetime.strptime(iso, "%Y-%m-%d")
         return f"{_DAY_NAMES[d.weekday()]},  {_MONTH_NAMES[d.month]} {d.day}, {d.year}"
@@ -55,7 +31,6 @@ def _pretty_date(iso: str) -> str:
 
 
 def _relative_label(iso: str) -> str:
-    """Return 'Today', 'Tomorrow', or '' for a date string."""
     try:
         d = datetime.strptime(iso, "%Y-%m-%d").date()
         today = date.today()
@@ -69,24 +44,23 @@ def _relative_label(iso: str) -> str:
 
 
 # ══════════════════════════════════════════════════════════════════════
-#  Appointment Dialog  (shared by create & edit)
+#  Appointment Dialog
 # ══════════════════════════════════════════════════════════════════════
 class AppointmentDialog(QDialog):
-    """Create / Edit appointment dialog."""
 
     def __init__(self, parent=None, *, title="New Appointment", data=None,
-                 patient_names: list[str] | None = None):
+                 patient_names=None, doctors=None, services=None, backend=None):
         super().__init__(parent)
         self.setWindowTitle(title)
-        self.setMinimumWidth(500)
+        self.setMinimumWidth(520)
+        self._doctors = doctors or []
+        self._services = services or []
+        self._backend = backend
 
         form = QFormLayout(self)
-        form.setSpacing(16)
-        form.setContentsMargins(32, 32, 32, 32)
+        form.setSpacing(14); form.setContentsMargins(32,32,32,32)
 
-        # Patient
-        self.patient_combo = QComboBox()
-        self.patient_combo.setObjectName("formCombo")
+        self.patient_combo = QComboBox(); self.patient_combo.setObjectName("formCombo")
         self.patient_combo.setMinimumHeight(40)
         if patient_names:
             self.patient_combo.addItems(patient_names)
@@ -94,99 +68,123 @@ class AppointmentDialog(QDialog):
             self.patient_combo.setEditable(True)
             self.patient_combo.lineEdit().setPlaceholderText("Select or type patient name")
 
-        # Doctor
-        self.doctor_combo = QComboBox()
-        self.doctor_combo.setObjectName("formCombo")
-        self.doctor_combo.addItems(["Dr. Reyes", "Dr. Tan", "Dr. Lim", "Dr. Santos"])
-        self.doctor_combo.setMinimumHeight(40)
+        self.doctor_combo = QComboBox(); self.doctor_combo.setObjectName("formCombo"); self.doctor_combo.setMinimumHeight(40)
+        for doc in self._doctors:
+            self.doctor_combo.addItem(doc["doctor_name"], doc["employee_id"])
 
-        # Date
-        self.date_edit = QDateEdit()
-        self.date_edit.setCalendarPopup(True)
-        self.date_edit.setDate(QDate.currentDate())
-        self.date_edit.setObjectName("formCombo")
-        self.date_edit.setDisplayFormat("dddd, MMMM d, yyyy")
-        self.date_edit.setMinimumHeight(40)
+        self.date_edit = QDateEdit(); self.date_edit.setCalendarPopup(True)
+        self.date_edit.setDate(QDate.currentDate()); self.date_edit.setObjectName("formCombo")
+        self.date_edit.setDisplayFormat("dddd, MMMM d, yyyy"); self.date_edit.setMinimumHeight(40)
 
-        # Time
-        self.time_edit = QTimeEdit()
-        self.time_edit.setTime(QTime(9, 0))
-        self.time_edit.setObjectName("formCombo")
-        self.time_edit.setDisplayFormat("hh:mm AP")
+        self.time_edit = QTimeEdit(); self.time_edit.setTime(QTime(9,0))
+        self.time_edit.setObjectName("formCombo"); self.time_edit.setDisplayFormat("hh:mm AP")
         self.time_edit.setMinimumHeight(40)
 
-        # Purpose
-        self.purpose_combo = QComboBox()
-        self.purpose_combo.setObjectName("formCombo")
-        self.purpose_combo.addItems([
-            "General Checkup", "Follow-up Visit", "Lab Results Review",
-            "Consultation", "Dental Cleaning", "Physical Exam",
-            "X-Ray Review", "Blood Work",
-        ])
-        self.purpose_combo.setMinimumHeight(40)
+        self.purpose_combo = QComboBox(); self.purpose_combo.setObjectName("formCombo"); self.purpose_combo.setMinimumHeight(40)
+        for svc in self._services:
+            self.purpose_combo.addItem(svc["service_name"], svc["service_id"])
 
-        # Status
-        self.status_combo = QComboBox()
-        self.status_combo.setObjectName("formCombo")
-        self.status_combo.addItems(["Pending", "Confirmed", "Cancelled", "Completed"])
-        self.status_combo.setMinimumHeight(40)
+        self.status_combo = QComboBox(); self.status_combo.setObjectName("formCombo")
+        self.status_combo.addItems(["Pending", "Confirmed", "Cancelled", "Completed"]); self.status_combo.setMinimumHeight(40)
 
-        # Notes
-        self.notes_edit = QTextEdit()
-        self.notes_edit.setObjectName("formInput")
-        self.notes_edit.setMaximumHeight(80)
-        self.notes_edit.setPlaceholderText("Optional notes…")
+        self.notes_edit = QTextEdit(); self.notes_edit.setObjectName("formInput")
+        self.notes_edit.setMaximumHeight(70); self.notes_edit.setPlaceholderText("Optional notes…")
 
-        form.addRow("Patient",  self.patient_combo)
-        form.addRow("Doctor",   self.doctor_combo)
-        form.addRow("Date",     self.date_edit)
-        form.addRow("Time",     self.time_edit)
-        form.addRow("Purpose",  self.purpose_combo)
-        form.addRow("Status",   self.status_combo)
-        form.addRow("Notes",    self.notes_edit)
+        # Cancellation reason
+        self.cancel_reason = QLineEdit(); self.cancel_reason.setObjectName("formInput")
+        self.cancel_reason.setPlaceholderText("Reason (if cancelling)"); self.cancel_reason.setMinimumHeight(38)
 
-        btns = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Save |
-            QDialogButtonBox.StandardButton.Cancel
-        )
-        btns.accepted.connect(self.accept)
-        btns.rejected.connect(self.reject)
+        # Reschedule reason
+        self.resched_reason = QLineEdit(); self.resched_reason.setObjectName("formInput")
+        self.resched_reason.setPlaceholderText("Reason (if rescheduling)"); self.resched_reason.setMinimumHeight(38)
+
+        # Reminder checkbox
+        self.reminder_check = QCheckBox("Reminder Sent")
+
+        # Recurring section (only for new)
+        self.recurring_check = QCheckBox("Make Recurring")
+        self.recur_freq = QComboBox(); self.recur_freq.addItems(["Weekly", "Daily", "Monthly"])
+        self.recur_freq.setObjectName("formCombo"); self.recur_freq.setMinimumHeight(38)
+        self.recur_count = QSpinBox(); self.recur_count.setMinimum(2); self.recur_count.setMaximum(52)
+        self.recur_count.setValue(4); self.recur_count.setMinimumHeight(38)
+        self.recur_freq.setEnabled(False); self.recur_count.setEnabled(False)
+        self.recurring_check.toggled.connect(lambda c: (self.recur_freq.setEnabled(c), self.recur_count.setEnabled(c)))
+
+        form.addRow("Patient", self.patient_combo)
+        form.addRow("Doctor", self.doctor_combo)
+        form.addRow("Date", self.date_edit)
+        form.addRow("Time", self.time_edit)
+        form.addRow("Service", self.purpose_combo)
+        form.addRow("Status", self.status_combo)
+        form.addRow("Notes", self.notes_edit)
+        form.addRow("Cancel Reason", self.cancel_reason)
+        form.addRow("Reschedule Reason", self.resched_reason)
+        form.addRow("", self.reminder_check)
+        if title == "New Appointment":
+            form.addRow("", self.recurring_check)
+            recur_row = QHBoxLayout()
+            recur_row.addWidget(QLabel("Every")); recur_row.addWidget(self.recur_freq)
+            recur_row.addWidget(QLabel("×")); recur_row.addWidget(self.recur_count)
+            form.addRow("Recurrence", recur_row)
+
+        btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        style_dialog_btns(btns)
+        btns.accepted.connect(self._validate_and_accept); btns.rejected.connect(self.reject)
         form.addRow(btns)
 
-        # Pre-fill when editing
         if data:
-            p_idx = self.patient_combo.findText(data.get("patient", ""))
-            if p_idx >= 0:
-                self.patient_combo.setCurrentIndex(p_idx)
-            elif self.patient_combo.isEditable():
-                self.patient_combo.setEditText(data.get("patient", ""))
-            idx = self.doctor_combo.findText(data.get("doctor", ""))
-            if idx >= 0:
-                self.doctor_combo.setCurrentIndex(idx)
-            if data.get("date"):
-                self.date_edit.setDate(QDate.fromString(data["date"], "yyyy-MM-dd"))
-            if data.get("time"):
-                self.time_edit.setTime(QTime.fromString(data["time"], "hh:mm AP"))
-            idx = self.purpose_combo.findText(data.get("purpose", ""))
-            if idx >= 0:
-                self.purpose_combo.setCurrentIndex(idx)
-            idx = self.status_combo.findText(data.get("status", ""))
-            if idx >= 0:
-                self.status_combo.setCurrentIndex(idx)
+            p_idx = self.patient_combo.findText(data.get("patient",""))
+            if p_idx >= 0: self.patient_combo.setCurrentIndex(p_idx)
+            elif self.patient_combo.isEditable(): self.patient_combo.setEditText(data.get("patient",""))
+            idx = self.doctor_combo.findText(data.get("doctor",""))
+            if idx >= 0: self.doctor_combo.setCurrentIndex(idx)
+            if data.get("date"): self.date_edit.setDate(QDate.fromString(data["date"],"yyyy-MM-dd"))
+            if data.get("time"): self.time_edit.setTime(QTime.fromString(data["time"],"HH:mm:ss"))
+            idx = self.purpose_combo.findText(data.get("purpose",""))
+            if idx >= 0: self.purpose_combo.setCurrentIndex(idx)
+            idx = self.status_combo.findText(data.get("status",""))
+            if idx >= 0: self.status_combo.setCurrentIndex(idx)
+            if data.get("notes"): self.notes_edit.setPlainText(data["notes"])
+            self.cancel_reason.setText(data.get("cancellation_reason","") or "")
+            self.resched_reason.setText(data.get("reschedule_reason","") or "")
+            self.reminder_check.setChecked(bool(data.get("reminder_sent", 0)))
+
+    def _validate_and_accept(self):
+        # Conflict check
+        if self._backend:
+            doc_id = self.doctor_combo.currentData()
+            dt = self.date_edit.date().toString("yyyy-MM-dd")
+            tm = self.time_edit.time().toString("HH:mm:ss")
+            if doc_id and self._backend.check_appointment_conflict(doc_id, dt, tm):
+                reply = QMessageBox.warning(self, "Conflict Detected",
+                    "This doctor already has an appointment at the same date/time.\nSave anyway?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                if reply != QMessageBox.StandardButton.Yes:
+                    return
+        self.accept()
 
     def get_data(self) -> dict:
         return {
-            "patient": self.patient_combo.currentText(),
-            "doctor":  self.doctor_combo.currentText(),
-            "date":    self.date_edit.date().toString("yyyy-MM-dd"),
-            "time":    self.time_edit.time().toString("hh:mm AP"),
+            "patient_name": self.patient_combo.currentText(),
+            "doctor": self.doctor_combo.currentText(),
+            "doctor_id": self.doctor_combo.currentData(),
+            "date": self.date_edit.date().toString("yyyy-MM-dd"),
+            "time": self.time_edit.time().toString("HH:mm:ss"),
             "purpose": self.purpose_combo.currentText(),
-            "status":  self.status_combo.currentText(),
+            "service_id": self.purpose_combo.currentData(),
+            "status": self.status_combo.currentText(),
+            "notes": self.notes_edit.toPlainText(),
+            "cancellation_reason": self.cancel_reason.text(),
+            "reschedule_reason": self.resched_reason.text(),
+            "reminder_sent": 1 if self.reminder_check.isChecked() else 0,
+            "recurring": self.recurring_check.isChecked() if hasattr(self, 'recurring_check') else False,
+            "recur_freq": self.recur_freq.currentText() if hasattr(self, 'recur_freq') else "Weekly",
+            "recur_count": self.recur_count.value() if hasattr(self, 'recur_count') else 4,
         }
 
 
 # ══════════════════════════════════════════════════════════════════════
-#  Appointments Page  (single table + quick-filter tabs)
+#  Appointments Page
 # ══════════════════════════════════════════════════════════════════════
 class AppointmentsPage(QWidget):
     _TAB_STYLE = (
@@ -198,293 +196,288 @@ class AppointmentsPage(QWidget):
     _TAB_ACTIVE   = _TAB_STYLE.format(bg="#388087", fg="#FFFFFF", hv="#2C6A70")
     _TAB_INACTIVE = _TAB_STYLE.format(bg="#FFFFFF", fg="#2C3E50", hv="#BADFE7")
 
-    def __init__(self, role: str = "Admin"):
+    def __init__(self, backend=None, role: str = "Admin"):
         super().__init__()
+        self._backend = backend
         self._role = role
         self._patient_names: list[str] = []
         self._active_tab = "Today"
         self._tab_buttons: dict[str, QPushButton] = {}
+        self._all_appointments: list[dict] = []
+        self._appointment_ids: list[int] = []
         self._build()
 
     def set_patient_names(self, names: list[str]):
         self._patient_names = names
 
-    # ── Build ──────────────────────────────────────────────────────────
+    def _load_from_db(self):
+        if not self._backend:
+            self._all_appointments = []; return
+        self._all_appointments = self._backend.get_appointments() or []
+        for appt in self._all_appointments:
+            d = appt.get("appointment_date")
+            if hasattr(d, "strftime"): appt["appointment_date"] = d.strftime("%Y-%m-%d")
+            elif d is not None: appt["appointment_date"] = str(d)
+            t = appt.get("appointment_time")
+            if hasattr(t, "total_seconds"):
+                total = int(t.total_seconds()); h, m = divmod(total // 60, 60)
+                appt["appointment_time"] = f"{h:02d}:{m:02d}:00"
+            elif hasattr(t, "strftime"): appt["appointment_time"] = t.strftime("%H:%M:%S")
+            elif t is not None: appt["appointment_time"] = str(t)
+        self._update_doctor_filter()
+
+    def _update_doctor_filter(self):
+        current = self.doc_filter.currentText()
+        self.doc_filter.blockSignals(True); self.doc_filter.clear()
+        self.doc_filter.addItem("All Doctors")
+        doc_names = sorted({a.get("doctor_name","") for a in self._all_appointments if a.get("doctor_name")})
+        self.doc_filter.addItems(doc_names)
+        idx = self.doc_filter.findText(current)
+        if idx >= 0: self.doc_filter.setCurrentIndex(idx)
+        self.doc_filter.blockSignals(False)
+
     def _build(self):
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        inner = QWidget()
-        inner.setObjectName("pageInner")
-        lay = QVBoxLayout(inner)
-        lay.setSpacing(16)
-        lay.setContentsMargins(28, 28, 28, 28)
+        scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setFrameShape(QFrame.Shape.NoFrame)
+        inner = QWidget(); inner.setObjectName("pageInner")
+        lay = QVBoxLayout(inner); lay.setSpacing(16); lay.setContentsMargins(28,28,28,28)
 
-        # ── Banner ─────────────────────────────────────────────────
-        banner = QFrame()
-        banner.setObjectName("pageBanner")
-        banner.setMinimumHeight(100)
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20); shadow.setOffset(0, 4)
-        shadow.setColor(QColor(0, 0, 0, 15))
+        # Banner
+        banner = QFrame(); banner.setObjectName("pageBanner"); banner.setMinimumHeight(100)
+        shadow = QGraphicsDropShadowEffect(); shadow.setBlurRadius(20); shadow.setOffset(0,4); shadow.setColor(QColor(0,0,0,15))
         banner.setGraphicsEffect(shadow)
-        banner_lay = QHBoxLayout(banner)
-        banner_lay.setContentsMargins(32, 20, 32, 20)
+        banner_lay = QHBoxLayout(banner); banner_lay.setContentsMargins(32,20,32,20)
         tc = QVBoxLayout(); tc.setSpacing(4)
-        title = QLabel("Appointment Scheduling")
-        title.setObjectName("bannerTitle")
-        sub = QLabel("View and manage all doctor-patient appointments")
-        sub.setObjectName("bannerSubtitle")
+        title = QLabel("Appointment Scheduling"); title.setObjectName("bannerTitle")
+        sub = QLabel("View and manage all doctor-patient appointments"); sub.setObjectName("bannerSubtitle")
         tc.addWidget(title); tc.addWidget(sub)
-        banner_lay.addLayout(tc)
-        banner_lay.addStretch()
-
-        if self._role != "Nurse":
-            add_btn = QPushButton("\uff0b  New Appointment")
-            add_btn.setObjectName("bannerBtn")
-            add_btn.setMinimumHeight(42)
-            add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        banner_lay.addLayout(tc); banner_lay.addStretch()
+        if self._role != "Cashier":
+            add_btn = QPushButton("\uff0b  New Appointment"); add_btn.setObjectName("bannerBtn")
+            add_btn.setMinimumHeight(42); add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             add_btn.clicked.connect(self._on_new)
             banner_lay.addWidget(add_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
         lay.addWidget(banner)
 
-        # ── Quick-filter tabs ──────────────────────────────────────
-        tab_row = QHBoxLayout()
-        tab_row.setSpacing(8)
+        # Quick-filter tabs
+        tab_row = QHBoxLayout(); tab_row.setSpacing(8)
         for label in ("Today", "Tomorrow", "This Week", "This Month", "All"):
-            btn = QPushButton(label)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setMinimumHeight(38)
+            btn = QPushButton(label); btn.setCursor(Qt.CursorShape.PointingHandCursor); btn.setMinimumHeight(38)
             btn.clicked.connect(lambda checked, l=label: self._switch_tab(l))
-            self._tab_buttons[label] = btn
-            tab_row.addWidget(btn)
-        tab_row.addStretch()
-        lay.addLayout(tab_row)
+            self._tab_buttons[label] = btn; tab_row.addWidget(btn)
+        tab_row.addStretch(); lay.addLayout(tab_row)
 
-        # ── Summary badge ──────────────────────────────────────────
         self._summary_label = QLabel()
-        self._summary_label.setStyleSheet(
-            "font-size: 13px; color: #7F8C8D; padding: 2px 0;"
-        )
+        self._summary_label.setStyleSheet("font-size:13px;color:#7F8C8D;padding:2px 0;")
         lay.addWidget(self._summary_label)
 
-        # ── Filter bar ─────────────────────────────────────────────
-        bar = QHBoxLayout()
-        bar.setSpacing(10)
-        self.search = QLineEdit()
-        self.search.setObjectName("searchBar")
-        self.search.setPlaceholderText("\U0001F50D  Search by patient, doctor, or purpose…")
-        self.search.setMinimumHeight(42)
-        self.search.textChanged.connect(self._apply_filters)
+        # Filter bar
+        bar = QHBoxLayout(); bar.setSpacing(10)
+        self.search = QLineEdit(); self.search.setObjectName("searchBar")
+        self.search.setPlaceholderText("🔍  Search by patient, doctor, or service…")
+        self.search.setMinimumHeight(42); self.search.textChanged.connect(self._apply_filters)
         bar.addWidget(self.search)
-
-        self.doc_filter = QComboBox()
-        self.doc_filter.setObjectName("formCombo")
-        self.doc_filter.addItems(["All Doctors", "Dr. Reyes", "Dr. Tan", "Dr. Lim", "Dr. Santos"])
-        self.doc_filter.setMinimumHeight(42); self.doc_filter.setMinimumWidth(150)
-        self.doc_filter.currentTextChanged.connect(self._apply_filters)
-        bar.addWidget(self.doc_filter)
-
-        self.status_filter = QComboBox()
-        self.status_filter.setObjectName("formCombo")
-        self.status_filter.addItems(["All Status", "Pending", "Confirmed", "Cancelled", "Completed"])
+        self.doc_filter = QComboBox(); self.doc_filter.setObjectName("formCombo")
+        self.doc_filter.addItems(["All Doctors"]); self.doc_filter.setMinimumHeight(42); self.doc_filter.setMinimumWidth(150)
+        self.doc_filter.currentTextChanged.connect(self._apply_filters); bar.addWidget(self.doc_filter)
+        self.status_filter = QComboBox(); self.status_filter.setObjectName("formCombo")
+        self.status_filter.addItems(["All Status","Pending","Confirmed","Cancelled","Completed"])
         self.status_filter.setMinimumHeight(42); self.status_filter.setMinimumWidth(140)
-        self.status_filter.currentTextChanged.connect(self._apply_filters)
-        bar.addWidget(self.status_filter)
+        self.status_filter.currentTextChanged.connect(self._apply_filters); bar.addWidget(self.status_filter)
+
+        export_btn = QPushButton("Export CSV"); export_btn.setObjectName("actionBtn")
+        export_btn.setMinimumHeight(42); export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        export_btn.clicked.connect(self._export_csv); bar.addWidget(export_btn)
+        print_btn = QPushButton("Print"); print_btn.setObjectName("actionBtn")
+        print_btn.setMinimumHeight(42); print_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        print_btn.clicked.connect(self._print_table); bar.addWidget(print_btn)
         lay.addLayout(bar)
 
-        # ── Main table ─────────────────────────────────────────────
-        cols = ["Day & Date", "Time", "Patient", "Doctor", "Purpose", "Status"]
-        if self._role != "Nurse":
-            cols.append("Actions")
-        self.table = QTableWidget(0, len(cols))
-        self.table.setHorizontalHeaderLabels(cols)
-        hdr = self.table.horizontalHeader()
-        hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        # Give "Day & Date" a wider stretch
-        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
-        self.table.setColumnWidth(0, 260)
-        if self._role != "Nurse":
-            hdr.setSectionResizeMode(len(cols) - 1, QHeaderView.ResizeMode.Fixed)
-            self.table.setColumnWidth(len(cols) - 1, 120)
+        # Table – added Notes column
+        cols = ["Day & Date", "Time", "Patient", "Doctor", "Service", "Notes", "Status"]
+        if self._role != "Cashier": cols.append("Actions")
+        self.table = QTableWidget(0, len(cols)); self.table.setHorizontalHeaderLabels(cols)
+        hdr = self.table.horizontalHeader(); hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive); self.table.setColumnWidth(0, 260)
+        if self._role != "Cashier":
+            hdr.setSectionResizeMode(len(cols)-1, QHeaderView.ResizeMode.Fixed); self.table.setColumnWidth(len(cols)-1, 120)
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        self.table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.table.setAlternatingRowColors(True)
-        self.table.verticalHeader().setDefaultSectionSize(52)
-        self.table.setMinimumHeight(460)
-        configure_table(self.table)
-        lay.addWidget(self.table)
+        self.table.setFocusPolicy(Qt.FocusPolicy.NoFocus); self.table.setAlternatingRowColors(True)
+        self.table.verticalHeader().setDefaultSectionSize(48); self.table.setMinimumHeight(420)
+        configure_table(self.table); lay.addWidget(self.table)
 
-        lay.addStretch()
-        scroll.setWidget(inner)
+        lay.addStretch(); scroll.setWidget(inner)
+        wrapper = QVBoxLayout(self); wrapper.setContentsMargins(0,0,0,0); wrapper.addWidget(scroll)
+        self._load_from_db(); self._switch_tab("Today")
 
-        wrapper = QVBoxLayout(self)
-        wrapper.setContentsMargins(0, 0, 0, 0)
-        wrapper.addWidget(scroll)
-
-        # Initial render
-        self._switch_tab("Today")
-
-    # ── Tab switching ──────────────────────────────────────────────
     def _switch_tab(self, label: str):
         self._active_tab = label
         for name, btn in self._tab_buttons.items():
             btn.setStyleSheet(self._TAB_ACTIVE if name == label else self._TAB_INACTIVE)
         self._refresh_table()
 
-    # ── Data helpers ───────────────────────────────────────────────
-    def _rows_for_tab(self) -> list[tuple]:
-        """Return the subset of _APPOINTMENTS matching the active tab."""
+    def _rows_for_tab(self) -> list[dict]:
         today = date.today()
         tab = self._active_tab
-
-        if tab == "Today":
-            key = today.strftime("%Y-%m-%d")
-            return [a for a in _APPOINTMENTS if a[0] == key]
-
+        def _parse(d):
+            try: return datetime.strptime(str(d), "%Y-%m-%d").date()
+            except: return None
+        if tab == "Today": return [a for a in self._all_appointments if _parse(a.get("appointment_date")) == today]
         if tab == "Tomorrow":
-            key = (today + timedelta(days=1)).strftime("%Y-%m-%d")
-            return [a for a in _APPOINTMENTS if a[0] == key]
-
+            tmr = today + timedelta(days=1); return [a for a in self._all_appointments if _parse(a.get("appointment_date")) == tmr]
         if tab == "This Week":
-            start = today - timedelta(days=today.weekday())  # Monday
-            end = start + timedelta(days=6)                  # Sunday
-            return [
-                a for a in _APPOINTMENTS
-                if start <= datetime.strptime(a[0], "%Y-%m-%d").date() <= end
-            ]
-
+            start = today - timedelta(days=today.weekday()); end = start + timedelta(days=6)
+            return [a for a in self._all_appointments if (d := _parse(a.get("appointment_date"))) and start <= d <= end]
         if tab == "This Month":
-            ym = today.strftime("%Y-%m")
-            return [a for a in _APPOINTMENTS if a[0][:7] == ym]
-
-        # "All"
-        return list(_APPOINTMENTS)
+            ym = today.strftime("%Y-%m"); return [a for a in self._all_appointments if str(a.get("appointment_date",""))[:7] == ym]
+        return list(self._all_appointments)
 
     def _refresh_table(self):
         rows = self._rows_for_tab()
-        # Sort chronologically (newest first for "All", oldest first otherwise)
-        rows.sort(key=lambda a: (a[0], a[1]),
+        rows.sort(key=lambda a: (str(a.get("appointment_date","")), str(a.get("appointment_time",""))),
                   reverse=(self._active_tab == "All"))
-
         self.table.setRowCount(len(rows))
+        self._appointment_ids = []
         col_count = self.table.columnCount()
-
         for r, appt in enumerate(rows):
-            # appt: (date_str, time_str, patient, doctor, purpose, status)
-            pretty = _pretty_date(appt[0])
-            rel = _relative_label(appt[0])
+            self._appointment_ids.append(appt.get("appointment_id", 0))
+            date_str = str(appt.get("appointment_date",""))
+            time_str = str(appt.get("appointment_time",""))
+            try:
+                t = datetime.strptime(time_str, "%H:%M:%S"); time_display = t.strftime("%I:%M %p")
+            except: time_display = time_str
+            pretty = _pretty_date(date_str); rel = _relative_label(date_str)
             date_display = f"{pretty}   ({rel})" if rel else pretty
-
-            values = [date_display, appt[1], appt[2], appt[3], appt[4], appt[5]]
+            notes_preview = (appt.get("notes","") or "")[:40]
+            if len(appt.get("notes","") or "") > 40: notes_preview += "…"
+            values = [date_display, time_display, appt.get("patient_name",""),
+                      appt.get("doctor_name",""), appt.get("service_name",""),
+                      notes_preview, appt.get("status","")]
             for c, val in enumerate(values):
-                item = QTableWidgetItem(val)
-                if c == 0:
-                    item.setFont(QFont("Segoe UI", 11))
-                # Status colouring
-                if c == 5:
-                    if val == "Confirmed":
-                        item.setForeground(QColor("#5CB85C"))
-                    elif val == "Pending":
-                        item.setForeground(QColor("#E8B931"))
-                    elif val == "Cancelled":
-                        item.setForeground(QColor("#D9534F"))
-                    elif val == "Completed":
-                        item.setForeground(QColor("#388087"))
-                    item.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
-                item.setData(Qt.ItemDataRole.UserRole, appt)   # stash raw tuple
+                item = QTableWidgetItem(str(val))
+                if c == 0: item.setFont(QFont("Segoe UI", 10))
+                if c == 6:
+                    color_map = {"Confirmed":"#5CB85C","Pending":"#E8B931","Cancelled":"#D9534F","Completed":"#388087"}
+                    item.setForeground(QColor(color_map.get(val,"#2C3E50")))
+                    item.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
                 self.table.setItem(r, c, item)
-
-            if self._role != "Nurse":
+            if self._role != "Cashier":
+                act_w = QWidget(); act_lay = QHBoxLayout(act_w)
+                act_lay.setContentsMargins(4, 4, 4, 4); act_lay.setSpacing(4)
                 edit_btn = make_table_btn("Edit")
-                edit_btn.clicked.connect(
-                    lambda checked, a=appt: self._on_edit(a)
-                )
-                self.table.setCellWidget(r, col_count - 1, edit_btn)
-
-        visible = sum(1 for r in range(self.table.rowCount())
-                      if not self.table.isRowHidden(r))
-        self._summary_label.setText(
-            f"Showing {len(rows)} appointment{'s' if len(rows) != 1 else ''}"
-        )
+                edit_btn.clicked.connect(lambda checked, a=appt: self._on_edit(a))
+                act_lay.addWidget(edit_btn)
+                self.table.setCellWidget(r, col_count - 1, act_w)
+        self._summary_label.setText(f"Showing {len(rows)} appointment{'s' if len(rows)!=1 else ''}")
         self._apply_filters()
 
-    # ── Filters ────────────────────────────────────────────────────
     def _apply_filters(self, _=None):
         search = self.search.text().lower()
-        doc    = self.doc_filter.currentText()
+        doc = self.doc_filter.currentText()
         status = self.status_filter.currentText()
         visible = 0
-
         for r in range(self.table.rowCount()):
-            row_text = " ".join(
-                self.table.item(r, c).text().lower() if self.table.item(r, c) else ""
-                for c in range(self.table.columnCount() - 1)
-            )
-            doc_cell    = self.table.item(r, 3)
-            status_cell = self.table.item(r, 5)
-
-            ok_search = not search or search in row_text
-            ok_doc    = doc == "All Doctors" or (doc_cell and doc_cell.text() == doc)
-            ok_status = status == "All Status" or (status_cell and status_cell.text() == status)
-            show = ok_search and ok_doc and ok_status
-            self.table.setRowHidden(r, not show)
-            if show:
-                visible += 1
-
+            row_text = " ".join(self.table.item(r,c).text().lower() if self.table.item(r,c) else "" for c in range(self.table.columnCount()-1))
+            doc_cell = self.table.item(r,3); status_cell = self.table.item(r,6)
+            ok = (not search or search in row_text) and \
+                 (doc=="All Doctors" or (doc_cell and doc_cell.text()==doc)) and \
+                 (status=="All Status" or (status_cell and status_cell.text()==status))
+            self.table.setRowHidden(r, not ok)
+            if ok: visible += 1
         total = self.table.rowCount()
-        if visible == total:
-            self._summary_label.setText(
-                f"Showing {total} appointment{'s' if total != 1 else ''}"
-            )
-        else:
-            self._summary_label.setText(
-                f"Showing {visible} of {total} appointment{'s' if total != 1 else ''}"
-            )
+        self._summary_label.setText(f"Showing {visible} of {total} appointment{'s' if total!=1 else ''}" if visible != total
+                                    else f"Showing {total} appointment{'s' if total!=1 else ''}")
 
     # ── CRUD ───────────────────────────────────────────────────────
     def _on_new(self):
+        doctors = self._backend.get_doctors() if self._backend else []
+        services = self._backend.get_services_list() if self._backend else []
         dlg = AppointmentDialog(self, title="New Appointment",
-                                patient_names=self._patient_names)
+                                patient_names=self._patient_names,
+                                doctors=doctors, services=services, backend=self._backend)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             d = dlg.get_data()
-            if not d["patient"].strip():
-                QMessageBox.warning(self, "Validation", "Patient name is required.")
-                return
-            _APPOINTMENTS.append(
-                (d["date"], d["time"], d["patient"], d["doctor"], d["purpose"], d["status"])
-            )
-            self._refresh_table()
-            QMessageBox.information(
-                self, "Success",
-                f"Appointment for '{d['patient']}' on "
-                f"{_pretty_date(d['date'])} at {d['time']} created."
-            )
+            if not d["patient_name"].strip():
+                QMessageBox.warning(self, "Validation", "Patient name is required."); return
+            if self._backend:
+                if d.get("recurring"):
+                    cnt = self._backend.add_recurring_appointments(d, d["recur_freq"], d["recur_count"])
+                    if cnt == 0:
+                        QMessageBox.warning(self, "Error", "Failed to create recurring appointments."); return
+                    QMessageBox.information(self, "Success", f"Created {cnt} recurring appointments.")
+                else:
+                    ok = self._backend.add_appointment(d)
+                    if not ok:
+                        QMessageBox.warning(self, "Error", "Failed to save appointment."); return
+                    QMessageBox.information(self, "Success", f"Appointment for '{d['patient_name']}' created.")
+            self._load_from_db(); self._refresh_table()
 
-    def _on_edit(self, appt: tuple):
+    def _on_edit(self, appt: dict):
         data = {
-            "date": appt[0], "time": appt[1], "patient": appt[2],
-            "doctor": appt[3], "purpose": appt[4], "status": appt[5],
+            "patient": appt.get("patient_name",""), "doctor": appt.get("doctor_name",""),
+            "date": str(appt.get("appointment_date","")), "time": str(appt.get("appointment_time","")),
+            "purpose": appt.get("service_name",""), "status": appt.get("status",""),
+            "notes": appt.get("notes","") or "",
+            "cancellation_reason": appt.get("cancellation_reason","") or "",
+            "reschedule_reason": appt.get("reschedule_reason","") or "",
+            "reminder_sent": appt.get("reminder_sent", 0),
         }
+        doctors = self._backend.get_doctors() if self._backend else []
+        services = self._backend.get_services_list() if self._backend else []
         dlg = AppointmentDialog(self, title="Edit Appointment", data=data,
-                                patient_names=self._patient_names)
+                                patient_names=self._patient_names,
+                                doctors=doctors, services=services, backend=self._backend)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             d = dlg.get_data()
-            if not d["patient"].strip():
-                QMessageBox.warning(self, "Validation", "Patient name is required.")
-                return
-            try:
-                idx = _APPOINTMENTS.index(appt)
-                _APPOINTMENTS[idx] = (
-                    d["date"], d["time"], d["patient"],
-                    d["doctor"], d["purpose"], d["status"],
-                )
-            except ValueError:
-                pass
-            self._refresh_table()
-            QMessageBox.information(
-                self, "Success",
-                f"Appointment for '{d['patient']}' updated."
-            )
+            if not d["patient_name"].strip():
+                QMessageBox.warning(self, "Validation", "Patient name is required."); return
+            appt_id = appt.get("appointment_id")
+            if self._backend and appt_id:
+                ok = self._backend.update_appointment(appt_id, d)
+                if not ok:
+                    QMessageBox.warning(self, "Error", "Failed to update appointment."); return
+            self._load_from_db(); self._refresh_table()
+            QMessageBox.information(self, "Success", f"Appointment for '{d['patient_name']}' updated.")
+
+    # ── Export / Print ─────────────────────────────────────────────
+    def _export_csv(self):
+        path, _ = QFileDialog.getSaveFileName(self, "Export Appointments", "appointments.csv", "CSV Files (*.csv)")
+        if not path: return
+        try:
+            with open(path, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                headers = [self.table.horizontalHeaderItem(c).text()
+                           for c in range(self.table.columnCount()-1)]
+                writer.writerow(headers)
+                for r in range(self.table.rowCount()):
+                    if self.table.isRowHidden(r): continue
+                    row = [self.table.item(r,c).text() if self.table.item(r,c) else ""
+                           for c in range(self.table.columnCount()-1)]
+                    writer.writerow(row)
+            QMessageBox.information(self, "Exported", f"Saved to {path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))
+
+    def _print_table(self):
+        try:
+            from PyQt6.QtPrintSupport import QPrintDialog, QPrinter
+            from PyQt6.QtGui import QTextDocument
+            printer = QPrinter()
+            dlg = QPrintDialog(printer, self)
+            if dlg.exec() == QDialog.DialogCode.Accepted:
+                doc = QTextDocument()
+                html = "<h2>Appointments</h2><table border='1' cellpadding='4' cellspacing='0'><tr>"
+                for c in range(self.table.columnCount()-1):
+                    html += f"<th>{self.table.horizontalHeaderItem(c).text()}</th>"
+                html += "</tr>"
+                for r in range(self.table.rowCount()):
+                    if self.table.isRowHidden(r): continue
+                    html += "<tr>"
+                    for c in range(self.table.columnCount()-1):
+                        html += f"<td>{self.table.item(r,c).text() if self.table.item(r,c) else ''}</td>"
+                    html += "</tr>"
+                html += "</table>"
+                doc.setHtml(html); doc.print(printer)
+        except ImportError:
+            QMessageBox.warning(self, "Print", "Print support not available.")
