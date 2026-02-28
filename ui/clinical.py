@@ -7,7 +7,6 @@ Billing: patient dropdown, multi-item invoice, partial payment, receipt
 Services: categories, deactivation toggle, usage count, bulk price update.
 """
 
-import csv, io, textwrap
 from datetime import datetime
 
 from PyQt6.QtWidgets import (
@@ -15,9 +14,9 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QFrame, QScrollArea,
     QComboBox, QStackedWidget, QTextEdit, QSpinBox, QDoubleSpinBox,
     QGraphicsDropShadowEffect, QDialog, QFormLayout, QDialogButtonBox,
-    QMessageBox, QCheckBox, QFileDialog, QTabWidget,
+    QMessageBox, QCheckBox, QTabWidget,
 )
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor
 from ui.styles import configure_table, make_table_btn, make_table_btn_danger, style_dialog_btns
 
@@ -31,7 +30,7 @@ class QueueEditDialog(QDialog):
     def __init__(self, parent=None, data=None):
         super().__init__(parent)
         self.setWindowTitle("Edit Queue Entry")
-        self.setMinimumWidth(480)
+        self.setMinimumWidth(560)
         form = QFormLayout(self)
         form.setSpacing(14)
         form.setContentsMargins(28, 28, 28, 28)
@@ -99,7 +98,7 @@ class ServiceEditDialog(QDialog):
     def __init__(self, parent=None, data=None, categories=None):
         super().__init__(parent)
         self.setWindowTitle("Edit Service" if data else "Add Service")
-        self.setMinimumWidth(440)
+        self.setMinimumWidth(520)
         form = QFormLayout(self)
         form.setSpacing(14)
         form.setContentsMargins(28, 28, 28, 28)
@@ -153,7 +152,7 @@ class NewInvoiceDialog(QDialog):
                  patients=None, backend=None):
         super().__init__(parent)
         self.setWindowTitle("Create Invoice")
-        self.setMinimumWidth(580)
+        self.setMinimumWidth(640)
 
         self._services = services or []
         self._payment_methods = payment_methods or []
@@ -444,6 +443,27 @@ class ClinicalPage(QWidget):
         self._service_ids: list[int] = []
         self._invoice_ids: list[int] = []
         self._build()
+        # Auto-refresh data every 10 seconds
+        self._refresh_timer = QTimer(self)
+        self._refresh_timer.timeout.connect(self.refresh)
+        self._refresh_timer.start(10_000)
+
+    def refresh(self):
+        """Reload data for all clinical tabs, auto-sync appointments."""
+        try:
+            if self._backend:
+                self._backend.sync_today_appointments_to_queue()
+            self._load_queue()
+        except Exception:
+            pass
+        try:
+            self._load_billing()
+        except Exception:
+            pass
+        try:
+            self._load_services()
+        except Exception:
+            pass
 
     # ── Build ──────────────────────────────────────────────────────
     def _build(self):
@@ -556,13 +576,8 @@ class ClinicalPage(QWidget):
         status_row.addWidget(wait_card)
         lay.addLayout(status_row)
 
-        # Toolbar: sync, call next, doctor filter
+        # Toolbar: call next, doctor filter
         toolbar = QHBoxLayout(); toolbar.setSpacing(10)
-        sync_btn = QPushButton("🔄  Sync Appointments")
-        sync_btn.setObjectName("actionBtn"); sync_btn.setMinimumHeight(40)
-        sync_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        sync_btn.clicked.connect(self._on_sync_queue)
-        toolbar.addWidget(sync_btn)
 
         call_btn = QPushButton("📢  Call Next")
         call_btn.setObjectName("actionBtn"); call_btn.setMinimumHeight(40)
@@ -589,7 +604,8 @@ class ClinicalPage(QWidget):
         self._queue_table.setHorizontalHeaderLabels(cols)
         self._queue_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self._queue_table.horizontalHeader().setSectionResizeMode(len(cols)-1, QHeaderView.ResizeMode.Fixed)
-        self._queue_table.setColumnWidth(len(cols)-1, 170)
+        self._queue_table.setColumnWidth(len(cols)-1, 80)
+        self._queue_table.horizontalHeader().setStretchLastSection(False)
         self._queue_table.verticalHeader().setVisible(False)
         self._queue_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._queue_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
@@ -598,6 +614,12 @@ class ClinicalPage(QWidget):
         self._queue_table.setMinimumHeight(420)
         self._queue_table.verticalHeader().setDefaultSectionSize(48)
         configure_table(self._queue_table)
+        # Auto-sync appointments into queue on first load
+        if self._backend:
+            try:
+                self._backend.sync_today_appointments_to_queue()
+            except Exception:
+                pass
         self._load_queue()
         lay.addWidget(self._queue_table)
         return page
@@ -637,8 +659,8 @@ class ClinicalPage(QWidget):
                         item.setForeground(QColor(color_map[val]))
                 self._queue_table.setItem(r, c, item)
             act_w = QWidget(); act_lay = QHBoxLayout(act_w)
-            act_lay.setContentsMargins(4, 4, 4, 4); act_lay.setSpacing(4)
-            edit_btn = make_table_btn("Edit")
+            act_lay.setContentsMargins(0,0,0,0); act_lay.setSpacing(6)
+            edit_btn = make_table_btn("Edit"); edit_btn.setFixedWidth(52)
             edit_btn.clicked.connect(lambda checked, ri=r: self._on_edit_queue(ri))
             act_lay.addWidget(edit_btn)
             self._queue_table.setCellWidget(r, 6, act_w)
@@ -714,12 +736,6 @@ class ClinicalPage(QWidget):
         new_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         new_btn.clicked.connect(self._on_new_invoice)
         bar.addWidget(new_btn)
-
-        export_btn = QPushButton("⬇  Export CSV")
-        export_btn.setObjectName("actionBtn"); export_btn.setMinimumHeight(42)
-        export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        export_btn.clicked.connect(self._export_billing_csv)
-        bar.addWidget(export_btn)
         lay.addLayout(bar)
 
         cols = ["Inv #", "Patient", "Services", "Total", "Paid", "Status", "Actions"]
@@ -727,7 +743,8 @@ class ClinicalPage(QWidget):
         self._billing_table.setHorizontalHeaderLabels(cols)
         self._billing_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self._billing_table.horizontalHeader().setSectionResizeMode(len(cols)-1, QHeaderView.ResizeMode.Fixed)
-        self._billing_table.setColumnWidth(len(cols)-1, 170)
+        self._billing_table.setColumnWidth(len(cols)-1, 160)
+        self._billing_table.horizontalHeader().setStretchLastSection(False)
         self._billing_table.verticalHeader().setVisible(False)
         self._billing_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._billing_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
@@ -772,16 +789,17 @@ class ClinicalPage(QWidget):
 
             # Actions: Pay | Print | Void
             act_w = QWidget()
-            act_lay = QHBoxLayout(act_w); act_lay.setContentsMargins(4, 4, 4, 4); act_lay.setSpacing(4)
+            act_lay = QHBoxLayout(act_w); act_lay.setContentsMargins(0,0,0,0); act_lay.setSpacing(6)
             if status not in ("Paid", "Voided"):
-                pay_btn = make_table_btn("Pay")
+                pay_btn = make_table_btn("Pay"); pay_btn.setFixedWidth(46)
                 pay_btn.clicked.connect(lambda checked, iid=inv_id: self._on_add_payment(iid))
                 act_lay.addWidget(pay_btn)
-            prt_btn = make_table_btn("Print")
-            prt_btn.clicked.connect(lambda checked, iid=inv_id: self._on_print_receipt(iid))
-            act_lay.addWidget(prt_btn)
+            if status == "Paid":
+                prt_btn = make_table_btn("Print"); prt_btn.setFixedWidth(52)
+                prt_btn.clicked.connect(lambda checked, iid=inv_id: self._on_print_receipt(iid))
+                act_lay.addWidget(prt_btn)
             if status != "Voided":
-                void_btn = make_table_btn_danger("Void")
+                void_btn = make_table_btn_danger("Void"); void_btn.setFixedWidth(46)
                 void_btn.clicked.connect(lambda checked, iid=inv_id: self._on_void_invoice(iid))
                 act_lay.addWidget(void_btn)
             self._billing_table.setCellWidget(r, 6, act_w)
@@ -880,25 +898,6 @@ class ClinicalPage(QWidget):
         text = "\n".join(lines)
         QMessageBox.information(self, f"Receipt – Invoice #{invoice_id}", text)
 
-    def _export_billing_csv(self):
-        path, _ = QFileDialog.getSaveFileName(self, "Export Invoices", "invoices.csv", "CSV (*.csv)")
-        if not path:
-            return
-        rows = self._backend.get_invoices() if self._backend else []
-        with open(path, "w", newline="", encoding="utf-8") as f:
-            w = csv.writer(f)
-            w.writerow(["Invoice #", "Patient", "Services", "Total", "Paid", "Status"])
-            for inv in rows:
-                w.writerow([
-                    inv.get("invoice_id", ""),
-                    inv.get("patient_name", ""),
-                    inv.get("service_name", ""),
-                    inv.get("total_amount", ""),
-                    inv.get("amount_paid", ""),
-                    inv.get("status", ""),
-                ])
-        QMessageBox.information(self, "Exported", f"Invoices exported to:\n{path}")
-
     # ══════════════════════════════════════════════════════════════
     #  SERVICES TAB
     # ══════════════════════════════════════════════════════════════
@@ -942,7 +941,8 @@ class ClinicalPage(QWidget):
         self._svc_table.setHorizontalHeaderLabels(cols)
         self._svc_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self._svc_table.horizontalHeader().setSectionResizeMode(len(cols)-1, QHeaderView.ResizeMode.Fixed)
-        self._svc_table.setColumnWidth(len(cols)-1, 200)
+        self._svc_table.setColumnWidth(len(cols)-1, 80)
+        self._svc_table.horizontalHeader().setStretchLastSection(False)
         self._svc_table.verticalHeader().setVisible(False)
         self._svc_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._svc_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
@@ -981,8 +981,8 @@ class ClinicalPage(QWidget):
             self._svc_table.setItem(r, 4, active_item)
 
             act_w = QWidget(); act_lay = QHBoxLayout(act_w)
-            act_lay.setContentsMargins(4, 4, 4, 4); act_lay.setSpacing(4)
-            edit_btn = make_table_btn("Edit")
+            act_lay.setContentsMargins(0,0,0,0); act_lay.setSpacing(6)
+            edit_btn = make_table_btn("Edit"); edit_btn.setFixedWidth(52)
             edit_btn.clicked.connect(lambda checked, ri=r: self._on_edit_service(ri))
             act_lay.addWidget(edit_btn)
             self._svc_table.setCellWidget(r, 5, act_w)

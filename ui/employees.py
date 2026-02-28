@@ -1,17 +1,15 @@
 """Employee Management page – V2
 
 New: profile view dialog, department filter, on-leave dates, department
-count card, performance stats, export CSV, print."""
-
-import csv
+count card, performance stats."""
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QFrame, QScrollArea,
     QComboBox, QDialog, QFormLayout, QDateEdit, QTabWidget,
-    QGraphicsDropShadowEffect, QMessageBox, QTextEdit, QFileDialog,
+    QGraphicsDropShadowEffect, QMessageBox, QTextEdit,
 )
-from PyQt6.QtCore import Qt, QDate
+from PyQt6.QtCore import Qt, QDate, QTimer
 from PyQt6.QtGui import QColor
 from ui.styles import configure_table, make_table_btn
 from backend import AuthBackend
@@ -29,10 +27,10 @@ class EmployeeDialog(QDialog):
     )
 
     def __init__(self, parent=None, *, title="Add Employee", data=None,
-                 is_admin: bool = False, current_password: str = ""):
+                 is_admin: bool = False):
         super().__init__(parent)
         self.setWindowTitle(title)
-        self.setMinimumWidth(520)
+        self.setMinimumWidth(600)
         self._fired = False
 
         form = QFormLayout(self)
@@ -43,15 +41,16 @@ class EmployeeDialog(QDialog):
         self.name_edit.setStyleSheet(self._INPUT_STYLE)
         self.name_edit.setPlaceholderText("Full name")
         self.name_edit.setMinimumHeight(38)
+        self.name_edit.setMinimumWidth(320)
 
         self.role_combo = QComboBox(); self.role_combo.setObjectName("formCombo")
-        self.role_combo.addItems(["Doctor", "Cashier", "Receptionist", "Lab Tech", "Admin", "Pharmacist"])
+        self.role_combo.addItems(["Doctor", "Cashier", "Receptionist", "Lab Tech", "Admin", "Pharmacist", "HR"])
         self.role_combo.setMinimumHeight(38)
 
         self.dept_combo = QComboBox(); self.dept_combo.setObjectName("formCombo")
         self.dept_combo.addItems([
             "General Medicine", "Cardiology", "Dentistry", "Pediatrics",
-            "Laboratory", "Front Desk", "Management", "Pharmacy",
+            "Laboratory", "Front Desk", "Management", "Pharmacy", "Human Resources",
         ])
         self.dept_combo.setMinimumHeight(38)
 
@@ -61,13 +60,16 @@ class EmployeeDialog(QDialog):
 
         self.phone_edit = QLineEdit()
         self.phone_edit.setStyleSheet(self._INPUT_STYLE)
-        self.phone_edit.setPlaceholderText("Phone number")
+        self.phone_edit.setPlaceholderText("+639XXXXXXXXX")
         self.phone_edit.setMinimumHeight(38)
+        self.phone_edit.setMaxLength(13)
+        self.phone_edit.setMinimumWidth(320)
 
         self.email_edit = QLineEdit()
         self.email_edit.setStyleSheet(self._INPUT_STYLE)
         self.email_edit.setPlaceholderText("Email")
         self.email_edit.setMinimumHeight(38)
+        self.email_edit.setMinimumWidth(320)
 
         self.hire_date = QDateEdit(); self.hire_date.setCalendarPopup(True)
         self.hire_date.setDate(QDate.currentDate()); self.hire_date.setObjectName("formCombo")
@@ -76,14 +78,6 @@ class EmployeeDialog(QDialog):
         self.status_combo = QComboBox(); self.status_combo.setObjectName("formCombo")
         self.status_combo.addItems(["Active", "On Leave", "Inactive"])
         self.status_combo.setMinimumHeight(38)
-
-        # Leave date fields (V2)
-        self.leave_from = QDateEdit(); self.leave_from.setCalendarPopup(True)
-        self.leave_from.setObjectName("formCombo"); self.leave_from.setMinimumHeight(38)
-        self.leave_from.setDate(QDate.currentDate())
-        self.leave_until = QDateEdit(); self.leave_until.setCalendarPopup(True)
-        self.leave_until.setObjectName("formCombo"); self.leave_until.setMinimumHeight(38)
-        self.leave_until.setDate(QDate.currentDate().addDays(7))
 
         self.notes_edit = QTextEdit()
         self.notes_edit.setStyleSheet(self._INPUT_STYLE)
@@ -97,20 +91,10 @@ class EmployeeDialog(QDialog):
         form.addRow("Email",       self.email_edit)
         form.addRow("Hire Date",   self.hire_date)
         form.addRow("Status",      self.status_combo)
-        form.addRow("Leave From",  self.leave_from)
-        form.addRow("Leave Until", self.leave_until)
         form.addRow("Notes",       self.notes_edit)
 
-        # Password field — admin only
-        self.password_edit = QLineEdit()
-        self.password_edit.setStyleSheet(self._INPUT_STYLE)
-        self.password_edit.setPlaceholderText("Account password (leave blank to keep current)")
-        self.password_edit.setMinimumHeight(38)
-        if is_admin:
-            self.password_edit.setText(current_password)
-            form.addRow("Password", self.password_edit)
-        else:
-            self.password_edit.setVisible(False)
+        # Password is auto-generated based on role (e.g. doctor123)
+        # No manual password field needed
         self._is_admin = is_admin
 
         # Buttons
@@ -148,16 +132,6 @@ class EmployeeDialog(QDialog):
                     combo.setCurrentIndex(idx)
             self.phone_edit.setText(data.get("phone", ""))
             self.email_edit.setText(data.get("email", ""))
-            if data.get("leave_from"):
-                try:
-                    self.leave_from.setDate(QDate.fromString(str(data["leave_from"]), "yyyy-MM-dd"))
-                except Exception:
-                    pass
-            if data.get("leave_until"):
-                try:
-                    self.leave_until.setDate(QDate.fromString(str(data["leave_until"]), "yyyy-MM-dd"))
-                except Exception:
-                    pass
 
     def _on_fire(self):
         self._fired = True; self.reject()
@@ -165,6 +139,24 @@ class EmployeeDialog(QDialog):
     @property
     def fired(self) -> bool:
         return self._fired
+
+    def accept(self):
+        import re
+        from PyQt6.QtWidgets import QMessageBox
+        # All fields required
+        if not self.name_edit.text().strip():
+            QMessageBox.warning(self, "Validation", "Full Name is required."); return
+        if not self.phone_edit.text().strip():
+            QMessageBox.warning(self, "Validation", "Phone number is required."); return
+        if not self.email_edit.text().strip():
+            QMessageBox.warning(self, "Validation", "Email is required."); return
+        phone = self.phone_edit.text().strip()
+        if not re.match(r'^\+63\d{10}$', phone):
+            QMessageBox.warning(self, "Validation",
+                                "Phone must be in Philippine format: +63 followed by 10 digits\n"
+                                "Example: +639171234567")
+            return
+        super().accept()
 
     def get_data(self) -> dict:
         d = {
@@ -176,12 +168,8 @@ class EmployeeDialog(QDialog):
             "email":       self.email_edit.text(),
             "hire_date":   self.hire_date.date().toString("yyyy-MM-dd"),
             "status":      self.status_combo.currentText(),
-            "leave_from":  self.leave_from.date().toString("yyyy-MM-dd"),
-            "leave_until": self.leave_until.date().toString("yyyy-MM-dd"),
             "notes":       self.notes_edit.toPlainText(),
         }
-        if self._is_admin:
-            d["password"] = self.password_edit.text()
         return d
 
 
@@ -217,8 +205,6 @@ class EmployeeProfileDialog(QDialog):
             ("Email",      self._emp.get("email", "") or "—"),
             ("Hire Date",  str(self._emp.get("hire_date", "")) or "—"),
             ("Status",     self._emp.get("status", "")),
-            ("Leave From", str(self._emp.get("leave_from", "")) or "—"),
-            ("Leave Until",str(self._emp.get("leave_until", "")) or "—"),
             ("Notes",      self._emp.get("notes", "") or "—"),
         ]
         for label, value in fields:
@@ -291,6 +277,10 @@ class EmployeesPage(QWidget):
         self._employees: list[dict] = []
         self._build()
         self._load_from_db()
+        # Auto-refresh data every 10 seconds
+        self._refresh_timer = QTimer(self)
+        self._refresh_timer.timeout.connect(self._load_from_db)
+        self._refresh_timer.start(10_000)
 
     def _load_from_db(self):
         rows = self._backend.get_employees() or []
@@ -318,11 +308,11 @@ class EmployeesPage(QWidget):
 
             # Actions: View | Edit
             act_w = QWidget()
-            act_lay = QHBoxLayout(act_w); act_lay.setContentsMargins(4, 4, 4, 4); act_lay.setSpacing(4)
-            view_btn = make_table_btn("View")
+            act_lay = QHBoxLayout(act_w); act_lay.setContentsMargins(0,0,0,0); act_lay.setSpacing(6)
+            view_btn = make_table_btn("View"); view_btn.setFixedWidth(52)
             view_btn.clicked.connect(lambda checked, ri=r: self._on_view(ri))
             act_lay.addWidget(view_btn)
-            edit_btn = make_table_btn("Edit")
+            edit_btn = make_table_btn("Edit"); edit_btn.setFixedWidth(52)
             edit_btn.clicked.connect(lambda checked, ri=r: self._on_edit(ri))
             act_lay.addWidget(edit_btn)
             self.table.setCellWidget(r, 8, act_w)
@@ -364,18 +354,6 @@ class EmployeesPage(QWidget):
         add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         add_btn.clicked.connect(self._on_add)
         banner_lay.addWidget(add_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
-
-        export_btn = QPushButton("⬇  Export CSV")
-        export_btn.setObjectName("bannerBtn"); export_btn.setMinimumHeight(42)
-        export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        export_btn.clicked.connect(self._export_csv)
-        banner_lay.addWidget(export_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
-
-        print_btn = QPushButton("🖨  Print")
-        print_btn.setObjectName("bannerBtn"); print_btn.setMinimumHeight(42)
-        print_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        print_btn.clicked.connect(self._print_table)
-        banner_lay.addWidget(print_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
         lay.addWidget(banner)
 
         # ── Stat cards ────────────────────────────────────────────
@@ -431,7 +409,7 @@ class EmployeesPage(QWidget):
 
         self.role_filter = QComboBox()
         self.role_filter.setObjectName("formCombo")
-        self.role_filter.addItems(["All Roles", "Doctor", "Cashier", "Receptionist", "Lab Tech", "Admin", "Pharmacist"])
+        self.role_filter.addItems(["All Roles", "Doctor", "Cashier", "Receptionist", "Lab Tech", "Admin", "Pharmacist", "HR"])
         self.role_filter.setMinimumHeight(42); self.role_filter.setMinimumWidth(140)
         self.role_filter.currentTextChanged.connect(lambda _: self._apply_filters())
         bar.addWidget(self.role_filter)
@@ -441,6 +419,7 @@ class EmployeesPage(QWidget):
         self.dept_filter.addItems([
             "All Departments", "General Medicine", "Cardiology", "Dentistry",
             "Pediatrics", "Laboratory", "Front Desk", "Management", "Pharmacy",
+            "Human Resources",
         ])
         self.dept_filter.setMinimumHeight(42); self.dept_filter.setMinimumWidth(160)
         self.dept_filter.currentTextChanged.connect(lambda _: self._apply_filters())
@@ -460,7 +439,8 @@ class EmployeesPage(QWidget):
         self.table.setHorizontalHeaderLabels(cols)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(len(cols)-1, QHeaderView.ResizeMode.Fixed)
-        self.table.setColumnWidth(len(cols)-1, 170)
+        self.table.setColumnWidth(len(cols)-1, 130)
+        self.table.horizontalHeader().setStretchLastSection(False)
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
@@ -505,7 +485,7 @@ class EmployeesPage(QWidget):
 
     # ── Add ───────────────────────────────────────────────────────
     def _on_add(self):
-        is_admin = self._role == "Admin"
+        is_admin = self._role in ("Admin", "HR")
         dlg = EmployeeDialog(self, title="Add Employee", is_admin=is_admin)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             d = dlg.get_data()
@@ -513,11 +493,12 @@ class EmployeesPage(QWidget):
                 QMessageBox.warning(self, "Validation", "Employee name is required.")
                 return
             ok = self._backend.add_employee(d)
-            if ok:
+            if ok is True:
                 self._load_from_db()
                 QMessageBox.information(self, "Success", f"Employee '{d['name']}' added.")
             else:
-                QMessageBox.warning(self, "Error", "Failed to save employee.")
+                err = ok if isinstance(ok, str) else ''
+                QMessageBox.warning(self, "Error", f"Failed to save employee.\n{err}")
 
     # ── Edit ──────────────────────────────────────────────────────
     def _on_edit(self, row: int):
@@ -527,19 +508,10 @@ class EmployeesPage(QWidget):
             item = self.table.item(row, c)
             data[key] = item.text() if item else ""
 
-        # Grab leave dates from original data
-        if row < len(self._employees):
-            emp = self._employees[row]
-            data["leave_from"] = str(emp.get("leave_from", "")) if emp.get("leave_from") else ""
-            data["leave_until"] = str(emp.get("leave_until", "")) if emp.get("leave_until") else ""
-
-        is_admin = self._role == "Admin"
-        current_pw = ""
-        if is_admin and data.get("email"):
-            current_pw = self._backend.get_user_password(data["email"])
+        is_admin = self._role in ("Admin", "HR")
 
         dlg = EmployeeDialog(self, title="Edit Employee", data=data,
-                             is_admin=is_admin, current_password=current_pw)
+                             is_admin=is_admin)
         result = dlg.exec()
         if dlg.fired:
             self._on_delete(row); return
@@ -555,13 +527,10 @@ class EmployeesPage(QWidget):
                 return
             old_email = data.get("email", "")
             ok = self._backend.update_employee(emp_id, d, old_email=old_email)
-            if not ok:
-                QMessageBox.warning(self, "Error", "Failed to update employee.")
+            if ok is not True:
+                err = ok if isinstance(ok, str) else ''
+                QMessageBox.warning(self, "Error", f"Failed to update employee.\n{err}")
                 return
-            if is_admin and d.get("password") and d["password"] != current_pw:
-                email_for_pw = d.get("email") or old_email
-                if email_for_pw:
-                    self._backend.update_user_password(email_for_pw, d["password"])
             self._load_from_db()
             QMessageBox.information(self, "Success", f"Employee '{d['name']}' updated.")
 
@@ -597,35 +566,3 @@ class EmployeesPage(QWidget):
                 QMessageBox.information(self, "Success", f"Employee '{name}' removed.")
             else:
                 QMessageBox.warning(self, "Error", "Failed to delete employee.")
-
-    # ── Export / Print ────────────────────────────────────────────
-    def _export_csv(self):
-        path, _ = QFileDialog.getSaveFileName(self, "Export Employees", "employees.csv", "CSV (*.csv)")
-        if not path:
-            return
-        with open(path, "w", newline="", encoding="utf-8") as f:
-            w = csv.writer(f)
-            w.writerow(["ID", "Name", "Role", "Department", "Type", "Phone", "Email", "Status"])
-            for emp in self._employees:
-                w.writerow([
-                    emp.get("employee_id", ""), emp.get("full_name", ""),
-                    emp.get("role_name", ""), emp.get("department_name", ""),
-                    emp.get("employment_type", ""), emp.get("phone", ""),
-                    emp.get("email", ""), emp.get("status", ""),
-                ])
-        QMessageBox.information(self, "Exported", f"Employees exported to:\n{path}")
-
-    def _print_table(self):
-        lines = [
-            "=" * 52,
-            "          E M P L O Y E E   L I S T",
-            "=" * 52, "",
-        ]
-        for emp in self._employees:
-            lines.append(
-                f"  [{emp.get('employee_id','')}] {emp.get('full_name',''):<22} "
-                f"{emp.get('role_name',''):<14} {emp.get('department_name',''):<18} "
-                f"{emp.get('status','')}"
-            )
-        lines += ["", f"  Total: {len(self._employees)} employees", "=" * 52]
-        QMessageBox.information(self, "Employee List", "\n".join(lines))

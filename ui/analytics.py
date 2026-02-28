@@ -3,15 +3,14 @@
 New: export PDF/CSV, revenue chart, patient retention, cancellation rate,
 doctor filter, date-range KPI, period comparison, drill-down tables."""
 
-import csv, math
+import math
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QScrollArea,
     QGraphicsDropShadowEffect, QGridLayout, QTableWidget, QTableWidgetItem,
     QHeaderView, QSizePolicy, QPushButton, QDateEdit, QComboBox,
-    QMessageBox, QFileDialog,
 )
-from PyQt6.QtCore import Qt, QRectF, QDate
+from PyQt6.QtCore import Qt, QRectF, QDate, QTimer
 from PyQt6.QtGui import QColor, QPainter, QPen, QBrush, QFont, QPainterPath
 from ui.styles import configure_table
 
@@ -102,6 +101,10 @@ class AnalyticsPage(QWidget):
         self._role = role
         self._user_email = user_email
         self._build()
+        # Auto-refresh data every 15 seconds
+        self._refresh_timer = QTimer(self)
+        self._refresh_timer.timeout.connect(self._on_refresh)
+        self._refresh_timer.start(15_000)
 
     @staticmethod
     def _fmt_peso(amount: float) -> str:
@@ -151,8 +154,6 @@ class AnalyticsPage(QWidget):
 
         if self._role == "Admin":
             for text, slot in [
-                ("⬇ Export CSV", self._export_csv),
-                ("🖨 Print", self._print_report),
                 ("↻ Refresh", self._on_refresh),
             ]:
                 btn = QPushButton(text); btn.setObjectName("bannerBtn")
@@ -396,67 +397,6 @@ class AnalyticsPage(QWidget):
             from PyQt6.QtWidgets import QWidget as _QW
             _QW().setLayout(old)
         self._build()
-
-    def _export_csv(self):
-        path, _ = QFileDialog.getSaveFileName(self, "Export Analytics", "analytics.csv", "CSV (*.csv)")
-        if not path:
-            return
-        data = self._load_data()
-        with open(path, "w", newline="", encoding="utf-8") as f:
-            w = csv.writer(f)
-            w.writerow(["Section", "Metric", "Value"])
-            stats = data.get("stats", {})
-            for k, v in stats.items():
-                w.writerow(["Summary", k, v])
-            for doc in data.get("doctors", []):
-                w.writerow(["Doctor", doc.get("doctor_name", ""),
-                            f"Appts={doc.get('total_appointments',0)} Rev={doc.get('revenue_generated',0)}"])
-            for svc in data.get("services", []):
-                w.writerow(["Service", svc.get("service_name", ""),
-                            f"Count={svc.get('usage_count',0)} Rev={svc.get('total_revenue',0)}"])
-            for m in data.get("monthly_rev", []):
-                w.writerow(["Revenue", m.get("month_label", ""), m.get("total_revenue", 0)])
-            for r in data.get("retention", []):
-                w.writerow(["Retention", r.get("month_label", ""),
-                            f"New={r.get('new_patients',0)} Return={r.get('returning_patients',0)}"])
-            for c in data.get("cancel_trend", []):
-                w.writerow(["Cancellation", c.get("month_label", ""),
-                            f"Rate={c.get('rate',0)}%"])
-        QMessageBox.information(self, "Exported", f"Analytics exported to:\n{path}")
-
-    def _print_report(self):
-        data = self._load_data()
-        stats = data.get("stats", {})
-        lines = [
-            "=" * 52,
-            "         C A R E C R U D   A N A L Y T I C S",
-            "=" * 52,
-            "",
-            "── Summary ─────────────────────────────────────",
-            f"  Period Revenue:     {self._fmt_peso(stats.get('period_revenue', 0))}",
-            f"  Total Appointments: {stats.get('total_appts', 0):,}",
-            f"  Completed:          {stats.get('completed', 0):,}",
-            f"  Cancelled:          {stats.get('cancelled', 0):,}",
-            f"  Active Patients:    {stats.get('total_patients', 0):,}",
-            f"  Today's Appts:      {stats.get('today_appts', 0):,}",
-            "",
-            "── Doctor Performance ──────────────────────────",
-        ]
-        for doc in data.get("doctors", []):
-            lines.append(
-                f"  Dr. {doc.get('doctor_name',''):<20}  "
-                f"Appts: {doc.get('total_appointments',0):<6}  "
-                f"Rev: {self._fmt_peso(float(doc.get('revenue_generated',0)))}"
-            )
-        lines += ["", "── Top Services ────────────────────────────────"]
-        for svc in data.get("services", []):
-            lines.append(
-                f"  {svc.get('service_name',''):<25}  "
-                f"Count: {svc.get('usage_count',0):<6}  "
-                f"Rev: {self._fmt_peso(float(svc.get('total_revenue',0)))}"
-            )
-        lines += ["", "=" * 52]
-        QMessageBox.information(self, "Analytics Report", "\n".join(lines))
 
     # ── Pie card ──────────────────────────────────────────────────
     @staticmethod

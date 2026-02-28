@@ -10,7 +10,8 @@ class AuthMixin:
             return False, "", "", "Please enter your password."
         try:
             user = self.fetch("""
-                SELECT u.user_id, u.full_name, u.password, r.role_name
+                SELECT u.user_id, u.full_name, u.password, r.role_name,
+                       COALESCE(u.must_change_password, 0) AS must_change_password
                 FROM users u INNER JOIN roles r ON u.role_id = r.role_id
                 WHERE u.email = %s
             """, (email,), one=True)
@@ -20,9 +21,15 @@ class AuthMixin:
                 return False, "", "", "Incorrect password."
             self.set_current_user(email, user["role_name"])
             self.log_activity("Login", "User", f"{user['full_name']} logged in")
-            return True, user["role_name"], user["full_name"], "Login successful."
+            # Return must_change_password flag as 5th element
+            return True, user["role_name"], user["full_name"], "Login successful.", bool(user["must_change_password"])
         except Exception as e:
-            return False, "", "", f"Error: {e}"
+            return False, "", "", f"Error: {e}", False
+
+    def clear_must_change_password(self, email):
+        """Clear the must_change_password flag after user changes their password."""
+        return bool(self.exec(
+            "UPDATE users SET must_change_password=0 WHERE email=%s", (email,)))
 
     def get_dark_mode(self, email):
         row = self.fetch("SELECT dark_mode FROM user_preferences WHERE user_email = %s", (email,), one=True)

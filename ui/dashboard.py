@@ -5,9 +5,10 @@ from datetime import datetime
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
     QTableWidget, QTableWidgetItem, QHeaderView, QGraphicsDropShadowEffect,
-    QScrollArea, QPushButton, QSizePolicy,
+    QScrollArea, QPushButton, QDialog, QDateEdit, QTextEdit, QFormLayout,
+    QMessageBox,
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QDate
 from PyQt6.QtGui import QColor, QPainter
 from ui.styles import configure_table
 
@@ -60,16 +61,21 @@ class DashboardPage(QWidget):
 
     navigate_to = pyqtSignal(int)
 
-    def __init__(self, user_name="Admin", backend=None, role="Admin"):
+    def __init__(self, user_name="Admin", backend=None, role="Admin", user_email=""):
         super().__init__()
         self._user_name = user_name
         self._backend = backend
         self._role = role
+        self._user_email = user_email
         self._kpi_labels = {}
         self._build()
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._update_time)
         self._timer.start(1_000)
+        # Auto-refresh data every 10 seconds
+        self._data_timer = QTimer(self)
+        self._data_timer.timeout.connect(self.refresh)
+        self._data_timer.start(10_000)
 
     # ── Layout ────────────────────────────────────────────────────
     def _build(self):
@@ -83,15 +89,16 @@ class DashboardPage(QWidget):
         # Banner
         lay.addWidget(self._build_banner())
 
-        # KPI cards
+        # KPI cards (analytics style)
         kpi_row = QHBoxLayout(); kpi_row.setSpacing(16)
-        for key, icon, title, page_idx in [
-            ("today_appts",     "\U0001F4C5", "Today's Appointments", 2),
-            ("active_patients", "\U0001F465", "Active Patients",      1),
-            ("today_revenue",   "\U0001F4B0", "Today's Revenue",      4),
-            ("active_staff",    "\U0001F3E5", "Active Staff",         5),
-        ]:
-            kpi_row.addWidget(self._make_kpi_card(key, icon, title, page_idx))
+        self._kpi_cards_data = [
+            ("today_appts",     "Today's Appointments", "#388087"),
+            ("active_patients", "Active Patients",      "#5CB85C"),
+            ("today_revenue",   "Today's Revenue",      "#6FB3B8"),
+            ("active_staff",    "Active Staff",         "#C2EDCE"),
+        ]
+        for key, title, color in self._kpi_cards_data:
+            kpi_row.addWidget(self._make_kpi_card(key, title, color))
         lay.addLayout(kpi_row)
 
         # Quick actions
@@ -108,6 +115,47 @@ class DashboardPage(QWidget):
             act_row.addWidget(btn)
         act_row.addStretch()
         lay.addLayout(act_row)
+
+        # ── My Leave section (for non-Admin, non-HR roles) ────────
+        if self._role not in ("Admin", "HR"):
+            leave_card = QFrame(); leave_card.setObjectName("card")
+            leave_shadow = QGraphicsDropShadowEffect()
+            leave_shadow.setBlurRadius(18); leave_shadow.setOffset(0, 3)
+            leave_shadow.setColor(QColor(0, 0, 0, 12))
+            leave_card.setGraphicsEffect(leave_shadow)
+            lv_lay = QVBoxLayout(leave_card)
+            lv_lay.setContentsMargins(20, 18, 20, 14); lv_lay.setSpacing(12)
+
+            lv_hdr = QHBoxLayout()
+            lv_title = QLabel("My Leave Requests")
+            lv_title.setObjectName("cardTitle")
+            lv_hdr.addWidget(lv_title); lv_hdr.addStretch()
+            req_btn = QPushButton("📝  Request Leave")
+            req_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            req_btn.setObjectName("bannerBtn")
+            req_btn.setMinimumHeight(36)
+            req_btn.clicked.connect(self._on_request_leave)
+            lv_hdr.addWidget(req_btn)
+            lv_lay.addLayout(lv_hdr)
+
+            self._my_leave_table = QTableWidget(0, 6)
+            self._my_leave_table.setHorizontalHeaderLabels([
+                "From", "Until", "Reason", "Status", "HR Note", "Submitted"])
+            self._my_leave_table.horizontalHeader().setSectionResizeMode(
+                QHeaderView.ResizeMode.Stretch)
+            self._my_leave_table.verticalHeader().setVisible(False)
+            self._my_leave_table.setEditTriggers(
+                QTableWidget.EditTrigger.NoEditTriggers)
+            self._my_leave_table.setSelectionMode(
+                QTableWidget.SelectionMode.NoSelection)
+            self._my_leave_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            self._my_leave_table.setAlternatingRowColors(True)
+            self._my_leave_table.setMinimumHeight(140)
+            self._my_leave_table.setMaximumHeight(220)
+            self._my_leave_table.verticalHeader().setDefaultSectionSize(44)
+            configure_table(self._my_leave_table)
+            lv_lay.addWidget(self._my_leave_table)
+            lay.addWidget(leave_card)
 
         # Two-column: schedule + chart
         cols = QHBoxLayout(); cols.setSpacing(16)
@@ -147,45 +195,35 @@ class DashboardPage(QWidget):
             "Here's what's happening at the hospital today.", 13, False, 0.7))
         return banner
 
-    # ── KPI card builder ──────────────────────────────────────────
-    def _make_kpi_card(self, key, icon, title, page_idx):
-        card = QPushButton()
-        card.setCursor(Qt.CursorShape.PointingHandCursor)
-        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        card.setMinimumHeight(110)
-        card.setStyleSheet(
-            "QPushButton { background: #FFFFFF; border: 1px solid #BADFE7;"
-            " border-radius: 14px; padding: 16px; text-align: left; }"
-            " QPushButton:hover { border-color: #388087; background: #F6F9FA; }"
-        )
+    # ── KPI card builder (analytics style) ────────────────────────
+    def _make_kpi_card(self, key, title, color):
+        card = QFrame(); card.setObjectName("card"); card.setMinimumHeight(110)
         shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(12); shadow.setOffset(0, 2)
-        shadow.setColor(QColor(0, 0, 0, 8))
+        shadow.setBlurRadius(20); shadow.setOffset(0, 4)
+        shadow.setColor(QColor(0, 0, 0, 18))
         card.setGraphicsEffect(shadow)
 
-        vl = QVBoxLayout(card)
-        vl.setSpacing(4); vl.setContentsMargins(4, 4, 4, 4)
+        vbox = QVBoxLayout(card)
+        vbox.setContentsMargins(18, 14, 18, 14); vbox.setSpacing(4)
 
-        ic = QLabel(icon)
-        ic.setStyleSheet("font-size: 22px; background: transparent;")
-        vl.addWidget(ic)
+        strip = QFrame(); strip.setFixedHeight(3)
+        strip.setStyleSheet(f"background-color: {color}; border-radius: 1px;")
+        vbox.addWidget(strip)
 
         val = QLabel("\u2013")
-        val.setStyleSheet(
-            "font-size: 28px; font-weight: bold; color: #2C3E50; background: transparent;")
-        vl.addWidget(val)
+        val.setObjectName("statValue")
+        vbox.addWidget(val)
         self._kpi_labels[key] = val
 
         lbl = QLabel(title)
-        lbl.setStyleSheet("font-size: 12px; color: #7F8C8D; background: transparent;")
-        vl.addWidget(lbl)
+        lbl.setObjectName("statLabel")
+        vbox.addWidget(lbl)
 
-        sub = QLabel("")
-        sub.setStyleSheet("font-size: 11px; color: #388087; background: transparent;")
-        vl.addWidget(sub)
-        self._kpi_labels[f"{key}_sub"] = sub
+        delta_lbl = QLabel("")
+        delta_lbl.setStyleSheet("font-size: 11px; font-weight: bold;")
+        vbox.addWidget(delta_lbl)
+        self._kpi_labels[f"{key}_sub"] = delta_lbl
 
-        card.clicked.connect(lambda: self.navigate_to.emit(page_idx))
         return card
 
     # ── Schedule preview ──────────────────────────────────────────
@@ -310,35 +348,54 @@ class DashboardPage(QWidget):
     # ── Data refresh ──────────────────────────────────────────────
     def _refresh_kpis(self):
         s = self._backend.get_dashboard_summary() if self._backend else {}
+        cmp = self._backend.get_period_comparison() if self._backend else {}
 
         # Today's appointments
-        self._kpi_labels["today_appts"].setText(str(s.get("today_appts", 0)))
-        parts = []
-        if s.get("today_confirmed"): parts.append(f"{s['today_confirmed']} confirmed")
-        if s.get("today_pending"):   parts.append(f"{s['today_pending']} pending")
-        if s.get("today_completed"): parts.append(f"{s['today_completed']} done")
-        self._kpi_labels["today_appts_sub"].setText(
-            ", ".join(parts) if parts else "No appointments")
+        today_appts = s.get("today_appts", 0)
+        self._kpi_labels["today_appts"].setText(str(today_appts))
+        appts_delta = cmp.get("appts_delta", 0)
+        if appts_delta is not None and appts_delta != 0:
+            arrow = "▲" if appts_delta >= 0 else "▼"
+            clr = "#5CB85C" if appts_delta >= 0 else "#D9534F"
+            self._kpi_labels["today_appts_sub"].setText(
+                f"{arrow} {abs(appts_delta):.1f}% vs last month")
+            self._kpi_labels["today_appts_sub"].setStyleSheet(
+                f"color: {clr}; font-size: 11px; font-weight: bold;")
+        else:
+            self._kpi_labels["today_appts_sub"].setText("")
 
         # Active patients
         pts = s.get("active_patients", 0)
         self._kpi_labels["active_patients"].setText(f"{pts:,}")
-        nw = s.get("new_patients_week", 0)
-        self._kpi_labels["active_patients_sub"].setText(
-            f"+{nw} this week" if nw else "No new this week")
+        pts_delta = cmp.get("patients_delta", 0)
+        if pts_delta is not None and pts_delta != 0:
+            arrow = "▲" if pts_delta >= 0 else "▼"
+            clr = "#5CB85C" if pts_delta >= 0 else "#D9534F"
+            self._kpi_labels["active_patients_sub"].setText(
+                f"{arrow} {abs(pts_delta):.1f}% vs last month")
+            self._kpi_labels["active_patients_sub"].setStyleSheet(
+                f"color: {clr}; font-size: 11px; font-weight: bold;")
+        else:
+            self._kpi_labels["active_patients_sub"].setText("")
 
         # Today's revenue
         rev = s.get("today_revenue", 0)
-        total_rev = s.get("total_revenue", 0)
         self._kpi_labels["today_revenue"].setText(
-            f"\u20B1 {rev/1000:,.1f}K" if rev >= 1000 else f"\u20B1 {rev:,.0f}")
-        self._kpi_labels["today_revenue_sub"].setText(
-            f"\u20B1 {total_rev/1000:,.0f}K all time" if total_rev >= 1000 else
-            f"\u20B1 {total_rev:,.0f} all time")
+            f"\u20B1 {rev:,.0f}")
+        rev_delta = cmp.get("revenue_delta", 0)
+        if rev_delta is not None and rev_delta != 0:
+            arrow = "▲" if rev_delta >= 0 else "▼"
+            clr = "#5CB85C" if rev_delta >= 0 else "#D9534F"
+            self._kpi_labels["today_revenue_sub"].setText(
+                f"{arrow} {abs(rev_delta):.1f}% vs last month")
+            self._kpi_labels["today_revenue_sub"].setStyleSheet(
+                f"color: {clr}; font-size: 11px; font-weight: bold;")
+        else:
+            self._kpi_labels["today_revenue_sub"].setText("")
 
         # Active staff
         self._kpi_labels["active_staff"].setText(str(s.get("active_staff", 0)))
-        self._kpi_labels["active_staff_sub"].setText("active employees")
+        self._kpi_labels["active_staff_sub"].setText("")
 
     def _refresh_schedule(self):
         upcoming = self._backend.get_upcoming_appointments(5) if self._backend else []
@@ -375,3 +432,124 @@ class DashboardPage(QWidget):
         self._refresh_kpis()
         self._refresh_schedule()
         self._refresh_chart()
+        if self._role not in ("Admin", "HR"):
+            self._refresh_my_leave()
+
+    # ── Leave Request (for non-admin/non-HR roles) ────────────────
+    def _get_my_employee_id(self):
+        if not self._backend or not self._user_email:
+            return None
+        return self._backend.get_employee_id_by_email(self._user_email)
+
+    def _refresh_my_leave(self):
+        emp_id = self._get_my_employee_id()
+        if not emp_id or not hasattr(self, "_my_leave_table"):
+            return
+        reqs = self._backend.get_my_leave_requests(emp_id) or []
+        self._my_leave_table.setRowCount(0)
+        for req in reqs:
+            r = self._my_leave_table.rowCount()
+            self._my_leave_table.insertRow(r)
+            self._my_leave_table.setItem(r, 0, QTableWidgetItem(str(req.get("leave_from", ""))))
+            self._my_leave_table.setItem(r, 1, QTableWidgetItem(str(req.get("leave_until", ""))))
+            self._my_leave_table.setItem(r, 2, QTableWidgetItem(req.get("reason", "")))
+            status_item = QTableWidgetItem(req.get("status", ""))
+            clr = {"Pending": "#E8B931", "Approved": "#5CB85C",
+                   "Declined": "#D9534F"}.get(req.get("status", ""), "#7F8C8D")
+            status_item.setForeground(QColor(clr))
+            self._my_leave_table.setItem(r, 3, status_item)
+            self._my_leave_table.setItem(r, 4, QTableWidgetItem(req.get("hr_note", "") or ""))
+            created = str(req.get("created_at", ""))
+            self._my_leave_table.setItem(r, 5, QTableWidgetItem(created))
+
+    def _on_request_leave(self):
+        emp_id = self._get_my_employee_id()
+        if not emp_id:
+            QMessageBox.warning(self, "Error", "Could not find your employee record.")
+            return
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Request Leave")
+        dlg.setMinimumWidth(460)
+        d_lay = QVBoxLayout(dlg)
+        d_lay.setSpacing(14); d_lay.setContentsMargins(28, 24, 28, 24)
+
+        title = QLabel("Submit Leave Request")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #388087;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        d_lay.addWidget(title)
+        d_lay.addSpacing(8)
+
+        form = QFormLayout(); form.setSpacing(12)
+
+        from_date = QDateEdit()
+        from_date.setCalendarPopup(True)
+        from_date.setDate(QDate.currentDate().addDays(1))
+        from_date.setMinimumDate(QDate.currentDate().addDays(1))
+        from_date.setObjectName("formCombo"); from_date.setMinimumHeight(38)
+
+        until_date = QDateEdit()
+        until_date.setCalendarPopup(True)
+        until_date.setDate(QDate.currentDate().addDays(7))
+        until_date.setMinimumDate(QDate.currentDate().addDays(1))
+        until_date.setObjectName("formCombo"); until_date.setMinimumHeight(38)
+
+        reason_edit = QTextEdit()
+        reason_edit.setMaximumHeight(100)
+        reason_edit.setPlaceholderText("Reason for leave request…")
+        reason_edit.setStyleSheet(
+            "QTextEdit { padding: 10px; border: 2px solid #BADFE7;"
+            " border-radius: 10px; font-size: 13px; background: #FFF; }")
+
+        form.addRow("Leave From:", from_date)
+        form.addRow("Leave Until:", until_date)
+        form.addRow("Reason:", reason_edit)
+        d_lay.addLayout(form)
+
+        btn_row = QHBoxLayout(); btn_row.setSpacing(10)
+        btn_row.addStretch()
+        cancel_btn = QPushButton("Cancel"); cancel_btn.setMinimumHeight(36)
+        cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        cancel_btn.setStyleSheet(
+            "QPushButton { background-color: #6c757d; color: #FFF; border: none;"
+            " border-radius: 4px; padding: 8px 24px; font-size: 13px; font-weight: bold; }")
+        cancel_btn.clicked.connect(dlg.reject)
+        submit_btn = QPushButton("Submit Request"); submit_btn.setMinimumHeight(36)
+        submit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        submit_btn.setStyleSheet(
+            "QPushButton { background-color: #388087; color: #FFF; border: none;"
+            " border-radius: 4px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
+            " QPushButton:hover { background-color: #2C6A70; }")
+
+        def _do_submit():
+            reason_text = reason_edit.toPlainText().strip()
+            if not reason_text:
+                QMessageBox.warning(dlg, "Validation", "Please enter a reason for your leave request.")
+                return
+            f_date = from_date.date()
+            u_date = until_date.date()
+            if u_date < f_date:
+                QMessageBox.warning(dlg, "Validation", "'Leave Until' must be on or after 'Leave From'.")
+                return
+            dlg.accept()
+
+        submit_btn.clicked.connect(_do_submit)
+        btn_row.addWidget(cancel_btn); btn_row.addWidget(submit_btn)
+        d_lay.addLayout(btn_row)
+
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        leave_from = from_date.date().toString("yyyy-MM-dd")
+        leave_until = until_date.date().toString("yyyy-MM-dd")
+        reason = reason_edit.toPlainText().strip()
+
+        ok = self._backend.submit_leave_request(emp_id, leave_from, leave_until, reason)
+        if ok is True:
+            QMessageBox.information(self, "Submitted",
+                                    "Your leave request has been submitted.\n"
+                                    "You will be notified when HR makes a decision.")
+            self._refresh_my_leave()
+        else:
+            err = ok if isinstance(ok, str) else ""
+            QMessageBox.warning(self, "Error", f"Failed to submit request.\n{err}")

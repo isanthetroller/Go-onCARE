@@ -3,9 +3,9 @@
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QStackedWidget, QFrame, QSpacerItem, QSizePolicy,
-    QGraphicsDropShadowEffect,
+    QGraphicsDropShadowEffect, QMessageBox,
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QSize
+from PyQt6.QtCore import Qt, pyqtSignal, QSize, QTimer
 from PyQt6.QtGui import QFont, QColor, QAction
 
 from ui.styles import MAIN_STYLE
@@ -14,6 +14,7 @@ from ui.patients      import PatientsPage
 from ui.appointments  import AppointmentsPage
 from ui.clinical      import ClinicalPage
 from ui.employees     import EmployeesPage
+from ui.hr_employees  import HREmployeesPage
 from ui.analytics     import AnalyticsPage
 from ui.settings      import SettingsPage
 from ui.activity_log  import ActivityLogPage
@@ -34,6 +35,7 @@ _ALL_NAV = [
 _ROLE_ACCESS = {
     "Admin":        {"Dashboard", "Patients", "Appointments", "Clinical & POS",
                      "Data Analytics", "Employees", "Activity Log", "Settings"},
+    "HR":           {"Dashboard", "Employees", "Activity Log"},
     "Doctor":       {"Dashboard", "Patients", "Appointments", "Clinical & POS", "Data Analytics"},
     "Cashier":      {"Dashboard", "Patients", "Appointments", "Clinical & POS"},
     "Receptionist": {"Dashboard", "Patients", "Appointments", "Clinical & POS"},
@@ -78,6 +80,15 @@ class MainWindow(QMainWindow):
         root.addWidget(right, 1)
 
         self._select_nav(0)
+
+        # ── Notification check for leave request decisions ────────
+        self._employee_id = self._backend.get_employee_id_by_email(self._user)
+        if self._employee_id and self._role not in ("Admin", "HR"):
+            # Check immediately, then every 15 seconds
+            QTimer.singleShot(1500, self._check_notifications)
+            self._notif_timer = QTimer(self)
+            self._notif_timer.timeout.connect(self._check_notifications)
+            self._notif_timer.start(15_000)
 
     # ── Sidebar ────────────────────────────────────────────────────────
     def _build_sidebar(self) -> QWidget:
@@ -153,20 +164,20 @@ class MainWindow(QMainWindow):
 
         _display_name = self._user_name
         _initials = "".join(w[0].upper() for w in _display_name.split()[:2])
-        avatar = QLabel(_initials)
-        avatar.setObjectName("userAvatar")
-        avatar.setFixedSize(36, 36)
-        avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        user_row.addWidget(avatar)
+        self._avatar_label = QLabel(_initials)
+        self._avatar_label.setObjectName("userAvatar")
+        self._avatar_label.setFixedSize(36, 36)
+        self._avatar_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        user_row.addWidget(self._avatar_label)
 
         user_col = QVBoxLayout()
         user_col.setSpacing(1)
-        user_name = QLabel(_display_name)
-        user_name.setObjectName("userName")
+        self._sidebar_name_label = QLabel(_display_name)
+        self._sidebar_name_label.setObjectName("userName")
         user_email = QLabel(self._user)
         user_email.setObjectName("userEmail")
         user_email.setWordWrap(True)
-        user_col.addWidget(user_name)
+        user_col.addWidget(self._sidebar_name_label)
         user_col.addWidget(user_email)
         role_badge = QLabel(self._role)
         role_badge.setObjectName("roleBadge")
@@ -228,7 +239,8 @@ class MainWindow(QMainWindow):
 
         # 0 – Dashboard
         self._dashboard_page = DashboardPage(
-            user_name=self._user_name, backend=self._backend, role=self._role
+            user_name=self._user_name, backend=self._backend, role=self._role,
+            user_email=self._user
         )
         self._dashboard_page.navigate_to.connect(self._nav_to_page)
         self.stack.addWidget(self._dashboard_page)
@@ -238,7 +250,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self._patients_page)
 
         # 2 – Appointments
-        self._appointments_page = AppointmentsPage(backend=self._backend, role=self._role)
+        self._appointments_page = AppointmentsPage(backend=self._backend, role=self._role, user_email=self._user)
         self.stack.addWidget(self._appointments_page)
 
         self._appointments_page.set_patient_names(
@@ -249,22 +261,82 @@ class MainWindow(QMainWindow):
         )
 
         # 3 – Clinical & POS
-        self.stack.addWidget(ClinicalPage(backend=self._backend, role=self._role))
+        self._clinical_page = ClinicalPage(backend=self._backend, role=self._role)
+        self.stack.addWidget(self._clinical_page)
 
         # 4 – Data Analytics
-        self.stack.addWidget(AnalyticsPage(backend=self._backend, role=self._role, user_email=self._user))
+        self._analytics_page = AnalyticsPage(backend=self._backend, role=self._role, user_email=self._user)
+        self.stack.addWidget(self._analytics_page)
 
-        # 5 – Employees
-        self.stack.addWidget(EmployeesPage(backend=self._backend, role=self._role))
+        # 5 – Employees (HR gets enhanced page)
+        if self._role == "HR":
+            self._employees_page = HREmployeesPage(backend=self._backend, role=self._role)
+        else:
+            self._employees_page = EmployeesPage(backend=self._backend, role=self._role)
+        self.stack.addWidget(self._employees_page)
 
         # 6 – Activity Log
-        self.stack.addWidget(ActivityLogPage(backend=self._backend, role=self._role))
+        self._activity_log_page = ActivityLogPage(backend=self._backend, role=self._role)
+        self.stack.addWidget(self._activity_log_page)
 
         # 7 – Settings
-        self.stack.addWidget(SettingsPage(backend=self._backend, user_email=self._user))
+        self._settings_page = SettingsPage(backend=self._backend, user_email=self._user)
+        self.stack.addWidget(self._settings_page)
+
+        # Page-refresh map: stack index → (page_ref, refresh_method_name)
+        self._page_refresh_map = {
+            0: (self._dashboard_page,   "refresh"),
+            1: (self._patients_page,    "_load_from_db"),
+            2: (self._appointments_page,"_load_from_db"),
+            3: (self._clinical_page,    "refresh"),
+            4: (self._analytics_page,   "_on_refresh"),
+            5: (self._employees_page,   "_load_from_db"),
+            6: (self._activity_log_page,"refresh"),
+            7: (self._settings_page,    "_refresh_counts"),
+        }
 
         lay.addWidget(self.stack)
         return wrapper
+
+    # ── Live user-name refresh ─────────────────────────────────────
+    def _refresh_user_display_name(self):
+        """Re-read the user's full_name from DB and update sidebar + dashboard."""
+        row = self._backend.fetch(
+            "SELECT full_name FROM users WHERE email=%s",
+            (self._user,), one=True)
+        if not row:
+            return
+        new_name = row["full_name"]
+        if new_name == self._user_name:
+            return
+        self._user_name = new_name
+        # Sidebar
+        if hasattr(self, "_sidebar_name_label"):
+            self._sidebar_name_label.setText(new_name)
+        if hasattr(self, "_avatar_label"):
+            initials = "".join(w[0].upper() for w in new_name.split()[:2])
+            self._avatar_label.setText(initials)
+        # Dashboard greeting
+        if hasattr(self, "_dashboard_page"):
+            self._dashboard_page._user_name = new_name
+
+    # ── Notification check ──────────────────────────────────────────
+    def _check_notifications(self):
+        """Check for unread notifications and display them."""
+        if not self._employee_id:
+            return
+        try:
+            notifs = self._backend.get_unread_notifications(self._employee_id) or []
+            if notifs:
+                messages = []
+                for n in notifs:
+                    messages.append(f"• {n.get('message', '')}")
+                self._backend.mark_notifications_read(self._employee_id)
+                QMessageBox.information(
+                    self, "Leave Request Update",
+                    "\n\n".join(messages))
+        except Exception:
+            pass
 
     # ── Nav helpers ────────────────────────────────────────────────────
     def _select_nav(self, index: int):
@@ -276,5 +348,13 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentIndex(stack_idx)
         if hasattr(self, "_top_title"):
             self._top_title.setText(label)
-        if stack_idx == 0 and hasattr(self, "_dashboard_page"):
-            self._dashboard_page.refresh()
+        # Refresh user display name from DB
+        self._refresh_user_display_name()
+        # Refresh the target page on navigation
+        if stack_idx in self._page_refresh_map:
+            page, method = self._page_refresh_map[stack_idx]
+            if hasattr(page, method):
+                try:
+                    getattr(page, method)()
+                except Exception:
+                    pass

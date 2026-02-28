@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QFrame, QScrollArea, QGraphicsDropShadowEffect, QTableWidget,
     QTableWidgetItem, QHeaderView, QLineEdit, QComboBox, QDateEdit,
 )
-from PyQt6.QtCore import Qt, QDate
+from PyQt6.QtCore import Qt, QDate, QTimer
 from PyQt6.QtGui import QColor
 from ui.styles import configure_table
 
@@ -17,6 +17,7 @@ class ActivityLogPage(QWidget):
         super().__init__()
         self._backend = backend
         self._role = role
+        self._last_log_id = 0          # Track latest log_id for smart refresh
         self._build()
 
     def _build(self):
@@ -34,7 +35,10 @@ class ActivityLogPage(QWidget):
         bl = QHBoxLayout(banner); bl.setContentsMargins(32, 20, 32, 20)
         tc = QVBoxLayout(); tc.setSpacing(4)
         t = QLabel("Activity Log"); t.setObjectName("bannerTitle")
-        s = QLabel("Audit trail of all system actions"); s.setObjectName("bannerSubtitle")
+        if self._role == "HR":
+            s = QLabel("Login activity of Doctors and Receptionists"); s.setObjectName("bannerSubtitle")
+        else:
+            s = QLabel("Audit trail of all system actions"); s.setObjectName("bannerSubtitle")
         tc.addWidget(t); tc.addWidget(s)
         bl.addLayout(tc); bl.addStretch()
         ref = QPushButton("\u21BB  Refresh"); ref.setObjectName("bannerBtn"); ref.setMinimumHeight(42)
@@ -55,17 +59,27 @@ class ActivityLogPage(QWidget):
         self._user_filter.setMaximumWidth(180)
         fr.addWidget(self._user_filter)
 
-        fr.addWidget(QLabel("Action:"))
+        # Action & Type filters – hidden for HR (forced to Login only)
+        self._action_label = QLabel("Action:")
+        fr.addWidget(self._action_label)
         self._action_combo = QComboBox(); self._action_combo.setObjectName("formCombo")
         self._action_combo.setMinimumHeight(36)
         self._action_combo.addItems(["All", "Login", "Created", "Edited", "Deleted", "Voided", "Merged"])
         fr.addWidget(self._action_combo)
 
-        fr.addWidget(QLabel("Type:"))
+        self._type_label = QLabel("Type:")
+        fr.addWidget(self._type_label)
         self._type_combo = QComboBox(); self._type_combo.setObjectName("formCombo")
         self._type_combo.setMinimumHeight(36)
         self._type_combo.addItems(["All", "User", "Patient", "Appointment", "Invoice", "Service", "Employee", "Queue"])
         fr.addWidget(self._type_combo)
+
+        # Hide Action & Type filters for HR role
+        if self._role == "HR":
+            self._action_label.setVisible(False)
+            self._action_combo.setVisible(False)
+            self._type_label.setVisible(False)
+            self._type_combo.setVisible(False)
 
         fr.addWidget(QLabel("From:"))
         self._from_date = QDateEdit(); self._from_date.setCalendarPopup(True)
@@ -107,6 +121,17 @@ class ActivityLogPage(QWidget):
         wrapper.addWidget(scroll)
         self.refresh()
 
+    def _check_for_new_entries(self):
+        """Lightweight poll: only reload the table if new log entries exist."""
+        if not self._backend:
+            return
+        try:
+            latest = self._backend.get_latest_log_id()
+            if latest > self._last_log_id:
+                self.refresh()
+        except Exception:
+            pass
+
     def refresh(self):
         if not self._backend:
             return
@@ -115,14 +140,27 @@ class ActivityLogPage(QWidget):
         rtype = self._type_combo.currentText()
         from_d = self._from_date.date().toString("yyyy-MM-dd")
         to_d = self._to_date.date().toString("yyyy-MM-dd")
-        rows = self._backend.get_activity_log(
-            limit=500,
-            user_filter=user if user else "",
-            action_filter=action if action != "All" else "",
-            record_type_filter=rtype if rtype != "All" else "",
-            from_date=from_d,
-            to_date=to_d,
-        )
+
+        # HR role: only show Login activity from Doctor & Receptionist
+        if self._role == "HR":
+            rows = self._backend.get_activity_log(
+                limit=500,
+                user_filter=user if user else "",
+                action_filter="Login",
+                record_type_filter="",
+                from_date=from_d,
+                to_date=to_d,
+                include_roles=["Doctor", "Receptionist"],
+            )
+        else:
+            rows = self._backend.get_activity_log(
+                limit=500,
+                user_filter=user if user else "",
+                action_filter=action if action != "All" else "",
+                record_type_filter=rtype if rtype != "All" else "",
+                from_date=from_d,
+                to_date=to_d,
+            )
         self._table.setRowCount(len(rows))
         action_colors = {
             "Login": "#388087", "Created": "#5CB85C", "Edited": "#E8B931",
@@ -146,3 +184,8 @@ class ActivityLogPage(QWidget):
                     clr = action_colors.get(val, "#2C3E50")
                     item.setForeground(QColor(clr))
                 self._table.setItem(r, c, item)
+        # Update the last-seen log_id so the timer only refreshes on new entries
+        if rows:
+            max_id = max(r.get("log_id", 0) for r in rows)
+            if max_id > self._last_log_id:
+                self._last_log_id = max_id

@@ -1,6 +1,5 @@
-"""Appointment Scheduling page – V2 with conflict detection, recurring, reschedule, export."""
+"""Appointment Scheduling page – V2 with conflict detection, recurring, reschedule."""
 
-import csv
 from datetime import date, datetime, timedelta
 
 from PyQt6.QtWidgets import (
@@ -8,9 +7,9 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QFrame, QScrollArea,
     QComboBox, QDialog, QFormLayout, QDialogButtonBox, QMessageBox,
     QTimeEdit, QDateEdit, QTextEdit, QGraphicsDropShadowEffect,
-    QSpinBox, QCheckBox, QFileDialog,
+    QSpinBox, QCheckBox,
 )
-from PyQt6.QtCore import Qt, QDate, QTime
+from PyQt6.QtCore import Qt, QDate, QTime, QTimer
 from PyQt6.QtGui import QColor, QFont
 from ui.styles import configure_table, make_table_btn, style_dialog_btns
 
@@ -49,13 +48,16 @@ def _relative_label(iso: str) -> str:
 class AppointmentDialog(QDialog):
 
     def __init__(self, parent=None, *, title="New Appointment", data=None,
-                 patient_names=None, doctors=None, services=None, backend=None):
+                 patient_names=None, doctors=None, services=None, backend=None,
+                 user_email: str = "", user_role: str = ""):
         super().__init__(parent)
         self.setWindowTitle(title)
-        self.setMinimumWidth(520)
+        self.setMinimumWidth(600)
         self._doctors = doctors or []
         self._services = services or []
         self._backend = backend
+        self._user_email = user_email
+        self._user_role = user_role
 
         form = QFormLayout(self)
         form.setSpacing(14); form.setContentsMargins(32,32,32,32)
@@ -69,12 +71,31 @@ class AppointmentDialog(QDialog):
             self.patient_combo.lineEdit().setPlaceholderText("Select or type patient name")
 
         self.doctor_combo = QComboBox(); self.doctor_combo.setObjectName("formCombo"); self.doctor_combo.setMinimumHeight(40)
-        for doc in self._doctors:
+        preselect_idx = 0
+        # Look up the logged-in doctor's employee_id once (not inside the loop)
+        _my_emp_id = None
+        if self._user_role == "Doctor" and self._user_email and not data and self._backend:
+            emp = self._backend.fetch(
+                "SELECT employee_id FROM employees WHERE email=%s",
+                (self._user_email,), one=True)
+            if emp:
+                _my_emp_id = emp["employee_id"]
+        for i, doc in enumerate(self._doctors):
             self.doctor_combo.addItem(doc["doctor_name"], doc["employee_id"])
+            if _my_emp_id is not None and doc["employee_id"] == _my_emp_id:
+                preselect_idx = i
+        if not data:
+            self.doctor_combo.setCurrentIndex(preselect_idx)
 
         self.date_edit = QDateEdit(); self.date_edit.setCalendarPopup(True)
         self.date_edit.setDate(QDate.currentDate()); self.date_edit.setObjectName("formCombo")
         self.date_edit.setDisplayFormat("dddd, MMMM d, yyyy"); self.date_edit.setMinimumHeight(40)
+        # Restrict: no past dates, max = end of next month
+        self.date_edit.setMinimumDate(QDate.currentDate())
+        _today = QDate.currentDate()
+        _next_month = _today.addMonths(1)
+        _max_date = QDate(_next_month.year(), _next_month.month(), _next_month.daysInMonth())
+        self.date_edit.setMaximumDate(_max_date)
 
         self.time_edit = QTimeEdit(); self.time_edit.setTime(QTime(9,0))
         self.time_edit.setObjectName("formCombo"); self.time_edit.setDisplayFormat("hh:mm AP")
@@ -138,7 +159,12 @@ class AppointmentDialog(QDialog):
             elif self.patient_combo.isEditable(): self.patient_combo.setEditText(data.get("patient",""))
             idx = self.doctor_combo.findText(data.get("doctor",""))
             if idx >= 0: self.doctor_combo.setCurrentIndex(idx)
-            if data.get("date"): self.date_edit.setDate(QDate.fromString(data["date"],"yyyy-MM-dd"))
+            if data.get("date"):
+                orig_date = QDate.fromString(data["date"], "yyyy-MM-dd")
+                # Allow showing past dates for existing appointments
+                if orig_date < QDate.currentDate():
+                    self.date_edit.setMinimumDate(orig_date)
+                self.date_edit.setDate(orig_date)
             if data.get("time"): self.time_edit.setTime(QTime.fromString(data["time"],"HH:mm:ss"))
             idx = self.purpose_combo.findText(data.get("purpose",""))
             if idx >= 0: self.purpose_combo.setCurrentIndex(idx)
@@ -150,6 +176,22 @@ class AppointmentDialog(QDialog):
             self.reminder_check.setChecked(bool(data.get("reminder_sent", 0)))
 
     def _validate_and_accept(self):
+        # Date range validation
+        selected_date = self.date_edit.date()
+        today = QDate.currentDate()
+        if selected_date < today:
+            QMessageBox.warning(self, "Invalid Date",
+                "Cannot schedule an appointment in the past.\n"
+                "Please select today or a future date.")
+            return
+        next_month = today.addMonths(1)
+        max_date = QDate(next_month.year(), next_month.month(), next_month.daysInMonth())
+        if selected_date > max_date:
+            QMessageBox.warning(self, "Invalid Date",
+                f"Appointments can only be scheduled within this month "
+                f"or next month (up to {max_date.toString('MMMM d, yyyy')}).\n"
+                f"Please select an earlier date.")
+            return
         # Conflict check
         if self._backend:
             doc_id = self.doctor_combo.currentData()
@@ -196,16 +238,21 @@ class AppointmentsPage(QWidget):
     _TAB_ACTIVE   = _TAB_STYLE.format(bg="#388087", fg="#FFFFFF", hv="#2C6A70")
     _TAB_INACTIVE = _TAB_STYLE.format(bg="#FFFFFF", fg="#2C3E50", hv="#BADFE7")
 
-    def __init__(self, backend=None, role: str = "Admin"):
+    def __init__(self, backend=None, role: str = "Admin", user_email: str = ""):
         super().__init__()
         self._backend = backend
         self._role = role
+        self._user_email = user_email
         self._patient_names: list[str] = []
         self._active_tab = "Today"
         self._tab_buttons: dict[str, QPushButton] = {}
         self._all_appointments: list[dict] = []
         self._appointment_ids: list[int] = []
         self._build()
+        # Auto-refresh data every 10 seconds
+        self._refresh_timer = QTimer(self)
+        self._refresh_timer.timeout.connect(self._load_from_db)
+        self._refresh_timer.start(10_000)
 
     def set_patient_names(self, names: list[str]):
         self._patient_names = names
@@ -284,12 +331,6 @@ class AppointmentsPage(QWidget):
         self.status_filter.setMinimumHeight(42); self.status_filter.setMinimumWidth(140)
         self.status_filter.currentTextChanged.connect(self._apply_filters); bar.addWidget(self.status_filter)
 
-        export_btn = QPushButton("Export CSV"); export_btn.setObjectName("actionBtn")
-        export_btn.setMinimumHeight(42); export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        export_btn.clicked.connect(self._export_csv); bar.addWidget(export_btn)
-        print_btn = QPushButton("Print"); print_btn.setObjectName("actionBtn")
-        print_btn.setMinimumHeight(42); print_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        print_btn.clicked.connect(self._print_table); bar.addWidget(print_btn)
         lay.addLayout(bar)
 
         # Table – added Notes column
@@ -299,7 +340,8 @@ class AppointmentsPage(QWidget):
         hdr = self.table.horizontalHeader(); hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive); self.table.setColumnWidth(0, 260)
         if self._role != "Cashier":
-            hdr.setSectionResizeMode(len(cols)-1, QHeaderView.ResizeMode.Fixed); self.table.setColumnWidth(len(cols)-1, 120)
+            hdr.setSectionResizeMode(len(cols)-1, QHeaderView.ResizeMode.Fixed); self.table.setColumnWidth(len(cols)-1, 80)
+            hdr.setStretchLastSection(False)
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
@@ -364,8 +406,8 @@ class AppointmentsPage(QWidget):
                 self.table.setItem(r, c, item)
             if self._role != "Cashier":
                 act_w = QWidget(); act_lay = QHBoxLayout(act_w)
-                act_lay.setContentsMargins(4, 4, 4, 4); act_lay.setSpacing(4)
-                edit_btn = make_table_btn("Edit")
+                act_lay.setContentsMargins(0,0,0,0); act_lay.setSpacing(6)
+                edit_btn = make_table_btn("Edit"); edit_btn.setFixedWidth(52)
                 edit_btn.clicked.connect(lambda checked, a=appt: self._on_edit(a))
                 act_lay.addWidget(edit_btn)
                 self.table.setCellWidget(r, col_count - 1, act_w)
@@ -395,7 +437,8 @@ class AppointmentsPage(QWidget):
         services = self._backend.get_services_list() if self._backend else []
         dlg = AppointmentDialog(self, title="New Appointment",
                                 patient_names=self._patient_names,
-                                doctors=doctors, services=services, backend=self._backend)
+                                doctors=doctors, services=services, backend=self._backend,
+                                user_email=self._user_email, user_role=self._role)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             d = dlg.get_data()
             if not d["patient_name"].strip():
@@ -439,45 +482,3 @@ class AppointmentsPage(QWidget):
                     QMessageBox.warning(self, "Error", "Failed to update appointment."); return
             self._load_from_db(); self._refresh_table()
             QMessageBox.information(self, "Success", f"Appointment for '{d['patient_name']}' updated.")
-
-    # ── Export / Print ─────────────────────────────────────────────
-    def _export_csv(self):
-        path, _ = QFileDialog.getSaveFileName(self, "Export Appointments", "appointments.csv", "CSV Files (*.csv)")
-        if not path: return
-        try:
-            with open(path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                headers = [self.table.horizontalHeaderItem(c).text()
-                           for c in range(self.table.columnCount()-1)]
-                writer.writerow(headers)
-                for r in range(self.table.rowCount()):
-                    if self.table.isRowHidden(r): continue
-                    row = [self.table.item(r,c).text() if self.table.item(r,c) else ""
-                           for c in range(self.table.columnCount()-1)]
-                    writer.writerow(row)
-            QMessageBox.information(self, "Exported", f"Saved to {path}")
-        except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
-
-    def _print_table(self):
-        try:
-            from PyQt6.QtPrintSupport import QPrintDialog, QPrinter
-            from PyQt6.QtGui import QTextDocument
-            printer = QPrinter()
-            dlg = QPrintDialog(printer, self)
-            if dlg.exec() == QDialog.DialogCode.Accepted:
-                doc = QTextDocument()
-                html = "<h2>Appointments</h2><table border='1' cellpadding='4' cellspacing='0'><tr>"
-                for c in range(self.table.columnCount()-1):
-                    html += f"<th>{self.table.horizontalHeaderItem(c).text()}</th>"
-                html += "</tr>"
-                for r in range(self.table.rowCount()):
-                    if self.table.isRowHidden(r): continue
-                    html += "<tr>"
-                    for c in range(self.table.columnCount()-1):
-                        html += f"<td>{self.table.item(r,c).text() if self.table.item(r,c) else ''}</td>"
-                    html += "</tr>"
-                html += "</table>"
-                doc.setHtml(html); doc.print(printer)
-        except ImportError:
-            QMessageBox.warning(self, "Print", "Print support not available.")

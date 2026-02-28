@@ -48,12 +48,13 @@ CREATE TABLE standard_conditions (
 
 -- User accounts (for login)
 CREATE TABLE users (
-    user_id    INT AUTO_INCREMENT PRIMARY KEY,
-    email      VARCHAR(150) NOT NULL UNIQUE,
-    password   VARCHAR(255) NOT NULL,
-    full_name  VARCHAR(100) NOT NULL,
-    role_id    INT          NOT NULL,
-    created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    user_id              INT AUTO_INCREMENT PRIMARY KEY,
+    email                VARCHAR(150) NOT NULL UNIQUE,
+    password             VARCHAR(255) NOT NULL,
+    full_name            VARCHAR(100) NOT NULL,
+    role_id              INT          NOT NULL,
+    must_change_password TINYINT(1)   NOT NULL DEFAULT 0,
+    created_at           DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (role_id) REFERENCES roles(role_id)
 );
@@ -80,8 +81,10 @@ CREATE TABLE employees (
     hire_date       DATE         NOT NULL,
     status          ENUM('Active', 'On Leave', 'Inactive') NOT NULL DEFAULT 'Active',
     notes           TEXT,
-    leave_from      DATE DEFAULT NULL,
-    leave_until     DATE DEFAULT NULL,
+    leave_from         DATE DEFAULT NULL,
+    leave_until        DATE DEFAULT NULL,
+    salary             DECIMAL(10, 2) DEFAULT NULL,
+    emergency_contact  VARCHAR(200) DEFAULT '',
 
     FOREIGN KEY (role_id)       REFERENCES roles(role_id),
     FOREIGN KEY (department_id) REFERENCES departments(department_id)
@@ -198,6 +201,32 @@ CREATE TABLE activity_log (
     created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Leave requests (V3: request-based leave management)
+CREATE TABLE leave_requests (
+    request_id     INT AUTO_INCREMENT PRIMARY KEY,
+    employee_id    INT NOT NULL,
+    leave_from     DATE NOT NULL,
+    leave_until    DATE NOT NULL,
+    reason         TEXT NOT NULL,
+    status         ENUM('Pending','Approved','Declined') NOT NULL DEFAULT 'Pending',
+    hr_note        TEXT DEFAULT NULL,
+    hr_decided_by  INT DEFAULT NULL,
+    decided_at     DATETIME DEFAULT NULL,
+    created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (employee_id) REFERENCES employees(employee_id),
+    FOREIGN KEY (hr_decided_by) REFERENCES employees(employee_id)
+);
+
+-- Notifications (V3: in-app notifications for employees)
+CREATE TABLE notifications (
+    notification_id INT AUTO_INCREMENT PRIMARY KEY,
+    employee_id     INT NOT NULL,
+    message         TEXT NOT NULL,
+    is_read         TINYINT(1) NOT NULL DEFAULT 0,
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (employee_id) REFERENCES employees(employee_id)
+);
+
 
 -- ────────────────────────────────────────────────────────────
 -- INDEXES FOR PERFORMANCE
@@ -216,6 +245,10 @@ CREATE INDEX idx_employees_dept        ON employees(department_id);
 CREATE INDEX idx_employees_status      ON employees(status);
 CREATE INDEX idx_activity_log_date     ON activity_log(created_at);
 CREATE INDEX idx_activity_log_user     ON activity_log(user_email);
+CREATE INDEX idx_leave_requests_employee ON leave_requests(employee_id);
+CREATE INDEX idx_leave_requests_status   ON leave_requests(status);
+CREATE INDEX idx_notifications_employee  ON notifications(employee_id);
+CREATE INDEX idx_notifications_read      ON notifications(is_read);
 
 
 -- ============================================================
@@ -230,7 +263,8 @@ INSERT INTO departments (department_name) VALUES
     ('Laboratory'),
     ('Front Desk'),
     ('Management'),
-    ('Pharmacy');
+    ('Pharmacy'),
+    ('Human Resources');
 
 INSERT INTO roles (role_name) VALUES
     ('Doctor'),
@@ -238,7 +272,8 @@ INSERT INTO roles (role_name) VALUES
     ('Receptionist'),
     ('Lab Tech'),
     ('Admin'),
-    ('Pharmacist');
+    ('Pharmacist'),
+    ('HR');
 
 INSERT INTO services (service_name, price, category, is_active) VALUES
     ('General Checkup',          800.00,  'Consultation', 1),
@@ -275,18 +310,20 @@ INSERT INTO users (email, password, full_name, role_id) VALUES
     ('admin@carecrud.com',         'admin123',     'Carlo Santos',  5),
     ('ana.reyes@carecrud.com',     'doctor123',    'Ana Reyes',     1),
     ('sofia.reyes@carecrud.com',   'cashier123',   'Sofia Reyes',   2),
-    ('james.cruz@carecrud.com',    'reception123', 'James Cruz',    3);
+    ('james.cruz@carecrud.com',    'reception123', 'James Cruz',    3),
+    ('hr@carecrud.com',            'hr123',        'Elena Ramos',   7);
 
 -- Default employees
-INSERT INTO employees (first_name, last_name, role_id, department_id, employment_type, phone, email, hire_date, status) VALUES
-    ('Ana',    'Reyes',   1, 2, 'Full-time', '09171234567', 'ana.reyes@carecrud.com',    '2020-06-15', 'Active'),
-    ('Mark',   'Tan',     1, 1, 'Full-time', '09179876543', 'mark.tan@carecrud.com',     '2019-03-10', 'Active'),
-    ('Lisa',   'Lim',     1, 3, 'Part-time', '09171112233', 'lisa.lim@carecrud.com',     '2021-01-20', 'Active'),
-    ('Pedro',  'Santos',  1, 4, 'Full-time', '09172223344', 'pedro.santos@carecrud.com', '2018-09-01', 'Inactive'),
-    ('Sofia',  'Reyes',   2, 2, 'Full-time', '09174445566', 'sofia.reyes@carecrud.com',  '2022-04-12', 'Active'),
-    ('James',  'Cruz',    3, 6, 'Full-time', '09177778899', 'james.cruz@carecrud.com',   '2021-07-01', 'Active'),
-    ('Maria',  'Garcia',  4, 5, 'Full-time', '09173334455', 'maria.garcia@carecrud.com', '2020-11-15', 'On Leave'),
-    ('Carlo',  'Santos',  5, 7, 'Full-time', '09176667788', 'carlo.santos@carecrud.com', '2019-01-05', 'Active');
+INSERT INTO employees (first_name, last_name, role_id, department_id, employment_type, phone, email, hire_date, status, salary) VALUES
+    ('Ana',    'Reyes',   1, 2, 'Full-time', '09171234567', 'ana.reyes@carecrud.com',    '2020-06-15', 'Active',   55000.00),
+    ('Mark',   'Tan',     1, 1, 'Full-time', '09179876543', 'mark.tan@carecrud.com',     '2019-03-10', 'Active',   60000.00),
+    ('Lisa',   'Lim',     1, 3, 'Part-time', '09171112233', 'lisa.lim@carecrud.com',     '2021-01-20', 'Active',   35000.00),
+    ('Pedro',  'Santos',  1, 4, 'Full-time', '09172223344', 'pedro.santos@carecrud.com', '2018-09-01', 'Inactive', 50000.00),
+    ('Sofia',  'Reyes',   2, 2, 'Full-time', '09174445566', 'sofia.reyes@carecrud.com',  '2022-04-12', 'Active',   28000.00),
+    ('James',  'Cruz',    3, 6, 'Full-time', '09177778899', 'james.cruz@carecrud.com',   '2021-07-01', 'Active',   25000.00),
+    ('Maria',  'Garcia',  4, 5, 'Full-time', '09173334455', 'maria.garcia@carecrud.com', '2020-11-15', 'On Leave', 32000.00),
+    ('Carlo',  'Santos',  5, 7, 'Full-time', '09176667788', 'carlo.santos@carecrud.com', '2019-01-05', 'Active',   70000.00),
+    ('Elena',  'Ramos',   7, 9, 'Full-time', '09178889900', 'hr@carecrud.com',           '2020-01-15', 'Active',   45000.00);
 
 -- Default patients (with V2 fields)
 INSERT INTO patients (first_name, last_name, sex, date_of_birth, phone, email, emergency_contact, blood_type, status) VALUES
@@ -376,7 +413,9 @@ SELECT
     e.status,
     e.notes,
     e.leave_from,
-    e.leave_until
+    e.leave_until,
+    e.salary,
+    e.emergency_contact
 FROM employees e
 INNER JOIN roles r       ON e.role_id       = r.role_id
 INNER JOIN departments d ON e.department_id = d.department_id;

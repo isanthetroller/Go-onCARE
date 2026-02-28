@@ -37,7 +37,8 @@ INSERT INTO departments (department_id, department_name) VALUES
     (5, 'Laboratory'),
     (6, 'Front Desk'),
     (7, 'Management'),
-    (8, 'Pharmacy');
+    (8, 'Pharmacy'),
+    (9, 'Human Resources');
 
 INSERT INTO roles (role_id, role_name) VALUES
     (1, 'Doctor'),
@@ -45,7 +46,8 @@ INSERT INTO roles (role_id, role_name) VALUES
     (3, 'Receptionist'),
     (4, 'Lab Tech'),
     (5, 'Admin'),
-    (6, 'Pharmacist');
+    (6, 'Pharmacist'),
+    (7, 'HR');
 
 INSERT INTO services (service_id, service_name, price, category, is_active) VALUES
     (1,  'General Checkup',          800.00,  'Consultation', 1),
@@ -88,7 +90,8 @@ INSERT INTO users (email, password, full_name, role_id) VALUES
     ('mark.tan@carecrud.com',      'doctor123',    'Mark Tan',      1),
     ('lisa.lim@carecrud.com',      'doctor123',    'Lisa Lim',      1),
     ('sofia.reyes@carecrud.com',   'cashier123',   'Sofia Reyes',   2),
-    ('james.cruz@carecrud.com',    'reception123', 'James Cruz',    3);
+    ('james.cruz@carecrud.com',    'reception123', 'James Cruz',    3),
+    ('hr@carecrud.com',            'hr123',        'Elena Ramos',   7);
 
 
 -- ────────────────────────────────────────────────────────────
@@ -103,15 +106,16 @@ INSERT INTO user_preferences (user_email, dark_mode) VALUES
 -- EMPLOYEES (V2: with leave_from / leave_until)
 -- ────────────────────────────────────────────────────────────
 
-INSERT INTO employees (employee_id, first_name, last_name, role_id, department_id, employment_type, phone, email, hire_date, status, leave_from, leave_until) VALUES
-    (1, 'Ana',    'Reyes',   1, 2, 'Full-time', '09171234567', 'ana.reyes@carecrud.com',    '2020-06-15', 'Active',   NULL,         NULL),
-    (2, 'Mark',   'Tan',     1, 1, 'Full-time', '09179876543', 'mark.tan@carecrud.com',     '2019-03-10', 'Active',   NULL,         NULL),
-    (3, 'Lisa',   'Lim',     1, 3, 'Part-time', '09171112233', 'lisa.lim@carecrud.com',     '2021-01-20', 'Active',   NULL,         NULL),
-    (4, 'Pedro',  'Santos',  1, 4, 'Full-time', '09172223344', 'pedro.santos@carecrud.com', '2018-09-01', 'Inactive', NULL,         NULL),
-    (5, 'Sofia',  'Reyes',   2, 2, 'Full-time', '09174445566', 'sofia.reyes@carecrud.com',  '2022-04-12', 'Active',   NULL,         NULL),
-    (6, 'James',  'Cruz',    3, 6, 'Full-time', '09177778899', 'james.cruz@carecrud.com',   '2021-07-01', 'Active',   NULL,         NULL),
-    (7, 'Maria',  'Garcia',  4, 5, 'Full-time', '09173334455', 'maria.garcia@carecrud.com', '2020-11-15', 'On Leave', '2026-02-20', '2026-03-05'),
-    (8, 'Carlo',  'Santos',  5, 7, 'Full-time', '09176667788', 'carlo.santos@carecrud.com', '2019-01-05', 'Active',   NULL,         NULL);
+INSERT INTO employees (employee_id, first_name, last_name, role_id, department_id, employment_type, phone, email, hire_date, status, leave_from, leave_until, salary) VALUES
+    (1, 'Ana',    'Reyes',   1, 2, 'Full-time', '09171234567', 'ana.reyes@carecrud.com',    '2020-06-15', 'Active',   NULL,         NULL,         55000.00),
+    (2, 'Mark',   'Tan',     1, 1, 'Full-time', '09179876543', 'mark.tan@carecrud.com',     '2019-03-10', 'Active',   NULL,         NULL,         60000.00),
+    (3, 'Lisa',   'Lim',     1, 3, 'Part-time', '09171112233', 'lisa.lim@carecrud.com',     '2021-01-20', 'Active',   NULL,         NULL,         35000.00),
+    (4, 'Pedro',  'Santos',  1, 4, 'Full-time', '09172223344', 'pedro.santos@carecrud.com', '2018-09-01', 'Inactive', NULL,         NULL,         50000.00),
+    (5, 'Sofia',  'Reyes',   2, 2, 'Full-time', '09174445566', 'sofia.reyes@carecrud.com',  '2022-04-12', 'Active',   NULL,         NULL,         28000.00),
+    (6, 'James',  'Cruz',    3, 6, 'Full-time', '09177778899', 'james.cruz@carecrud.com',   '2021-07-01', 'Active',   NULL,         NULL,         25000.00),
+    (7, 'Maria',  'Garcia',  4, 5, 'Full-time', '09173334455', 'maria.garcia@carecrud.com', '2020-11-15', 'On Leave', '2026-02-20', '2026-03-05', 32000.00),
+    (8, 'Carlo',  'Santos',  5, 7, 'Full-time', '09176667788', 'carlo.santos@carecrud.com', '2019-01-05', 'Active',   NULL,         NULL,         70000.00),
+    (9, 'Elena',  'Ramos',   7, 9, 'Full-time', '09178889900', 'hr@carecrud.com',           '2020-01-15', 'Active',   NULL,         NULL,         45000.00);
 
 
 -- ────────────────────────────────────────────────────────────

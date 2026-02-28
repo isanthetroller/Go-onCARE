@@ -52,7 +52,33 @@ class AppointmentMixin:
                          (first, last), one=True)
         return row["patient_id"] if row else None
 
+    def _validate_appointment_date(self, date_str):
+        """Return (ok, error_msg). Date must be today or later, within current or next month."""
+        from datetime import date, datetime
+        import calendar
+        try:
+            appt_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            return False, "Invalid date format."
+        today = date.today()
+        if appt_date < today:
+            return False, "Cannot schedule an appointment in the past."
+        # Max = last day of next month
+        if today.month == 12:
+            next_y, next_m = today.year + 1, 1
+        else:
+            next_y, next_m = today.year, today.month + 1
+        max_day = calendar.monthrange(next_y, next_m)[1]
+        max_date = date(next_y, next_m, max_day)
+        if appt_date > max_date:
+            return False, f"Appointments can only be scheduled up to {max_date.strftime('%B %d, %Y')}."
+        return True, ""
+
     def add_appointment(self, data):
+        # Validate date range
+        ok, err = self._validate_appointment_date(data["date"])
+        if not ok:
+            return False
         pid = self._lookup_patient_id(data["patient_name"])
         if not pid:
             return False
@@ -71,23 +97,48 @@ class AppointmentMixin:
                       data.get("recurring_parent_id")))
                 appt_id = cur.lastrowid
                 conn.commit()
-            self.log_activity("Created", "Appointment", f"Appt #{appt_id} for {data['patient_name']}")
+            doctor_name = data.get('doctor', '')
+            if not doctor_name and data.get('doctor_id'):
+                doc_row = self.fetch(
+                    "SELECT CONCAT(first_name,' ',last_name) AS n FROM employees WHERE employee_id=%s",
+                    (data['doctor_id'],), one=True)
+                doctor_name = doc_row['n'] if doc_row else ''
+            self.log_activity("Created", "Appointment",
+                              f"Appt #{appt_id} for {data['patient_name']} with Dr. {doctor_name}")
             return True
         except Exception:
             return False
 
     def add_recurring_appointments(self, data, frequency, count):
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, date as date_cls
+        import calendar
         created, base = 0, datetime.strptime(data["date"], "%Y-%m-%d")
         deltas = {"Daily": timedelta(days=1), "Weekly": timedelta(weeks=1), "Monthly": timedelta(days=30)}
         delta = deltas.get(frequency, timedelta(weeks=1))
+        # Calculate max allowed date (end of next month)
+        today = date_cls.today()
+        if today.month == 12:
+            next_y, next_m = today.year + 1, 1
+        else:
+            next_y, next_m = today.year, today.month + 1
+        max_day = calendar.monthrange(next_y, next_m)[1]
+        max_date = date_cls(next_y, next_m, max_day)
         for i in range(count):
-            appt = dict(data, date=(base + delta * i).strftime("%Y-%m-%d"))
+            appt_date = (base + delta * i).date()
+            if appt_date < today:
+                continue  # skip past dates
+            if appt_date > max_date:
+                break  # stop once we exceed the allowed range
+            appt = dict(data, date=appt_date.strftime("%Y-%m-%d"))
             if self.add_appointment(appt):
                 created += 1
         return created
 
     def update_appointment(self, appointment_id, data):
+        # Validate date range
+        ok, err = self._validate_appointment_date(data["date"])
+        if not ok:
+            return False
         pid = self._lookup_patient_id(data["patient_name"])
         if not pid:
             return False
@@ -103,7 +154,14 @@ class AppointmentMixin:
               data.get("reschedule_reason", ""), data.get("reminder_sent", 0),
               appointment_id))
         if ok:
-            self.log_activity("Edited", "Appointment", f"Appt #{appointment_id}")
+            doctor_name = data.get('doctor', '')
+            if not doctor_name and data.get('doctor_id'):
+                doc_row = self.fetch(
+                    "SELECT CONCAT(first_name,' ',last_name) AS n FROM employees WHERE employee_id=%s",
+                    (data['doctor_id'],), one=True)
+                doctor_name = doc_row['n'] if doc_row else ''
+            self.log_activity("Edited", "Appointment",
+                              f"Appt #{appointment_id} for {data.get('patient_name','')} with Dr. {doctor_name}")
         return ok
 
     def update_reminder_sent(self, appointment_id, sent):

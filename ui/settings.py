@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QDateEdit, QComboBox,
     QLineEdit, QCheckBox,
 )
-from PyQt6.QtCore import Qt, QDate
+from PyQt6.QtCore import Qt, QDate, QTimer
 from PyQt6.QtGui import QColor
 from ui.styles import configure_table
 
@@ -19,6 +19,10 @@ class SettingsPage(QWidget):
         self._backend = backend
         self._user_email = user_email
         self._build()
+        # Auto-refresh data every 10 seconds
+        self._refresh_timer = QTimer(self)
+        self._refresh_timer.timeout.connect(self._refresh_counts)
+        self._refresh_timer.start(10_000)
 
     # ── UI ─────────────────────────────────────────────────────────────
     def _build(self):

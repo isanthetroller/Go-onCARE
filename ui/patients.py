@@ -1,6 +1,5 @@
-"""Patient Record Management page – V2 with full profile, merge, export, conditions picker."""
+"""Patient Record Management page – V2 with full profile, merge, conditions picker."""
 
-import csv, io
 from datetime import date
 
 from PyQt6.QtWidgets import (
@@ -8,9 +7,9 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QFrame, QScrollArea,
     QFormLayout, QComboBox, QTextEdit, QDialog, QDialogButtonBox,
     QGraphicsDropShadowEffect, QMessageBox, QDateEdit, QTabWidget,
-    QFileDialog, QCompleter, QListWidget, QListWidgetItem, QCheckBox,
+    QCompleter, QListWidget, QListWidgetItem, QCheckBox,
 )
-from PyQt6.QtCore import Qt, QDate, pyqtSignal
+from PyQt6.QtCore import Qt, QDate, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor
 from ui.styles import configure_table, make_table_btn, make_table_btn_danger, style_dialog_btns
 
@@ -22,7 +21,7 @@ class PatientDialog(QDialog):
     def __init__(self, parent=None, *, title="Add New Patient", data=None, backend=None):
         super().__init__(parent)
         self.setWindowTitle(title)
-        self.setMinimumWidth(520)
+        self.setMinimumWidth(600)
         self._backend = backend
 
         form = QFormLayout(self)
@@ -34,7 +33,10 @@ class PatientDialog(QDialog):
         self.sex_combo.addItems(["Male", "Female"])
         self.dob_edit = QDateEdit(); self.dob_edit.setCalendarPopup(True)
         self.dob_edit.setDate(QDate.currentDate()); self.dob_edit.setObjectName("formCombo")
-        self.phone_edit = self._input("Phone number")
+        self.dob_edit.setMaximumDate(QDate.currentDate())  # Birthday cannot be in the future
+        self.dob_edit.setDisplayFormat("MMMM d, yyyy")
+        self.phone_edit = self._input("+639XXXXXXXXX")
+        self.phone_edit.setMaxLength(13)
         self.email_edit = self._input("Email")
         self.emergency_edit = self._input("Emergency contact (name / phone)")
         self.blood_combo = QComboBox(); self.blood_combo.setObjectName("formCombo")
@@ -121,8 +123,18 @@ class PatientDialog(QDialog):
     @staticmethod
     def _input(placeholder: str) -> QLineEdit:
         le = QLineEdit(); le.setPlaceholderText(placeholder)
-        le.setObjectName("formInput"); le.setMinimumHeight(38)
+        le.setObjectName("formInput"); le.setMinimumHeight(38); le.setMinimumWidth(320)
         return le
+
+    def accept(self):
+        import re
+        phone = self.phone_edit.text().strip()
+        if phone and not re.match(r'^\+63\d{10}$', phone):
+            QMessageBox.warning(self, "Validation",
+                                "Phone must be in Philippine format: +63 followed by 10 digits\n"
+                                "Example: +639171234567")
+            return
+        super().accept()
 
 
 # ── Patient Full Profile Dialog ───────────────────────────────────────
@@ -249,6 +261,10 @@ class PatientsPage(QWidget):
         self._patient_ids: list[int] = []
         self._all_patients: list[dict] = []
         self._build()
+        # Auto-refresh data every 10 seconds
+        self._refresh_timer = QTimer(self)
+        self._refresh_timer.timeout.connect(self._load_from_db)
+        self._refresh_timer.start(10_000)
 
     def get_patient_names(self) -> list[str]:
         names = []
@@ -296,21 +312,23 @@ class PatientsPage(QWidget):
         self.filter_combo.currentTextChanged.connect(self._apply_filters)
         bar.addWidget(self.filter_combo)
 
-        if self._role == "Admin":
-            merge_btn = QPushButton("Merge Duplicates"); merge_btn.setObjectName("actionBtn")
-            merge_btn.setMinimumHeight(42); merge_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            merge_btn.clicked.connect(self._on_merge)
-            bar.addWidget(merge_btn)
+        self.sex_filter = QComboBox(); self.sex_filter.setObjectName("formCombo")
+        self.sex_filter.addItems(["All Sex", "Male", "Female"])
+        self.sex_filter.setMinimumHeight(42); self.sex_filter.setMinimumWidth(120)
+        self.sex_filter.currentTextChanged.connect(self._apply_filters)
+        bar.addWidget(self.sex_filter)
 
-        export_btn = QPushButton("Export CSV"); export_btn.setObjectName("actionBtn")
-        export_btn.setMinimumHeight(42); export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        export_btn.clicked.connect(self._export_csv)
-        bar.addWidget(export_btn)
+        self.blood_filter = QComboBox(); self.blood_filter.setObjectName("formCombo")
+        self.blood_filter.addItems(["All Blood Type", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "Unknown"])
+        self.blood_filter.setMinimumHeight(42); self.blood_filter.setMinimumWidth(140)
+        self.blood_filter.currentTextChanged.connect(self._apply_filters)
+        bar.addWidget(self.blood_filter)
 
-        print_btn = QPushButton("Print"); print_btn.setObjectName("actionBtn")
-        print_btn.setMinimumHeight(42); print_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        print_btn.clicked.connect(self._print_table)
-        bar.addWidget(print_btn)
+        self.cond_filter = QComboBox(); self.cond_filter.setObjectName("formCombo")
+        self.cond_filter.addItems(["All Conditions"])
+        self.cond_filter.setMinimumHeight(42); self.cond_filter.setMinimumWidth(160)
+        self.cond_filter.currentTextChanged.connect(self._apply_filters)
+        bar.addWidget(self.cond_filter)
         lay.addLayout(bar)
 
         # ── Table ──────────────────────────────────────────────────
@@ -323,7 +341,8 @@ class PatientsPage(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         if self._role != "Cashier":
             self.table.horizontalHeader().setSectionResizeMode(len(cols)-1, QHeaderView.ResizeMode.Fixed)
-            self.table.setColumnWidth(len(cols)-1, 200)
+            self.table.setColumnWidth(len(cols)-1, 185)
+            self.table.horizontalHeader().setStretchLastSection(False)
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
@@ -332,6 +351,7 @@ class PatientsPage(QWidget):
         self.table.setMinimumHeight(420)
         self.table.verticalHeader().setDefaultSectionSize(48)
         configure_table(self.table)
+        self.table.setSortingEnabled(True)
         self._load_from_db()
         lay.addWidget(self.table)
 
@@ -342,6 +362,7 @@ class PatientsPage(QWidget):
 
     # ── DB Load ────────────────────────────────────────────────────
     def _load_from_db(self):
+        self.table.setSortingEnabled(False)
         if self._backend and self._role == "Doctor" and self._user_email:
             rows = self._backend.get_patients_for_doctor(self._user_email)
         else:
@@ -349,6 +370,26 @@ class PatientsPage(QWidget):
         self._all_patients = rows
         self._patient_ids.clear()
         self.table.setRowCount(len(rows))
+
+        # Collect unique conditions for filter
+        all_conds = set()
+        for p in rows:
+            conds = p.get("conditions", "") or ""
+            for c in conds.split(","):
+                c = c.strip()
+                if c:
+                    all_conds.add(c)
+
+        prev_cond = self.cond_filter.currentText()
+        self.cond_filter.blockSignals(True)
+        self.cond_filter.clear()
+        self.cond_filter.addItem("All Conditions")
+        for c in sorted(all_conds):
+            self.cond_filter.addItem(c)
+        idx = self.cond_filter.findText(prev_cond)
+        if idx >= 0:
+            self.cond_filter.setCurrentIndex(idx)
+        self.cond_filter.blockSignals(False)
         for r, p in enumerate(rows):
             self._patient_ids.append(p["patient_id"])
             pid_str = f"PT-{p['patient_id']:04d}"
@@ -374,20 +415,27 @@ class PatientsPage(QWidget):
 
             if self._role != "Cashier":
                 act_w = QWidget(); act_lay = QHBoxLayout(act_w)
-                act_lay.setContentsMargins(4,4,4,4); act_lay.setSpacing(4)
-                view_btn = make_table_btn("View")
+                act_lay.setContentsMargins(0,0,0,0); act_lay.setSpacing(6)
+                view_btn = make_table_btn("View"); view_btn.setFixedWidth(52)
                 view_btn.clicked.connect(lambda checked, ri=r: self._on_view(ri))
-                edit_btn = make_table_btn("Edit")
+                edit_btn = make_table_btn("Edit"); edit_btn.setFixedWidth(52)
                 edit_btn.clicked.connect(lambda checked, ri=r: self._on_edit(ri))
-                del_btn = make_table_btn_danger("Del")
+                del_btn = make_table_btn_danger("Del"); del_btn.setFixedWidth(46)
                 del_btn.clicked.connect(lambda checked, ri=r: self._on_delete(ri))
                 act_lay.addWidget(view_btn); act_lay.addWidget(edit_btn); act_lay.addWidget(del_btn)
                 self.table.setCellWidget(r, len(values), act_w)
+        self.table.setSortingEnabled(True)
 
     # ── Filters ────────────────────────────────────────────────────
     def _apply_filters(self, _=None):
         text = self.search.text().lower()
         status = self.filter_combo.currentText()
+        sex = self.sex_filter.currentText()
+        blood = self.blood_filter.currentText()
+        cond = self.cond_filter.currentText()
+        sex_col = 2
+        blood_col = 5
+        cond_col = 6
         status_col = 8
         for r in range(self.table.rowCount()):
             row_text = " ".join(
@@ -396,7 +444,13 @@ class PatientsPage(QWidget):
             ok_text = not text or text in row_text
             item_status = self.table.item(r, status_col)
             ok_status = status == "All Status" or (item_status and item_status.text() == status)
-            self.table.setRowHidden(r, not (ok_text and ok_status))
+            item_sex = self.table.item(r, sex_col)
+            ok_sex = sex == "All Sex" or (item_sex and item_sex.text() == sex)
+            item_blood = self.table.item(r, blood_col)
+            ok_blood = blood == "All Blood Type" or (item_blood and item_blood.text() == blood)
+            item_cond = self.table.item(r, cond_col)
+            ok_cond = cond == "All Conditions" or (item_cond and cond.lower() in item_cond.text().lower())
+            self.table.setRowHidden(r, not (ok_text and ok_status and ok_sex and ok_blood and ok_cond))
 
     # ── CRUD ───────────────────────────────────────────────────────
     def _on_add(self):
@@ -495,45 +549,3 @@ class PatientsPage(QWidget):
                     self._load_from_db(); self.patients_changed.emit(self.get_patient_names())
                 else:
                     QMessageBox.critical(self, "Error", "Merge failed.")
-
-    # ── Export / Print ─────────────────────────────────────────────
-    def _export_csv(self):
-        path, _ = QFileDialog.getSaveFileName(self, "Export Patients", "patients.csv", "CSV Files (*.csv)")
-        if not path: return
-        try:
-            with open(path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                headers = [self.table.horizontalHeaderItem(c).text()
-                           for c in range(self.table.columnCount()-1)]
-                writer.writerow(headers)
-                for r in range(self.table.rowCount()):
-                    row = [self.table.item(r,c).text() if self.table.item(r,c) else ""
-                           for c in range(self.table.columnCount()-1)]
-                    writer.writerow(row)
-            QMessageBox.information(self, "Exported", f"Saved to {path}")
-        except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
-
-    def _print_table(self):
-        try:
-            from PyQt6.QtPrintSupport import QPrintDialog, QPrinter
-            from PyQt6.QtGui import QTextDocument
-            printer = QPrinter()
-            dlg = QPrintDialog(printer, self)
-            if dlg.exec() == QDialog.DialogCode.Accepted:
-                doc = QTextDocument()
-                html = "<h2>Patient Records</h2><table border='1' cellpadding='4' cellspacing='0'><tr>"
-                for c in range(self.table.columnCount()-1):
-                    html += f"<th>{self.table.horizontalHeaderItem(c).text()}</th>"
-                html += "</tr>"
-                for r in range(self.table.rowCount()):
-                    if self.table.isRowHidden(r): continue
-                    html += "<tr>"
-                    for c in range(self.table.columnCount()-1):
-                        html += f"<td>{self.table.item(r,c).text() if self.table.item(r,c) else ''}</td>"
-                    html += "</tr>"
-                html += "</table>"
-                doc.setHtml(html)
-                doc.print(printer)
-        except ImportError:
-            QMessageBox.warning(self, "Print", "Print support not available.")

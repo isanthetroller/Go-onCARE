@@ -76,8 +76,14 @@ class DatabaseBase:
             (self._current_user_email, self._current_user_role, action, record_type, detail)
         )
 
+    def get_latest_log_id(self):
+        """Return the current MAX(log_id) from activity_log – lightweight check."""
+        row = self.fetch("SELECT COALESCE(MAX(log_id), 0) AS max_id FROM activity_log", one=True)
+        return row["max_id"] if row else 0
+
     def get_activity_log(self, limit=200, user_filter="", action_filter="",
-                         record_type_filter="", from_date="", to_date=""):
+                         record_type_filter="", from_date="", to_date="",
+                         include_roles=None):
         where, params = ["1=1"], []
         if user_filter:
             where.append("user_email = %s"); params.append(user_filter)
@@ -89,6 +95,10 @@ class DatabaseBase:
             where.append("DATE(created_at) >= %s"); params.append(from_date)
         if to_date:
             where.append("DATE(created_at) <= %s"); params.append(to_date)
+        if include_roles:
+            placeholders = ",".join(["%s"] * len(include_roles))
+            where.append(f"user_role IN ({placeholders})")
+            params.extend(include_roles)
         params.append(limit)
         return self.fetch(f"""
             SELECT log_id, user_email, user_role, action, record_type, record_detail, created_at
