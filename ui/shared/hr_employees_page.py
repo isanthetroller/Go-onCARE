@@ -1,4 +1,4 @@
-"""HR Employee Management page – extracted page class."""
+# HR employee management page - full employee control + leave requests
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,

@@ -1,4 +1,4 @@
-"""Base backend – DB connection, helpers, and activity logging."""
+# DB connection + helper functions
 
 import mysql.connector
 from mysql.connector import Error

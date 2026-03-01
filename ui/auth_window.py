@@ -1,4 +1,4 @@
-"""Authentication window – Login screen with forced password change."""
+# Login window + forced password change dialog
 
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,

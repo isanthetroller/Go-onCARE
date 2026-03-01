@@ -1,7 +1,4 @@
-"""Appointment dialog and date-formatting helpers.
-
-Extracted from ui/appointments.py for better organisation.
-"""
+# Appointment dialog + date formatting helpers
 
 from datetime import date, datetime, timedelta
 

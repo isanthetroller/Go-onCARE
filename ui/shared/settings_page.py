@@ -1,4 +1,4 @@
-"""Settings page – Database cleanup, dark mode toggle, self-service profile."""
+# Settings page - db cleanup, dark mode, password change
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,

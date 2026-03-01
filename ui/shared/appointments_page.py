@@ -1,4 +1,4 @@
-"""Appointment Scheduling page – view and manage all appointments."""
+# Appointments page - scheduling table with date tabs
 
 from datetime import date, datetime, timedelta
 

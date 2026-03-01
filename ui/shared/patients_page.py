@@ -1,4 +1,4 @@
-"""Patient Records page – manage and view all patient information."""
+# Patients page - table with CRUD, filters, merge
 
 from datetime import date
 

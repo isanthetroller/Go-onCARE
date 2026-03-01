@@ -5,22 +5,22 @@ USE carecrud_db;
 
 
 -- ────────────────────────────────────────────────────────────
--- LOOKUP / REFERENCE TABLES
+-- LOOKUP TABLES
 -- ────────────────────────────────────────────────────────────
 
--- Departments (eliminates transitive dependency from employees)
+-- Departments
 CREATE TABLE departments (
     department_id   INT AUTO_INCREMENT PRIMARY KEY,
     department_name VARCHAR(100) NOT NULL UNIQUE
 );
 
--- Roles (eliminates transitive dependency from employees)
+-- Roles
 CREATE TABLE roles (
     role_id   INT AUTO_INCREMENT PRIMARY KEY,
     role_name VARCHAR(50) NOT NULL UNIQUE
 );
 
--- Services offered by the hospital (V2: category + active flag)
+-- Services offered by the hospital
 CREATE TABLE services (
     service_id   INT AUTO_INCREMENT PRIMARY KEY,
     service_name VARCHAR(100) NOT NULL UNIQUE,
@@ -29,13 +29,13 @@ CREATE TABLE services (
     is_active    TINYINT(1) NOT NULL DEFAULT 1
 );
 
--- Payment methods (eliminates repeating string values in invoices)
+-- Payment methods
 CREATE TABLE payment_methods (
     method_id   INT AUTO_INCREMENT PRIMARY KEY,
     method_name VARCHAR(50) NOT NULL UNIQUE
 );
 
--- Standard conditions master list (V2)
+-- Standard conditions list
 CREATE TABLE standard_conditions (
     condition_id   INT AUTO_INCREMENT PRIMARY KEY,
     condition_name VARCHAR(100) NOT NULL UNIQUE
@@ -43,10 +43,10 @@ CREATE TABLE standard_conditions (
 
 
 -- ────────────────────────────────────────────────────────────
--- CORE ENTITY TABLES
+-- MAIN TABLES
 -- ────────────────────────────────────────────────────────────
 
--- User accounts (for login)
+-- User accounts
 CREATE TABLE users (
     user_id              INT AUTO_INCREMENT PRIMARY KEY,
     email                VARCHAR(150) NOT NULL UNIQUE,
@@ -59,7 +59,7 @@ CREATE TABLE users (
     FOREIGN KEY (role_id) REFERENCES roles(role_id)
 );
 
--- User preferences (V2: dark mode, etc.)
+-- User preferences (dark mode etc)
 CREATE TABLE user_preferences (
     pref_id    INT AUTO_INCREMENT PRIMARY KEY,
     user_email VARCHAR(150) NOT NULL UNIQUE,
@@ -68,7 +68,7 @@ CREATE TABLE user_preferences (
         ON UPDATE CASCADE ON DELETE CASCADE
 );
 
--- Employees / Staff (V2: leave_from, leave_until)
+-- Employees
 CREATE TABLE employees (
     employee_id     INT AUTO_INCREMENT PRIMARY KEY,
     first_name      VARCHAR(50)  NOT NULL,
@@ -90,7 +90,7 @@ CREATE TABLE employees (
     FOREIGN KEY (department_id) REFERENCES departments(department_id)
 );
 
--- Patients (V2: emergency_contact, blood_type)
+-- Patients
 CREATE TABLE patients (
     patient_id        INT AUTO_INCREMENT PRIMARY KEY,
     first_name        VARCHAR(50)  NOT NULL,
@@ -106,7 +106,7 @@ CREATE TABLE patients (
     created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Patient medical conditions (3NF: multi-valued attribute separated)
+-- Patient conditions (separate table so one patient can have multiple)
 CREATE TABLE patient_conditions (
     condition_id   INT AUTO_INCREMENT PRIMARY KEY,
     patient_id     INT          NOT NULL,
@@ -118,10 +118,10 @@ CREATE TABLE patient_conditions (
 
 
 -- ────────────────────────────────────────────────────────────
--- TRANSACTIONAL TABLES
+-- TRANSACTION TABLES
 -- ────────────────────────────────────────────────────────────
 
--- Appointments (V2: cancellation/reschedule reasons, reminder, recurring)
+-- Appointments
 CREATE TABLE appointments (
     appointment_id     INT AUTO_INCREMENT PRIMARY KEY,
     patient_id         INT  NOT NULL,
@@ -142,7 +142,7 @@ CREATE TABLE appointments (
     FOREIGN KEY (service_id) REFERENCES services(service_id)
 );
 
--- Patient queue (clinical workflow)
+-- Patient queue (for clinical workflow)
 CREATE TABLE queue_entries (
     queue_id       INT AUTO_INCREMENT PRIMARY KEY,
     patient_id     INT  NOT NULL,
@@ -158,7 +158,7 @@ CREATE TABLE queue_entries (
     FOREIGN KEY (appointment_id) REFERENCES appointments(appointment_id)
 );
 
--- Invoices (billing header) – V2: Voided status
+-- Invoices
 CREATE TABLE invoices (
     invoice_id       INT AUTO_INCREMENT PRIMARY KEY,
     patient_id       INT  NOT NULL,
@@ -176,7 +176,7 @@ CREATE TABLE invoices (
     FOREIGN KEY (method_id)      REFERENCES payment_methods(method_id)
 );
 
--- Invoice line items (3NF: each item is its own row)
+-- Invoice line items (each service on an invoice gets its own row)
 CREATE TABLE invoice_items (
     item_id    INT AUTO_INCREMENT PRIMARY KEY,
     invoice_id INT NOT NULL,
@@ -190,7 +190,7 @@ CREATE TABLE invoice_items (
     FOREIGN KEY (service_id) REFERENCES services(service_id)
 );
 
--- Activity log (V2: audit trail)
+-- Activity log
 CREATE TABLE activity_log (
     log_id        INT AUTO_INCREMENT PRIMARY KEY,
     user_email    VARCHAR(150) NOT NULL,
@@ -201,7 +201,7 @@ CREATE TABLE activity_log (
     created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Leave requests (V3: request-based leave management)
+-- Leave requests
 CREATE TABLE leave_requests (
     request_id     INT AUTO_INCREMENT PRIMARY KEY,
     employee_id    INT NOT NULL,
@@ -217,7 +217,7 @@ CREATE TABLE leave_requests (
     FOREIGN KEY (hr_decided_by) REFERENCES employees(employee_id)
 );
 
--- Notifications (V3: in-app notifications for employees)
+-- Notifications
 CREATE TABLE notifications (
     notification_id INT AUTO_INCREMENT PRIMARY KEY,
     employee_id     INT NOT NULL,
@@ -229,7 +229,7 @@ CREATE TABLE notifications (
 
 
 -- ────────────────────────────────────────────────────────────
--- INDEXES FOR PERFORMANCE
+-- INDEXES
 -- ────────────────────────────────────────────────────────────
 
 CREATE INDEX idx_appointments_date     ON appointments(appointment_date);
@@ -252,7 +252,7 @@ CREATE INDEX idx_notifications_read      ON notifications(is_read);
 
 
 -- ============================================================
--- SEED DATA  (lookup tables only – see sample_data.sql for full test data)
+-- SEED DATA
 -- ============================================================
 
 INSERT INTO departments (department_name) VALUES
@@ -393,10 +393,10 @@ INSERT INTO invoice_items (invoice_id, service_id, quantity, unit_price, subtota
 
 
 -- ============================================================
--- VIEWS (JOIN queries for common operations)
+-- VIEWS
 -- ============================================================
 
--- ── Full employee details with role and department names ────
+-- Employees with role + department names
 CREATE VIEW vw_employees AS
 SELECT
     e.employee_id,
@@ -418,7 +418,7 @@ INNER JOIN roles r       ON e.role_id       = r.role_id
 INNER JOIN departments d ON e.department_id = d.department_id;
 
 
--- ── Full patient details with conditions ───────────────────
+-- Patients with their conditions────
 CREATE VIEW vw_patients AS
 SELECT
     p.patient_id,
@@ -437,7 +437,7 @@ LEFT JOIN patient_conditions pc ON p.patient_id = pc.patient_id
 GROUP BY p.patient_id;
 
 
--- ── Appointment list with patient, doctor, and service names
+-- Appointments with patient, doctor, service names
 CREATE VIEW vw_appointments AS
 SELECT
     a.appointment_id,
@@ -457,7 +457,7 @@ INNER JOIN employees e ON a.doctor_id  = e.employee_id
 INNER JOIN services  s ON a.service_id = s.service_id;
 
 
--- ── Queue with patient and doctor names ────────────────────
+-- Queue with patient + doctor names────
 CREATE VIEW vw_queue AS
 SELECT
     q.queue_id,
@@ -472,7 +472,7 @@ INNER JOIN patients  p ON q.patient_id = p.patient_id
 INNER JOIN employees e ON q.doctor_id  = e.employee_id;
 
 
--- ── Invoice details with patient, payment method, items ────
+-- Invoice details joined with patient, payment method, items
 CREATE VIEW vw_invoices AS
 SELECT
     i.invoice_id,
@@ -495,7 +495,7 @@ INNER JOIN invoice_items   ii ON i.invoice_id = ii.invoice_id
 INNER JOIN services        s  ON ii.service_id = s.service_id;
 
 
--- ── Doctor performance (appointments + revenue) ───────────
+-- Doctor performance stats──
 CREATE VIEW vw_doctor_performance AS
 SELECT
     e.employee_id,
@@ -511,7 +511,7 @@ WHERE r.role_name = 'Doctor'
 GROUP BY e.employee_id;
 
 
--- ── Monthly revenue summary ───────────────────────────────
+-- Monthly revenue────────
 CREATE VIEW vw_monthly_revenue AS
 SELECT
     DATE_FORMAT(a.appointment_date, '%M %Y') AS month_label,
@@ -525,7 +525,7 @@ GROUP BY sort_key, month_label
 ORDER BY sort_key DESC;
 
 
--- ── Today's appointments (quick dashboard query) ──────────
+-- Today's appointments for dashboard──
 CREATE VIEW vw_today_appointments AS
 SELECT
     DATE_FORMAT(a.appointment_time, '%h:%i %p') AS time_slot,
@@ -541,7 +541,7 @@ WHERE a.appointment_date = CURDATE()
 ORDER BY a.appointment_time;
 
 
--- ── Top services by usage count ───────────────────────────
+-- Top services by how often they're used────────
 CREATE VIEW vw_top_services AS
 SELECT
     s.service_id,

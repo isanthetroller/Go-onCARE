@@ -1,4 +1,4 @@
-"""Authentication – Login, dark mode, password management."""
+# Login, dark mode, password stuff
 
 
 class AuthMixin:

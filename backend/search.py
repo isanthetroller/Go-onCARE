@@ -1,4 +1,4 @@
-"""Search backend – Global cross-entity search."""
+# Global search across patients, employees, etc
 
 
 class SearchMixin:

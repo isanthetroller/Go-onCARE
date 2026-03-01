@@ -1,9 +1,4 @@
-"""Admin role – full access to all 8 pages.
-
-Re-exports every shared page so imports read clearly::
-
-    from ui.admin import DashboardPage, PatientsPage, ...
-"""
+# Admin pages - has access to everything
 
 from ui.shared.dashboard_page     import DashboardPage          # noqa: F401
 from ui.shared.patients_page      import PatientsPage            # noqa: F401

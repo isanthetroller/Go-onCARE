@@ -1,4 +1,4 @@
-"""Employee backend – CRUD, performance queries, and HR operations."""
+# Employee CRUD + HR stuff (leave requests, salary, etc)
 
 
 class EmployeeMixin:

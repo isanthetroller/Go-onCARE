@@ -1,7 +1,4 @@
-"""Patient dialogs – Add/Edit, Full Profile, Merge.
-
-Extracted from ui/patients.py for better organisation.
-"""
+# Patient dialogs - add/edit, profile view, merge
 
 from datetime import date
 

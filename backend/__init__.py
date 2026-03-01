@@ -1,20 +1,5 @@
-"""CareCRUD Backend Package – Modular database operations.
-
-Each module handles one domain:
-    base.py        – DB connection management & activity logging
-    auth.py        – Login, user preferences, passwords
-    employees.py   – Employee CRUD & performance
-    patients.py    – Patient CRUD & profiles
-    appointments.py– Appointment CRUD, conflicts, recurring
-    clinical.py    – Queue, invoices, billing, services
-    dashboard.py   – Dashboard stats & alerts
-    analytics.py   – Revenue, trends, demographics, reports
-    settings.py    – Data cleanup, table mgmt, standard conditions
-    search.py      – Global cross-entity search
-
-The AuthBackend class below composes all mixins so existing code using
-``from backend import AuthBackend`` continues to work unchanged.
-"""
+# Backend package - each file handles a different part of the DB logic.
+# AuthBackend below pulls them all together into one class.
 
 from backend.base import DatabaseBase
 from backend.auth import AuthMixin
@@ -40,9 +25,5 @@ class AuthBackend(
     SettingsMixin,
     SearchMixin,
 ):
-    """Unified backend combining all domain mixins.
-
-    Instantiate once and pass to all UI pages — every method from the
-    original monolithic backend.py is available on this single object.
-    """
+    # All DB methods in one class - just pass this to every page
     pass

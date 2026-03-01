@@ -1,7 +1,4 @@
-"""Dashboard page – glanceable hospital summary with KPI cards, schedule & trends.
-
-Extracted from ui/dashboard.py. Uses BarChartWidget from shared/chart_widgets.
-"""
+# Dashboard - KPI cards, schedule, trends
 
 from datetime import datetime
 

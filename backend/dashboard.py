@@ -1,4 +1,4 @@
-"""Dashboard backend – summary stats, upcoming appointments, monthly trends."""
+# Dashboard stats and data
 
 
 class DashboardMixin:

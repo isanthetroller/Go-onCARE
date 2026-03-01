@@ -1,7 +1,4 @@
-"""Clinical Workflow & Point-of-Sale page.
-
-Queue, Billing/POS, and Services & Pricing tabs.
-"""
+# Clinical page - Queue, Billing/POS, Services tabs
 
 from datetime import datetime
 

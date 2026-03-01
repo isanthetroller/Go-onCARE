@@ -1,4 +1,4 @@
-"""Appointment backend – CRUD, conflict checking, recurring."""
+# Appointment CRUD + scheduling logic
 
 
 class AppointmentMixin:

@@ -1,9 +1,4 @@
-"""Doctor role – Dashboard, Patients, Appointments, Clinical, Analytics.
-
-Re-exports the pages a Doctor can access::
-
-    from ui.doctor import DashboardPage, PatientsPage, ...
-"""
+# Doctor pages - dashboard, patients, appointments, clinical, analytics
 
 from ui.shared.dashboard_page     import DashboardPage          # noqa: F401
 from ui.shared.patients_page      import PatientsPage            # noqa: F401

@@ -1,9 +1,4 @@
-"""Receptionist role – Dashboard, Patients, Appointments, Clinical & POS.
-
-Re-exports the pages a Receptionist can access::
-
-    from ui.receptionist import DashboardPage, PatientsPage, ...
-"""
+# Receptionist pages - dashboard, patients, appointments, clinical/POS
 
 from ui.shared.dashboard_page     import DashboardPage          # noqa: F401
 from ui.shared.patients_page      import PatientsPage            # noqa: F401

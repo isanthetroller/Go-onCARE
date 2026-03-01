@@ -1,8 +1,4 @@
-"""Clinical workflow dialogs – Queue, Service, Invoice, Payment, Bulk Price.
-
-Extracted from the monolithic clinical.py for better organisation.
-These dialogs are used by ClinicalPage across all roles.
-"""
+# Dialogs for clinical page - queue edit, service edit, invoice, payment, bulk price
 
 from PyQt6.QtWidgets import (
     QDialog, QFormLayout, QLineEdit, QTextEdit, QComboBox,

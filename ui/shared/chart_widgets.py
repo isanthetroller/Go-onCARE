@@ -1,10 +1,4 @@
-"""Reusable chart widgets for CareCRUD analytics & dashboard.
-
-Contains:
-    BarChartWidget   – simple horizontal bar chart (used by Dashboard)
-    PieChartWidget   – donut / pie chart (used by Analytics)
-    HBarChartWidget  – horizontal bar chart with colour per bar (Analytics)
-"""
+# Chart widgets - bar, pie, horizontal bar for analytics/dashboard
 
 from PyQt6.QtWidgets import QWidget, QSizePolicy
 from PyQt6.QtCore import Qt, QRectF

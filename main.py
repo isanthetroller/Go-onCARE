@@ -1,6 +1,4 @@
-"""CareCRUD – Healthcare Management & Scheduling System
-Entry point: shows auth window, then the main application on login.
-"""
+# CareCRUD - main entry point
 
 import sys
 sys.dont_write_bytecode = True

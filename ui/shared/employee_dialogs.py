@@ -1,8 +1,4 @@
-"""Employee dialogs – Add/Edit and Profile (Admin version).
-
-Extracted from ui/employees.py. Used by the Admin EmployeesPage.
-Includes the unified phone field with QFrame container + eventFilter.
-"""
+# Employee dialogs - add/edit form + profile view (Admin version)
 
 from PyQt6.QtWidgets import (
     QDialog, QFormLayout, QLineEdit, QTextEdit, QComboBox,

@@ -1,8 +1,4 @@
-"""HR Employee dialogs – Add/Edit and Profile (HR-extended version).
-
-Extracted from ui/hr_employees.py. Includes salary, emergency contact,
-tenure calculation, and enhanced profile with Salary & HR tab.
-"""
+# HR employee dialogs - add/edit + profile with salary & HR tab
 
 from PyQt6.QtWidgets import (
     QDialog, QFormLayout, QLineEdit, QTextEdit, QComboBox,

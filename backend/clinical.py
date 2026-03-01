@@ -1,4 +1,4 @@
-"""Clinical backend – Queue, invoices, billing, services."""
+# Queue, invoices, billing, services
 
 
 class ClinicalMixin:

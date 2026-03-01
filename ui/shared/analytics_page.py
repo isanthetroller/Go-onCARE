@@ -1,4 +1,4 @@
-"""Data Analytics page – hospital performance, revenue, trends."""
+# Analytics page - charts, revenue, performance data
 
 import math
 

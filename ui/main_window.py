@@ -1,4 +1,4 @@
-"""Main application window V2 – sidebar, top header, stacked pages."""
+# Main window - sidebar nav + stacked pages
 
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,

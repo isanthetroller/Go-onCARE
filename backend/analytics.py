@@ -1,4 +1,4 @@
-"""Analytics backend – Revenue, performance, demographics, trends."""
+# Analytics - revenue, performance, charts data
 
 
 class AnalyticsMixin:

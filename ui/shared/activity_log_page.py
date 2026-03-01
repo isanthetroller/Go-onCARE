@@ -1,4 +1,4 @@
-"""Activity Log page – audit trail viewer with filters."""
+# Activity log page - shows who did what and when
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,

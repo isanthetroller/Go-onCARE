@@ -1,4 +1,4 @@
-"""Settings backend – Data cleanup, table management, standard conditions."""
+# Settings - cleanup tools, table management
 
 
 class SettingsMixin:

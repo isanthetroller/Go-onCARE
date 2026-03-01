@@ -1,4 +1,4 @@
-"""Employee Management page – extracted page class."""
+# Admin employee management page
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,

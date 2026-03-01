@@ -1,4 +1,4 @@
-"""Patient backend – CRUD and profile queries."""
+# Patient CRUD + profile queries
 
 
 class PatientMixin:

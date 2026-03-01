@@ -1,19 +1,18 @@
-# ── CareCRUD Design System ─────────────────────────────────────────────
-# Palette from user reference:
+# Color palette and style helpers
 #
+# Colors:
 # Primary:   #388087  (dark teal)
 # Accent:    #6FB3B8  (medium teal)
 # Highlight: #BADFE7  (light blue)
 # Mint:      #C2EDCE  (light green)
-# BG:        #F6F6F2  (warm off-white)
+# BG:        #F6F6F2  (off-white)
 # Card:      #FFFFFF
-# Text:      #2C3E50  (dark blue-gray)
+# Text:      #2C3E50
 # Muted:     #7F8C8D
-# Warning:   #E8B931  (amber)
-# Danger:    #D9534F  (red)
+# Warning:   #E8B931
+# Danger:    #D9534F
 #
-# Stylesheets are stored as .qss files under ui/styles/ and loaded
-# at import time by the helper function _load_qss().
+# QSS files are in ui/styles/ folder
 
 import os as _os
 
