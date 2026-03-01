@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QComboBox, QDialog, QFormLayout, QDateEdit, QTabWidget,
     QGraphicsDropShadowEffect, QMessageBox, QTextEdit,
 )
-from PyQt6.QtCore import Qt, QDate, QTimer
+from PyQt6.QtCore import Qt, QDate, QTimer, QEvent
 from PyQt6.QtGui import QColor
 from ui.styles import configure_table, make_table_btn
 from backend import AuthBackend
@@ -58,29 +58,37 @@ class EmployeeDialog(QDialog):
         self.type_combo.addItems(["Full-time", "Part-time", "Contract"])
         self.type_combo.setMinimumHeight(38)
 
-        # Phone: permanent +63 prefix + 10-digit input
-        self._phone_row = QWidget()
-        phone_lay = QHBoxLayout(self._phone_row)
+        # Phone: container frame with unified border
+        self._phone_frame = QFrame()
+        self._phone_frame.setObjectName("phoneFrame")
+        self._phone_normal_ss = (
+            "QFrame#phoneFrame { border: 2px solid #BADFE7; border-radius: 10px;"
+            " background: #FFFFFF; }"
+        )
+        self._phone_focus_ss = (
+            "QFrame#phoneFrame { border: 2px solid #388087; border-radius: 10px;"
+            " background: #FFFFFF; }"
+        )
+        self._phone_frame.setStyleSheet(self._phone_normal_ss)
+        self._phone_frame.setFixedHeight(42)
+        phone_lay = QHBoxLayout(self._phone_frame)
         phone_lay.setContentsMargins(0, 0, 0, 0)
         phone_lay.setSpacing(0)
         self._phone_prefix = QLabel("+63")
         self._phone_prefix.setStyleSheet(
-            "QLabel { padding: 10px 10px; border: 2px solid #BADFE7;"
-            " border-right: none; border-radius: 10px 0px 0px 10px;"
+            "QLabel { padding: 0px 10px; border: none;"
             " font-size: 13px; font-weight: bold; background: #F0F7F8;"
+            " border-top-left-radius: 8px; border-bottom-left-radius: 8px;"
             " color: #2C3E50; }"
         )
-        self._phone_prefix.setFixedHeight(38)
         self.phone_edit = QLineEdit()
         self.phone_edit.setStyleSheet(
-            "QLineEdit { padding: 10px 14px; border: 2px solid #BADFE7;"
-            " border-left: none; border-radius: 0px 10px 10px 0px;"
-            " font-size: 13px; background-color: #FFFFFF; color: #2C3E50; }"
-            "QLineEdit:focus { border: 2px solid #388087; border-left: none; }"
+            "QLineEdit { padding: 0px 14px; border: none;"
+            " font-size: 13px; background-color: transparent; color: #2C3E50; }"
         )
         self.phone_edit.setPlaceholderText("9XXXXXXXXX")
-        self.phone_edit.setMinimumHeight(38)
         self.phone_edit.setMaxLength(10)
+        self.phone_edit.installEventFilter(self)
         phone_lay.addWidget(self._phone_prefix)
         phone_lay.addWidget(self.phone_edit, 1)
 
@@ -107,7 +115,7 @@ class EmployeeDialog(QDialog):
         form.addRow("Role",        self.role_combo)
         form.addRow("Department",  self.dept_combo)
         form.addRow("Type",        self.type_combo)
-        form.addRow("Phone",       self._phone_row)
+        form.addRow("Phone",       self._phone_frame)
         form.addRow("Email",       self.email_edit)
         form.addRow("Hire Date",   self.hire_date)
         form.addRow("Status",      self.status_combo)
@@ -162,6 +170,14 @@ class EmployeeDialog(QDialog):
     @property
     def fired(self) -> bool:
         return self._fired
+
+    def eventFilter(self, obj, event):
+        if obj is self.phone_edit:
+            if event.type() == QEvent.Type.FocusIn:
+                self._phone_frame.setStyleSheet(self._phone_focus_ss)
+            elif event.type() == QEvent.Type.FocusOut:
+                self._phone_frame.setStyleSheet(self._phone_normal_ss)
+        return super().eventFilter(obj, event)
 
     def accept(self):
         import re
