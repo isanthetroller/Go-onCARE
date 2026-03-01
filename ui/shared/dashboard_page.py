@@ -1,4 +1,7 @@
-"""Dashboard – glanceable hospital summary with KPI cards, schedule preview & trends."""
+"""Dashboard page – glanceable hospital summary with KPI cards, schedule & trends.
+
+Extracted from ui/dashboard.py. Uses BarChartWidget from shared/chart_widgets.
+"""
 
 from datetime import datetime
 
@@ -11,51 +14,9 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QDate
 from PyQt6.QtGui import QColor, QPainter
 from ui.styles import configure_table
+from ui.shared.chart_widgets import BarChartWidget
 
 
-# ── Tiny bar-chart widget ─────────────────────────────────────────
-class _BarChartWidget(QWidget):
-    """Simple horizontal bar chart painted via QPainter."""
-
-    def __init__(self, data=None, parent=None):
-        super().__init__(parent)
-        self._data = data or []
-        self._max = max(v for _, v in self._data) if self._data else 1
-        self.setMinimumHeight(max(len(self._data) * 38 + 10, 50))
-
-    def set_data(self, data):
-        self._data = data
-        self._max = max(v for _, v in data) if data else 1
-        self.setMinimumHeight(max(len(data) * 38 + 10, 50))
-        self.update()
-
-    def paintEvent(self, event):
-        if not self._data:
-            return
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        w = self.width()
-        bar_h, spacing, label_w, padding_r = 22, 38, 80, 40
-        for i, (label, value) in enumerate(self._data):
-            y = i * spacing + 6
-            painter.setPen(QColor("#7F8C8D"))
-            painter.setFont(self.font())
-            painter.drawText(0, y, label_w, bar_h, Qt.AlignmentFlag.AlignVCenter, label)
-            bar_x = label_w + 8
-            max_bar_w = w - bar_x - padding_r
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor("#F6F6F2"))
-            painter.drawRoundedRect(bar_x, y + 2, int(max_bar_w), bar_h - 4, 6, 6)
-            fill_w = int(max_bar_w * value / self._max) if self._max else 0
-            painter.setBrush(QColor("#388087"))
-            painter.drawRoundedRect(bar_x, y + 2, fill_w, bar_h - 4, 6, 6)
-            painter.setPen(QColor("#2C3E50"))
-            painter.drawText(bar_x + int(max_bar_w) + 6, y, 34, bar_h,
-                             Qt.AlignmentFlag.AlignVCenter, str(value))
-        painter.end()
-
-
-# ── Dashboard page ────────────────────────────────────────────────
 class DashboardPage(QWidget):
     """Hospital dashboard – KPI cards, schedule preview, monthly trends."""
 
@@ -72,7 +33,6 @@ class DashboardPage(QWidget):
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._update_time)
         self._timer.start(1_000)
-        # Auto-refresh data every 10 seconds
         self._data_timer = QTimer(self)
         self._data_timer.timeout.connect(self.refresh)
         self._data_timer.start(10_000)
@@ -86,10 +46,8 @@ class DashboardPage(QWidget):
         lay = QVBoxLayout(inner)
         lay.setSpacing(20); lay.setContentsMargins(28, 28, 28, 28)
 
-        # Banner
         lay.addWidget(self._build_banner())
 
-        # KPI cards (analytics style)
         kpi_row = QHBoxLayout(); kpi_row.setSpacing(16)
         self._kpi_cards_data = [
             ("today_appts",     "Today's Appointments", "#388087"),
@@ -98,23 +56,19 @@ class DashboardPage(QWidget):
             ("active_staff",    "Active Staff",         "#C2EDCE"),
         ]
         for key, title, color in self._kpi_cards_data:
-            # HR should not see Active Patients or Today's Appointments
             if self._role == "HR" and key in ("today_appts", "active_patients"):
                 continue
             kpi_row.addWidget(self._make_kpi_card(key, title, color))
         lay.addLayout(kpi_row)
 
-        # Quick actions
         act_row = QHBoxLayout(); act_row.setSpacing(12)
         quick_actions = [
             ("\u2795  New Patient", 1), ("\U0001F4C5  New Appointment", 2),
             ("\U0001F3E5  Clinical Queue", 3), ("\U0001F4CA  Analytics", 4),
         ]
         for text, pi in quick_actions:
-            # Doctor cannot add patients or create appointments
             if self._role == "Doctor" and pi in (1, 2):
                 continue
-            # HR has no access to these pages
             if self._role == "HR" and pi in (1, 2, 3, 4):
                 continue
             btn = QPushButton(text)
@@ -126,7 +80,6 @@ class DashboardPage(QWidget):
         act_row.addStretch()
         lay.addLayout(act_row)
 
-        # ── My Leave section (for non-Admin, non-HR roles) ────────
         if self._role not in ("Admin", "HR"):
             leave_card = QFrame(); leave_card.setObjectName("card")
             leave_shadow = QGraphicsDropShadowEffect()
@@ -167,13 +120,11 @@ class DashboardPage(QWidget):
             lv_lay.addWidget(self._my_leave_table)
             lay.addWidget(leave_card)
 
-        # Two-column: schedule + chart
         cols = QHBoxLayout(); cols.setSpacing(16)
         cols.addWidget(self._schedule_card(), 3)
         cols.addWidget(self._chart_card(), 2)
         lay.addLayout(cols)
 
-        # Recent Activity feed (Admin & HR only)
         if self._role in ("Admin",):
             lay.addWidget(self._recent_activity_card())
 
@@ -184,7 +135,6 @@ class DashboardPage(QWidget):
         wrapper.addWidget(scroll)
         self.refresh()
 
-    # ── Banner ────────────────────────────────────────────────────
     def _build_banner(self):
         banner = QFrame()
         banner.setObjectName("pageBanner")
@@ -209,7 +159,6 @@ class DashboardPage(QWidget):
             "Here's what's happening at the hospital today.", 13, False, 0.7))
         return banner
 
-    # ── KPI card builder (analytics style) ────────────────────────
     def _make_kpi_card(self, key, title, color):
         card = QFrame(); card.setObjectName("card"); card.setMinimumHeight(110)
         shadow = QGraphicsDropShadowEffect()
@@ -240,7 +189,6 @@ class DashboardPage(QWidget):
 
         return card
 
-    # ── Schedule preview ──────────────────────────────────────────
     def _schedule_card(self):
         card = QFrame(); card.setObjectName("card")
         shadow = QGraphicsDropShadowEffect()
@@ -291,7 +239,6 @@ class DashboardPage(QWidget):
         vbox.addWidget(view_all)
         return card
 
-    # ── Chart card ────────────────────────────────────────────────
     def _chart_card(self):
         card = QFrame(); card.setObjectName("card")
         shadow = QGraphicsDropShadowEffect()
@@ -309,7 +256,7 @@ class DashboardPage(QWidget):
         hdr.addWidget(period)
         vbox.addLayout(hdr)
 
-        self._chart_widget = _BarChartWidget()
+        self._chart_widget = BarChartWidget()
         vbox.addWidget(self._chart_widget, 1)
 
         summary = QHBoxLayout(); summary.setSpacing(20)
@@ -331,7 +278,6 @@ class DashboardPage(QWidget):
         vbox.addLayout(summary)
         return card
 
-    # ── Recent Activity card ──────────────────────────────────────
     def _recent_activity_card(self):
         card = QFrame(); card.setObjectName("card")
         shadow = QGraphicsDropShadowEffect()
@@ -391,7 +337,6 @@ class DashboardPage(QWidget):
 
     @staticmethod
     def _fmt_time(t):
-        """Convert timedelta / time / str to readable AM/PM string."""
         if hasattr(t, "total_seconds"):
             s = int(t.total_seconds())
             h, rem = divmod(s, 3600); m = rem // 60
@@ -405,7 +350,6 @@ class DashboardPage(QWidget):
         s = self._backend.get_dashboard_summary() if self._backend else {}
         cmp = self._backend.get_period_comparison() if self._backend else {}
 
-        # Today's appointments
         today_appts = s.get("today_appts", 0)
         self._kpi_labels["today_appts"].setText(str(today_appts))
         appts_delta = cmp.get("appts_delta", 0)
@@ -419,7 +363,6 @@ class DashboardPage(QWidget):
         else:
             self._kpi_labels["today_appts_sub"].setText("")
 
-        # Active patients
         pts = s.get("active_patients", 0)
         self._kpi_labels["active_patients"].setText(f"{pts:,}")
         pts_delta = cmp.get("patients_delta", 0)
@@ -433,10 +376,8 @@ class DashboardPage(QWidget):
         else:
             self._kpi_labels["active_patients_sub"].setText("")
 
-        # Today's revenue
         rev = s.get("today_revenue", 0)
-        self._kpi_labels["today_revenue"].setText(
-            f"\u20B1 {rev:,.0f}")
+        self._kpi_labels["today_revenue"].setText(f"\u20B1 {rev:,.0f}")
         rev_delta = cmp.get("revenue_delta", 0)
         if rev_delta is not None and rev_delta != 0:
             arrow = "▲" if rev_delta >= 0 else "▼"
@@ -448,7 +389,6 @@ class DashboardPage(QWidget):
         else:
             self._kpi_labels["today_revenue_sub"].setText("")
 
-        # Active staff
         self._kpi_labels["active_staff"].setText(str(s.get("active_staff", 0)))
         self._kpi_labels["active_staff_sub"].setText("")
 
@@ -498,7 +438,7 @@ class DashboardPage(QWidget):
             if hasattr(ts, "strftime"):
                 ts = ts.strftime("%I:%M %p")
             else:
-                ts = str(ts)[-8:]  # fallback: last 8 chars (time part)
+                ts = str(ts)[-8:]
             cells = [
                 ts,
                 row.get("user_email", "").split("@")[0],

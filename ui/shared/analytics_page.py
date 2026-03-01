@@ -1,7 +1,4 @@
-"""Data Analytics page – V2
-
-New: export PDF/CSV, revenue chart, patient retention, cancellation rate,
-doctor filter, date-range KPI, period comparison, drill-down tables."""
+"""Data Analytics page – hospital performance, revenue, trends."""
 
 import math
 
@@ -13,82 +10,10 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QRectF, QDate, QTimer
 from PyQt6.QtGui import QColor, QPainter, QPen, QBrush, QFont, QPainterPath
 from ui.styles import configure_table
-
-
-# ── Colour palettes ───────────────────────────────────────────────────
-_CONDITION_COLORS = ["#388087", "#6FB3B8", "#BADFE7", "#C2EDCE", "#E8B931", "#D9534F", "#7F8C8D"]
-_STATUS_COLORS    = {"Completed": "#5CB85C", "Confirmed": "#388087", "Pending": "#E8B931", "Cancelled": "#D9534F"}
-_DEPT_COLORS      = ["#388087", "#6FB3B8", "#BADFE7", "#C2EDCE", "#E8B931", "#7F8C8D", "#D9534F", "#5CB85C"]
-_DEMO_COLORS      = {"0–17": "#6FB3B8", "18–35": "#388087", "36–50": "#BADFE7", "51–65": "#C2EDCE", "65+": "#E8B931"}
-_RETENTION_COLORS = {"new_patients": "#6FB3B8", "returning_patients": "#388087"}
-
-
-# ── Pie Chart Widget ──────────────────────────────────────────────────
-class _PieChartWidget(QWidget):
-    def __init__(self, data: list[tuple[str, int, str]], *, donut: bool = True, parent=None):
-        super().__init__(parent)
-        self._data = data; self._donut = donut
-        self._total = sum(v for _, v, _ in data)
-        self.setMinimumSize(220, 220)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-
-    def set_data(self, data):
-        self._data = data; self._total = sum(v for _, v, _ in data); self.update()
-
-    def paintEvent(self, event):
-        painter = QPainter(self); painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        size = min(self.width(), self.height()) - 20
-        x, y = (self.width() - size) / 2, (self.height() - size) / 2
-        rect = QRectF(x, y, size, size)
-        start = 90 * 16
-        for _, value, color in self._data:
-            span = int(value / self._total * 360 * 16) if self._total else 0
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QBrush(QColor(color)))
-            painter.drawPie(rect, start, -span)
-            start -= span
-        if self._donut:
-            hole = size * 0.52; hx, hy = (self.width()-hole)/2, (self.height()-hole)/2
-            painter.setBrush(QBrush(QColor("#FFFFFF")))
-            painter.drawEllipse(QRectF(hx, hy, hole, hole))
-        painter.end()
-
-
-# ── Horizontal Bar Chart ──────────────────────────────────────────────
-class _HBarChartWidget(QWidget):
-    def __init__(self, data: list[tuple[str, int, str]], parent=None):
-        super().__init__(parent)
-        self._data = data
-        self._max = max(v for _, v, _ in data) if data else 1
-        self.setMinimumHeight(len(data) * 38 + 10)
-
-    def set_data(self, data):
-        self._data = data
-        self._max = max(v for _, v, _ in data) if data else 1
-        self.setMinimumHeight(len(data) * 38 + 10)
-        self.update()
-
-    def paintEvent(self, event):
-        painter = QPainter(self); painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        bar_h, spacing, label_w, value_w = 22, 38, 130, 60
-        bar_area = self.width() - label_w - value_w - 20
-        font = QFont(); font.setPointSize(10); painter.setFont(font)
-        for i, (label, value, color) in enumerate(self._data):
-            y = i * spacing + 8
-            painter.setPen(QPen(QColor("#2C3E50")))
-            painter.drawText(QRectF(0, y, label_w, bar_h),
-                             Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, label)
-            bar_w = int((value / self._max) * bar_area) if self._max else 0
-            path = QPainterPath()
-            path.addRoundedRect(QRectF(label_w, y, bar_w, bar_h), 4, 4)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QBrush(QColor(color)))
-            painter.drawPath(path)
-            painter.setPen(QPen(QColor("#2C3E50")))
-            painter.drawText(QRectF(label_w + bar_area + 4, y, value_w, bar_h),
-                             Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
-                             f"{value:,}")
-        painter.end()
+from ui.shared.chart_widgets import (
+    PieChartWidget, HBarChartWidget,
+    CONDITION_COLORS, STATUS_COLORS, DEPT_COLORS, DEMO_COLORS, RETENTION_COLORS,
+)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -173,13 +98,13 @@ class AnalyticsPage(QWidget):
             # ── Row 1: Conditions + Appointment Status ────────────
             row1 = QHBoxLayout(); row1.setSpacing(20)
             cond_data = [(c["condition_name"], c["cnt"],
-                          _CONDITION_COLORS[i % len(_CONDITION_COLORS)])
+                          CONDITION_COLORS[i % len(CONDITION_COLORS)])
                          for i, c in enumerate(data.get("conditions", []))]
             row1.addWidget(self._pie_card("Patient Conditions",
                                           "Distribution of diagnosed conditions",
                                           cond_data or [("No data", 1, "#CCC")]))
             status_data = [(s["status"], s["cnt"],
-                            _STATUS_COLORS.get(s["status"], "#7F8C8D"))
+                            STATUS_COLORS.get(s["status"], "#7F8C8D"))
                            for s in data.get("appt_status", [])]
             row1.addWidget(self._pie_card("Appointment Status",
                                           "Current appointment outcomes",
@@ -189,13 +114,13 @@ class AnalyticsPage(QWidget):
             # ── Row 2: Revenue by Dept + Demographics ─────────────
             row2 = QHBoxLayout(); row2.setSpacing(20)
             dept_data = [(d["department_name"], int(d["total_revenue"]),
-                          _DEPT_COLORS[i % len(_DEPT_COLORS)])
+                          DEPT_COLORS[i % len(DEPT_COLORS)])
                          for i, d in enumerate(data.get("dept_revenue", []))]
             row2.addWidget(self._pie_card("Revenue by Department",
                                           "Revenue distribution by doctor department",
                                           dept_data or [("No data", 1, "#CCC")]))
             demo_data = [(d["age_group"], d["cnt"],
-                          _DEMO_COLORS.get(d["age_group"], "#7F8C8D"))
+                          DEMO_COLORS.get(d["age_group"], "#7F8C8D"))
                          for d in data.get("demographics", [])]
             row2.addWidget(self._pie_card("Patient Demographics",
                                           "Age group distribution",
@@ -318,7 +243,7 @@ class AnalyticsPage(QWidget):
                         for m in monthly]
             colors = ["#388087"] * len(bar_data)
             chart_data = [(lbl, val, c) for (lbl, val), c in zip(bar_data, colors)]
-            chart = _HBarChartWidget(chart_data)
+            chart = HBarChartWidget(chart_data)
             vbox.addWidget(chart)
             grand = sum(float(m.get("revenue", 0)) for m in monthly)
             total_row = QHBoxLayout(); total_row.addStretch()
@@ -402,7 +327,7 @@ class AnalyticsPage(QWidget):
         vbox.addWidget(t); vbox.addWidget(s)
 
         content = QHBoxLayout(); content.setSpacing(16)
-        chart = _PieChartWidget(data); chart.setFixedSize(200, 200)
+        chart = PieChartWidget(data); chart.setFixedSize(200, 200)
         content.addWidget(chart, alignment=Qt.AlignmentFlag.AlignCenter)
         legend = QVBoxLayout(); legend.setSpacing(6)
         total = sum(v for _, v, _ in data)

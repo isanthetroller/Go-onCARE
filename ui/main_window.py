@@ -9,16 +9,16 @@ from PyQt6.QtCore import Qt, pyqtSignal, QSize, QTimer
 from PyQt6.QtGui import QFont, QColor, QAction
 
 from ui.styles import MAIN_STYLE
-from ui.dashboard     import DashboardPage
-from ui.patients      import PatientsPage
-from ui.appointments  import AppointmentsPage
-from ui.clinical      import ClinicalPage
-from ui.employees     import EmployeesPage
-from ui.hr_employees  import HREmployeesPage
-from ui.analytics     import AnalyticsPage
-from ui.settings      import SettingsPage
-from ui.activity_log  import ActivityLogPage
-from backend          import AuthBackend
+from ui.shared.dashboard_page     import DashboardPage
+from ui.shared.patients_page      import PatientsPage
+from ui.shared.appointments_page  import AppointmentsPage
+from ui.shared.clinical_page      import ClinicalPage
+from ui.shared.employees_page     import EmployeesPage
+from ui.shared.hr_employees_page  import HREmployeesPage
+from ui.shared.analytics_page     import AnalyticsPage
+from ui.shared.settings_page      import SettingsPage
+from ui.shared.activity_log_page  import ActivityLogPage
+from backend                      import AuthBackend
 
 
 _ALL_NAV = [
