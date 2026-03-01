@@ -33,14 +33,18 @@ class SettingsMixin:
                     "DELETE ii FROM invoice_items ii INNER JOIN invoices i ON ii.invoice_id=i.invoice_id INNER JOIN appointments a ON i.appointment_id=a.appointment_id WHERE a.status='Completed' AND a.appointment_date<%s",
                     "DELETE i FROM invoices i INNER JOIN appointments a ON i.appointment_id=a.appointment_id WHERE a.status='Completed' AND a.appointment_date<%s",
                     "DELETE q FROM queue_entries q INNER JOIN appointments a ON q.appointment_id=a.appointment_id WHERE a.status='Completed' AND a.appointment_date<%s",
-                    "DELETE FROM appointments WHERE status='Completed' AND appointment_date<%s",
                 ]:
                     cur.execute(q, (before_date,))
+                cur.execute("DELETE FROM appointments WHERE status='Completed' AND appointment_date<%s", (before_date,))
                 removed = cur.rowcount
                 conn.commit()
             self.log_activity("Deleted", "Appointment", f"Cleaned {removed} completed appts before {before_date}")
             return removed
         except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
             return 0
 
     def cleanup_cancelled_appointments(self):
@@ -51,14 +55,18 @@ class SettingsMixin:
                     "DELETE ii FROM invoice_items ii INNER JOIN invoices i ON ii.invoice_id=i.invoice_id INNER JOIN appointments a ON i.appointment_id=a.appointment_id WHERE a.status='Cancelled'",
                     "DELETE i FROM invoices i INNER JOIN appointments a ON i.appointment_id=a.appointment_id WHERE a.status='Cancelled'",
                     "DELETE q FROM queue_entries q INNER JOIN appointments a ON q.appointment_id=a.appointment_id WHERE a.status='Cancelled'",
-                    "DELETE FROM appointments WHERE status='Cancelled'",
                 ]:
                     cur.execute(q)
+                cur.execute("DELETE FROM appointments WHERE status='Cancelled'")
                 removed = cur.rowcount
                 conn.commit()
             self.log_activity("Deleted", "Appointment", f"Cleaned {removed} cancelled appointments")
             return removed
         except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
             return 0
 
     def cleanup_inactive_patients(self):
@@ -71,14 +79,18 @@ class SettingsMixin:
                     "DELETE q FROM queue_entries q INNER JOIN patients p ON q.patient_id=p.patient_id WHERE p.status='Inactive'",
                     "DELETE a FROM appointments a INNER JOIN patients p ON a.patient_id=p.patient_id WHERE p.status='Inactive'",
                     "DELETE FROM patient_conditions WHERE patient_id IN (SELECT patient_id FROM patients WHERE status='Inactive')",
-                    "DELETE FROM patients WHERE status='Inactive'",
                 ]:
                     cur.execute(q)
+                cur.execute("DELETE FROM patients WHERE status='Inactive'")
                 removed = cur.rowcount
                 conn.commit()
             self.log_activity("Deleted", "Patient", f"Cleaned {removed} inactive patients")
             return removed
         except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
             return 0
 
     def truncate_table(self, table_name):

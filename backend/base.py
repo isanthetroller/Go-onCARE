@@ -58,15 +58,21 @@ class DatabaseBase:
 
     def exec_many(self, queries):
         """Run multiple write queries in one transaction.
-        queries = [(sql, params), ...]. Returns rowcount or False."""
+        queries = [(sql, params), ...]. Returns total rowcount or False."""
         try:
             conn = self._get_connection()
+            total = 0
             with conn.cursor() as cur:
                 for sql, params in queries:
                     cur.execute(sql, params or ())
+                    total += cur.rowcount
                 conn.commit()
-                return cur.rowcount
+            return total
         except Error:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
             return False
 
     # ── Activity Log ──────────────────────────────────────────────

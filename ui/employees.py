@@ -44,7 +44,7 @@ class EmployeeDialog(QDialog):
         self.name_edit.setMinimumWidth(320)
 
         self.role_combo = QComboBox(); self.role_combo.setObjectName("formCombo")
-        self.role_combo.addItems(["Doctor", "Cashier", "Receptionist", "Lab Tech", "Admin", "Pharmacist", "HR"])
+        self.role_combo.addItems(["Doctor", "Cashier", "Receptionist", "Admin", "HR"])
         self.role_combo.setMinimumHeight(38)
 
         self.dept_combo = QComboBox(); self.dept_combo.setObjectName("formCombo")
@@ -58,12 +58,31 @@ class EmployeeDialog(QDialog):
         self.type_combo.addItems(["Full-time", "Part-time", "Contract"])
         self.type_combo.setMinimumHeight(38)
 
+        # Phone: permanent +63 prefix + 10-digit input
+        self._phone_row = QWidget()
+        phone_lay = QHBoxLayout(self._phone_row)
+        phone_lay.setContentsMargins(0, 0, 0, 0)
+        phone_lay.setSpacing(0)
+        self._phone_prefix = QLabel("+63")
+        self._phone_prefix.setStyleSheet(
+            "QLabel { padding: 10px 10px; border: 2px solid #BADFE7;"
+            " border-right: none; border-radius: 10px 0px 0px 10px;"
+            " font-size: 13px; font-weight: bold; background: #F0F7F8;"
+            " color: #2C3E50; }"
+        )
+        self._phone_prefix.setFixedHeight(38)
         self.phone_edit = QLineEdit()
-        self.phone_edit.setStyleSheet(self._INPUT_STYLE)
-        self.phone_edit.setPlaceholderText("+639XXXXXXXXX")
+        self.phone_edit.setStyleSheet(
+            "QLineEdit { padding: 10px 14px; border: 2px solid #BADFE7;"
+            " border-left: none; border-radius: 0px 10px 10px 0px;"
+            " font-size: 13px; background-color: #FFFFFF; color: #2C3E50; }"
+            "QLineEdit:focus { border: 2px solid #388087; border-left: none; }"
+        )
+        self.phone_edit.setPlaceholderText("9XXXXXXXXX")
         self.phone_edit.setMinimumHeight(38)
-        self.phone_edit.setMaxLength(13)
-        self.phone_edit.setMinimumWidth(320)
+        self.phone_edit.setMaxLength(10)
+        phone_lay.addWidget(self._phone_prefix)
+        phone_lay.addWidget(self.phone_edit, 1)
 
         self.email_edit = QLineEdit()
         self.email_edit.setStyleSheet(self._INPUT_STYLE)
@@ -73,6 +92,7 @@ class EmployeeDialog(QDialog):
 
         self.hire_date = QDateEdit(); self.hire_date.setCalendarPopup(True)
         self.hire_date.setDate(QDate.currentDate()); self.hire_date.setObjectName("formCombo")
+        self.hire_date.setMaximumDate(QDate.currentDate())  # Cannot hire in the future
         self.hire_date.setMinimumHeight(38)
 
         self.status_combo = QComboBox(); self.status_combo.setObjectName("formCombo")
@@ -87,7 +107,7 @@ class EmployeeDialog(QDialog):
         form.addRow("Role",        self.role_combo)
         form.addRow("Department",  self.dept_combo)
         form.addRow("Type",        self.type_combo)
-        form.addRow("Phone",       self.phone_edit)
+        form.addRow("Phone",       self._phone_row)
         form.addRow("Email",       self.email_edit)
         form.addRow("Hire Date",   self.hire_date)
         form.addRow("Status",      self.status_combo)
@@ -130,7 +150,10 @@ class EmployeeDialog(QDialog):
                 idx = combo.findText(data.get(key, ""))
                 if idx >= 0:
                     combo.setCurrentIndex(idx)
-            self.phone_edit.setText(data.get("phone", ""))
+            raw_phone = data.get("phone", "")
+            if raw_phone.startswith("+63"):
+                raw_phone = raw_phone[3:]
+            self.phone_edit.setText(raw_phone)
             self.email_edit.setText(data.get("email", ""))
 
     def _on_fire(self):
@@ -150,11 +173,11 @@ class EmployeeDialog(QDialog):
             QMessageBox.warning(self, "Validation", "Phone number is required."); return
         if not self.email_edit.text().strip():
             QMessageBox.warning(self, "Validation", "Email is required."); return
-        phone = self.phone_edit.text().strip()
-        if not re.match(r'^\+63\d{10}$', phone):
+        digits = self.phone_edit.text().strip()
+        if not re.match(r'^\d{10}$', digits):
             QMessageBox.warning(self, "Validation",
-                                "Phone must be in Philippine format: +63 followed by 10 digits\n"
-                                "Example: +639171234567")
+                                "Enter exactly 10 digits after +63\n"
+                                "Example: 9171234567")
             return
         super().accept()
 
@@ -164,7 +187,7 @@ class EmployeeDialog(QDialog):
             "role":        self.role_combo.currentText(),
             "dept":        self.dept_combo.currentText(),
             "type":        self.type_combo.currentText(),
-            "phone":       self.phone_edit.text(),
+            "phone":       "+63" + self.phone_edit.text().strip(),
             "email":       self.email_edit.text(),
             "hire_date":   self.hire_date.date().toString("yyyy-MM-dd"),
             "status":      self.status_combo.currentText(),
@@ -179,12 +202,13 @@ class EmployeeDialog(QDialog):
 class EmployeeProfileDialog(QDialog):
     """Read-only profile with tabs: Info, Appointments, Performance."""
 
-    def __init__(self, parent=None, *, emp_data=None, backend=None):
+    def __init__(self, parent=None, *, emp_data=None, backend=None, role: str = "Admin"):
         super().__init__(parent)
         self.setWindowTitle(f"Employee Profile – {emp_data.get('full_name', '')}")
         self.setMinimumSize(620, 500)
         self._backend = backend
         self._emp = emp_data or {}
+        self._role = role
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(20, 20, 20, 20)
@@ -243,7 +267,9 @@ class EmployeeProfileDialog(QDialog):
             si.setForeground(QColor(clr))
             at.setItem(r, 4, si)
         appt_lay.addWidget(at)
-        tabs.addTab(appt_w, f"Appointments ({len(appts)})")
+        # Hide appointments tab for Receptionist role
+        if self._role != "Receptionist":
+            tabs.addTab(appt_w, f"Appointments ({len(appts)})")
 
         # ── Performance Tab ──────────────────────────────────────
         perf_w = QWidget()
@@ -409,7 +435,7 @@ class EmployeesPage(QWidget):
 
         self.role_filter = QComboBox()
         self.role_filter.setObjectName("formCombo")
-        self.role_filter.addItems(["All Roles", "Doctor", "Cashier", "Receptionist", "Lab Tech", "Admin", "Pharmacist", "HR"])
+        self.role_filter.addItems(["All Roles", "Doctor", "Cashier", "Receptionist", "Admin", "HR"])
         self.role_filter.setMinimumHeight(42); self.role_filter.setMinimumWidth(140)
         self.role_filter.currentTextChanged.connect(lambda _: self._apply_filters())
         bar.addWidget(self.role_filter)
@@ -480,7 +506,7 @@ class EmployeesPage(QWidget):
         if row >= len(self._employees):
             return
         emp = self._employees[row]
-        dlg = EmployeeProfileDialog(self, emp_data=emp, backend=self._backend)
+        dlg = EmployeeProfileDialog(self, emp_data=emp, backend=self._backend, role=self._role)
         dlg.exec()
 
     # ── Add ───────────────────────────────────────────────────────
@@ -491,6 +517,23 @@ class EmployeesPage(QWidget):
             d = dlg.get_data()
             if not d["name"].strip():
                 QMessageBox.warning(self, "Validation", "Employee name is required.")
+                return
+            # Check for duplicate phone number
+            phone = d.get("phone", "").strip()
+            if phone and self._backend:
+                existing = self._backend.fetch(
+                    "SELECT employee_id, CONCAT(first_name,' ',last_name) AS full_name "
+                    "FROM employees WHERE phone=%s", (phone,), one=True)
+                if existing:
+                    QMessageBox.warning(self, "Duplicate Phone",
+                        f"Phone number {phone} is already assigned to "
+                        f"{existing['full_name']} (ID: {existing['employee_id']}).")
+                    return
+            # Confirmation dialog
+            reply = QMessageBox.question(self, "Confirm Add Employee",
+                f"Are you sure you want to add '{d['name']}' as a new employee?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply != QMessageBox.StandardButton.Yes:
                 return
             ok = self._backend.add_employee(d)
             if ok is True:

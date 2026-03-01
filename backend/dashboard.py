@@ -66,7 +66,7 @@ class DashboardMixin:
 
     def get_patient_stats_monthly(self, months=6):
         return self.fetch("""
-            SELECT DATE_FORMAT(appointment_date, '%%b') AS month_label,
+            SELECT MONTHNAME(appointment_date) AS month_label,
                    DATE_FORMAT(appointment_date, '%%Y-%%m') AS sort_key,
                    COUNT(*) AS visit_count
             FROM appointments

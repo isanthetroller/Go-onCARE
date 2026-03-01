@@ -292,7 +292,7 @@ class PatientsPage(QWidget):
         title_col.addWidget(title); title_col.addWidget(sub)
         banner_lay.addLayout(title_col); banner_lay.addStretch()
 
-        if self._role != "Cashier":
+        if self._role not in ("Cashier", "Doctor"):
             add_btn = QPushButton("\uff0b  Add Patient"); add_btn.setObjectName("bannerBtn")
             add_btn.setMinimumHeight(42); add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             add_btn.clicked.connect(self._on_add)

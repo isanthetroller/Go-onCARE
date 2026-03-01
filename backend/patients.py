@@ -75,6 +75,10 @@ class PatientMixin:
             self.log_activity("Created", "Patient", f"{data['first_name']} {data['last_name']}")
             return True
         except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
             return False
 
     def update_patient(self, patient_id, data):
@@ -94,6 +98,10 @@ class PatientMixin:
             self.log_activity("Edited", "Patient", f"{data['first_name']} {data['last_name']}")
             return True
         except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
             return False
 
     def delete_patient(self, patient_id):

@@ -1,12 +1,65 @@
 """Authentication window – Login screen with forced password change."""
 
 from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QLabel,
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QLineEdit, QPushButton, QMessageBox, QFrame,
-    QGraphicsDropShadowEffect, QDialog, QFormLayout,
+    QGraphicsDropShadowEffect, QDialog, QFormLayout, QAbstractButton,
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QSize, QRect
+from PyQt6.QtCore import Qt, pyqtSignal, QSize, QRect, QRectF, QPointF
 from PyQt6.QtGui import QColor, QPainter, QBrush, QPen, QPainterPath
+
+
+class _EyeToggleButton(QAbstractButton):
+    """Custom-painted eye icon button for password visibility toggle."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._visible = False          # password is hidden by default
+        self.setFixedSize(46, 46)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setToolTip("Show / Hide password")
+
+    @property
+    def showing(self) -> bool:
+        return self._visible
+
+    @showing.setter
+    def showing(self, val: bool):
+        self._visible = val
+        self.update()
+
+    def sizeHint(self):
+        return QSize(46, 46)
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        pen = QPen(QColor("#388087"), 2.0)
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+
+        cx, cy = self.width() / 2, self.height() / 2
+        ew, eh = 22.0, 12.0  # eye width / height
+
+        # Draw eye shape (two arcs)
+        path = QPainterPath()
+        path.moveTo(cx - ew / 2, cy)
+        path.quadTo(cx, cy - eh, cx + ew / 2, cy)
+        path.quadTo(cx, cy + eh, cx - ew / 2, cy)
+        p.drawPath(path)
+
+        # Pupil
+        p.setBrush(QBrush(QColor("#388087")))
+        p.drawEllipse(QPointF(cx, cy), 3.5, 3.5)
+
+        # Slash line when password is hidden
+        if not self._visible:
+            slash_pen = QPen(QColor("#388087"), 2.2)
+            p.setPen(slash_pen)
+            p.drawLine(QPointF(cx - 10, cy + 8), QPointF(cx + 10, cy - 8))
+
+        p.end()
 
 from ui.styles import AUTH_STYLE
 from backend import AuthBackend
@@ -83,8 +136,18 @@ class AuthWindow(QMainWindow):
 
         self.login_email = self._input("Email address")
         self.login_pw    = self._input("Password", password=True)
+        # Allow Enter key to trigger login from either field
+        self.login_email.returnPressed.connect(self._on_login)
+        self.login_pw.returnPressed.connect(self._on_login)
         lay.addWidget(self.login_email)
-        lay.addWidget(self.login_pw)
+
+        # Password row with toggle visibility button
+        pw_row = QHBoxLayout(); pw_row.setSpacing(0)
+        pw_row.addWidget(self.login_pw)
+        self._pw_toggle = _EyeToggleButton()
+        self._pw_toggle.clicked.connect(self._toggle_login_pw)
+        pw_row.addWidget(self._pw_toggle)
+        lay.addLayout(pw_row)
 
         lay.addSpacing(4)
 
@@ -154,6 +217,14 @@ class AuthWindow(QMainWindow):
             le.setEchoMode(QLineEdit.EchoMode.Password)
         return le
 
+    def _toggle_login_pw(self):
+        if self.login_pw.echoMode() == QLineEdit.EchoMode.Password:
+            self.login_pw.setEchoMode(QLineEdit.EchoMode.Normal)
+            self._pw_toggle.showing = True
+        else:
+            self.login_pw.setEchoMode(QLineEdit.EchoMode.Password)
+            self._pw_toggle.showing = False
+
     def _err(self, msg: str):
         QMessageBox.warning(self, "Validation Error", msg)
 
@@ -206,8 +277,24 @@ class _ForcePasswordChangeDialog(QDialog):
         self.confirm_pw.setMinimumHeight(42)
         self.confirm_pw.setStyleSheet(self.new_pw.styleSheet())
 
-        form.addRow("New Password", self.new_pw)
-        form.addRow("Confirm", self.confirm_pw)
+        # New password row with toggle
+        new_pw_row = QHBoxLayout(); new_pw_row.setSpacing(0)
+        new_pw_row.addWidget(self.new_pw)
+        self._new_pw_toggle = _EyeToggleButton()
+        self._new_pw_toggle.setFixedSize(42, 42)
+        self._new_pw_toggle.clicked.connect(lambda: self._toggle_pw_field(self.new_pw, self._new_pw_toggle))
+        new_pw_row.addWidget(self._new_pw_toggle)
+
+        # Confirm password row with toggle
+        confirm_pw_row = QHBoxLayout(); confirm_pw_row.setSpacing(0)
+        confirm_pw_row.addWidget(self.confirm_pw)
+        self._confirm_pw_toggle = _EyeToggleButton()
+        self._confirm_pw_toggle.setFixedSize(42, 42)
+        self._confirm_pw_toggle.clicked.connect(lambda: self._toggle_pw_field(self.confirm_pw, self._confirm_pw_toggle))
+        confirm_pw_row.addWidget(self._confirm_pw_toggle)
+
+        form.addRow("New Password", new_pw_row)
+        form.addRow("Confirm", confirm_pw_row)
         lay.addLayout(form)
         lay.addSpacing(8)
 
@@ -239,3 +326,12 @@ class _ForcePasswordChangeDialog(QDialog):
             (new_pw, self._email))
         QMessageBox.information(self, "Success", "Password changed successfully!\nYou can now log in with your new password.")
         self.accept()
+
+    @staticmethod
+    def _toggle_pw_field(field: QLineEdit, btn: _EyeToggleButton):
+        if field.echoMode() == QLineEdit.EchoMode.Password:
+            field.setEchoMode(QLineEdit.EchoMode.Normal)
+            btn.showing = True
+        else:
+            field.setEchoMode(QLineEdit.EchoMode.Password)
+            btn.showing = False

@@ -260,7 +260,11 @@ class AppointmentsPage(QWidget):
     def _load_from_db(self):
         if not self._backend:
             self._all_appointments = []; return
-        self._all_appointments = self._backend.get_appointments() or []
+        # Doctor sees only their own appointments
+        if self._role == "Doctor" and self._user_email:
+            self._all_appointments = self._backend.get_appointments_for_doctor(self._user_email) or []
+        else:
+            self._all_appointments = self._backend.get_appointments() or []
         for appt in self._all_appointments:
             d = appt.get("appointment_date")
             if hasattr(d, "strftime"): appt["appointment_date"] = d.strftime("%Y-%m-%d")
@@ -298,7 +302,7 @@ class AppointmentsPage(QWidget):
         sub = QLabel("View and manage all doctor-patient appointments"); sub.setObjectName("bannerSubtitle")
         tc.addWidget(title); tc.addWidget(sub)
         banner_lay.addLayout(tc); banner_lay.addStretch()
-        if self._role != "Cashier":
+        if self._role not in ("Cashier", "Doctor"):
             add_btn = QPushButton("\uff0b  New Appointment"); add_btn.setObjectName("bannerBtn")
             add_btn.setMinimumHeight(42); add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             add_btn.clicked.connect(self._on_new)
@@ -335,6 +339,7 @@ class AppointmentsPage(QWidget):
 
         # Table – added Notes column
         cols = ["Day & Date", "Time", "Patient", "Doctor", "Service", "Notes", "Status"]
+        if self._role != "Doctor": cols.append("Billing")
         if self._role != "Cashier": cols.append("Actions")
         self.table = QTableWidget(0, len(cols)); self.table.setHorizontalHeaderLabels(cols)
         hdr = self.table.horizontalHeader(); hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
@@ -396,12 +401,20 @@ class AppointmentsPage(QWidget):
             values = [date_display, time_display, appt.get("patient_name",""),
                       appt.get("doctor_name",""), appt.get("service_name",""),
                       notes_preview, appt.get("status","")]
+            # Add billing status for non-Doctor roles
+            if self._role != "Doctor":
+                values.append(appt.get("billing_status", "No Invoice"))
             for c, val in enumerate(values):
                 item = QTableWidgetItem(str(val))
                 if c == 0: item.setFont(QFont("Segoe UI", 10))
                 if c == 6:
                     color_map = {"Confirmed":"#5CB85C","Pending":"#E8B931","Cancelled":"#D9534F","Completed":"#388087"}
                     item.setForeground(QColor(color_map.get(val,"#2C3E50")))
+                    item.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+                # Billing column color coding
+                if self._role != "Doctor" and c == 7:
+                    bill_colors = {"Paid":"#5CB85C","Partial":"#E8B931","Unpaid":"#D9534F","No Invoice":"#7F8C8D","Voided":"#7F8C8D"}
+                    item.setForeground(QColor(bill_colors.get(val,"#2C3E50")))
                     item.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
                 self.table.setItem(r, c, item)
             if self._role != "Cashier":

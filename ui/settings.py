@@ -43,10 +43,6 @@ class SettingsPage(QWidget):
         s = QLabel("Database maintenance, appearance, and profile"); s.setObjectName("bannerSubtitle")
         tc.addWidget(t); tc.addWidget(s)
         bl.addLayout(tc); bl.addStretch()
-        ref = QPushButton("\u21BB  Refresh"); ref.setObjectName("bannerBtn")
-        ref.setMinimumHeight(42); ref.setCursor(Qt.CursorShape.PointingHandCursor)
-        ref.clicked.connect(self._refresh_counts)
-        bl.addWidget(ref, alignment=Qt.AlignmentFlag.AlignVCenter)
         lay.addWidget(banner)
 
         # ── Profile & Appearance Card ──────────────────────────────

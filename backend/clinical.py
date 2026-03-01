@@ -48,9 +48,14 @@ class ClinicalMixin:
                         VALUES (%s,%s,%s,%s,%s,'Waiting',CURDATE())
                     """, (r["patient_id"], r["doctor_id"], r["appointment_id"], r["appointment_time"], r["service_name"]))
                 conn.commit()
-            self.log_activity("Created", "Queue", f"Synced {len(rows)} appointments to queue")
+            if rows:
+                self.log_activity("Created", "Queue", f"Synced {len(rows)} appointments to queue")
             return len(rows)
         except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
             return 0
 
     def call_next_queue(self, doctor_id=None):
@@ -71,6 +76,10 @@ class ClinicalMixin:
                     conn.commit()
             return entry or {}
         except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
             return {}
 
     def get_avg_consultation_minutes(self):
@@ -96,9 +105,7 @@ class ClinicalMixin:
         try:
             conn = self._get_connection()
             with conn.cursor() as cur:
-                parts = data["patient_name"].rsplit(" ", 1)
-                first, last = parts[0], parts[1] if len(parts) > 1 else ""
-                cur.execute("SELECT patient_id FROM patients WHERE first_name=%s AND last_name=%s LIMIT 1", (first, last))
+                cur.execute("SELECT patient_id FROM patients WHERE CONCAT(first_name,' ',last_name)=%s LIMIT 1", (data["patient_name"],))
                 prow = cur.fetchone()
                 if not prow:
                     return False
@@ -108,23 +115,26 @@ class ClinicalMixin:
                 if not items and data.get("service_id"):
                     items = [{"service_id": data["service_id"], "quantity": data.get("quantity", 1), "discount": data.get("discount", 0)}]
 
-                grand_total, line_items = 0.0, []
+                grand_total, total_before_discount, line_items = 0.0, 0.0, []
                 for item in items:
                     cur.execute("SELECT price FROM services WHERE service_id=%s", (item["service_id"],))
                     srow = cur.fetchone()
                     up = float(srow[0]) if srow else 0
                     qty = int(item.get("quantity", 1))
                     disc = float(item.get("discount", 0))
-                    sub = up * qty
-                    grand_total += sub * (1 - disc / 100)
+                    sub_raw = up * qty
+                    sub = sub_raw * (1 - disc / 100)
+                    total_before_discount += sub_raw
+                    grand_total += sub
                     line_items.append((item["service_id"], qty, up, sub))
 
+                effective_discount = round((1 - grand_total / total_before_discount) * 100, 2) if total_before_discount > 0 else 0
                 cur.execute("""
                     INSERT INTO invoices (patient_id, appointment_id, method_id,
                         discount_percent, total_amount, amount_paid, status, notes)
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
                 """, (patient_id, data.get("appointment_id") or None, data.get("method_id"),
-                      data.get("discount", 0), grand_total, 0, "Unpaid", data.get("notes", "")))
+                      effective_discount, grand_total, 0, "Unpaid", data.get("notes", "")))
                 inv_id = cur.lastrowid
                 for sid, qty, up, sub in line_items:
                     cur.execute("INSERT INTO invoice_items (invoice_id, service_id, quantity, unit_price, subtotal) VALUES (%s,%s,%s,%s,%s)",
@@ -133,6 +143,10 @@ class ClinicalMixin:
             self.log_activity("Created", "Invoice", f"Invoice #{inv_id} for {data['patient_name']}")
             return True
         except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
             return False
 
     def add_payment(self, invoice_id, amount, method_id=None):
@@ -143,8 +157,14 @@ class ClinicalMixin:
                 row = cur.fetchone()
                 if not row:
                     return False
-                new_paid = float(row[1]) + amount
-                status = "Paid" if new_paid >= float(row[0]) else "Partial"
+                total_amount = float(row[0])
+                current_paid = float(row[1])
+                remaining = total_amount - current_paid
+                if remaining <= 0:
+                    return False
+                actual_amount = min(amount, remaining)
+                new_paid = current_paid + actual_amount
+                status = "Paid" if new_paid >= total_amount else "Partial"
                 q, p = "UPDATE invoices SET amount_paid=%s, status=%s", [new_paid, status]
                 if method_id:
                     q += ", method_id=%s"
@@ -154,6 +174,10 @@ class ClinicalMixin:
             self.log_activity("Edited", "Invoice", f"Payment added to invoice #{invoice_id}")
             return True
         except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
             return False
 
     def void_invoice(self, invoice_id):
@@ -180,16 +204,14 @@ class ClinicalMixin:
         return {"info": info, "items": items}
 
     def get_today_completed_appointments_for_patient(self, patient_name):
-        parts = patient_name.rsplit(" ", 1)
-        first, last = parts[0], parts[1] if len(parts) > 1 else ""
         return self.fetch("""
             SELECT a.appointment_id, a.appointment_time, s.service_name
             FROM appointments a
             INNER JOIN patients p ON a.patient_id = p.patient_id
             INNER JOIN services s ON a.service_id = s.service_id
-            WHERE p.first_name=%s AND p.last_name=%s
+            WHERE CONCAT(p.first_name,' ',p.last_name)=%s
               AND a.appointment_date = CURDATE() AND a.status = 'Completed'
-        """, (first, last))
+        """, (patient_name,))
 
     def get_payment_methods(self):
         return self.fetch("SELECT method_id, method_name FROM payment_methods ORDER BY method_name")

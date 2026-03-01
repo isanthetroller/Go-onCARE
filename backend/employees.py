@@ -148,6 +148,10 @@ class EmployeeMixin:
             return True
         except Exception as e:
             import traceback; traceback.print_exc()
+            try:
+                conn.rollback()
+            except Exception:
+                pass
             return str(e)
 
     def update_employee(self, employee_id, data, old_email=""):
@@ -204,13 +208,25 @@ class EmployeeMixin:
             return True
         except Exception as e:
             import traceback; traceback.print_exc()
+            try:
+                conn.rollback()
+            except Exception:
+                pass
             return str(e)
 
     def delete_employee(self, employee_id):
         row = self.fetch("SELECT email, CONCAT(first_name,' ',last_name) AS n FROM employees WHERE employee_id=%s",
                          (employee_id,), one=True)
         queries = [
+            ("DELETE ii FROM invoice_items ii INNER JOIN invoices i ON ii.invoice_id=i.invoice_id "
+             "INNER JOIN appointments a ON i.appointment_id=a.appointment_id WHERE a.doctor_id=%s", (employee_id,)),
+            ("DELETE i FROM invoices i INNER JOIN appointments a ON i.appointment_id=a.appointment_id "
+             "WHERE a.doctor_id=%s", (employee_id,)),
             ("DELETE FROM queue_entries WHERE doctor_id=%s", (employee_id,)),
+            ("DELETE FROM appointments WHERE doctor_id=%s", (employee_id,)),
+            ("DELETE FROM notifications WHERE employee_id=%s", (employee_id,)),
+            ("UPDATE leave_requests SET hr_decided_by=NULL WHERE hr_decided_by=%s", (employee_id,)),
+            ("DELETE FROM leave_requests WHERE employee_id=%s", (employee_id,)),
             ("DELETE FROM employees WHERE employee_id=%s", (employee_id,)),
         ]
         if row and row.get("email"):
@@ -392,6 +408,10 @@ class EmployeeMixin:
             return True
         except Exception as e:
             import traceback; traceback.print_exc()
+            try:
+                conn.rollback()
+            except Exception:
+                pass
             return str(e)
 
     def decline_leave_request(self, request_id, hr_employee_id, hr_note):
@@ -426,6 +446,10 @@ class EmployeeMixin:
             return True
         except Exception as e:
             import traceback; traceback.print_exc()
+            try:
+                conn.rollback()
+            except Exception:
+                pass
             return str(e)
 
     def get_unread_notifications(self, employee_id):
@@ -439,3 +463,11 @@ class EmployeeMixin:
         """Mark all notifications as read for an employee."""
         self.exec("UPDATE notifications SET is_read=1 WHERE employee_id=%s AND is_read=0",
                   (employee_id,))
+
+    # ── Leave Auto-Expiry ─────────────────────────────────────
+
+    def auto_expire_leaves(self):
+        """Restore employees to Active whose leave_until date has passed."""
+        return self.exec(
+            "UPDATE employees SET status='Active', leave_from=NULL, leave_until=NULL "
+            "WHERE status='On Leave' AND leave_until IS NOT NULL AND leave_until < CURDATE()")

@@ -41,9 +41,6 @@ class ActivityLogPage(QWidget):
             s = QLabel("Audit trail of all system actions"); s.setObjectName("bannerSubtitle")
         tc.addWidget(t); tc.addWidget(s)
         bl.addLayout(tc); bl.addStretch()
-        ref = QPushButton("\u21BB  Refresh"); ref.setObjectName("bannerBtn"); ref.setMinimumHeight(42)
-        ref.setCursor(Qt.CursorShape.PointingHandCursor); ref.clicked.connect(self.refresh)
-        bl.addWidget(ref, alignment=Qt.AlignmentFlag.AlignVCenter)
         lay.addWidget(banner)
 
         # ── Filters row ──────────────────────────────────────────

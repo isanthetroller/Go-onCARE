@@ -90,6 +90,15 @@ class MainWindow(QMainWindow):
             self._notif_timer.timeout.connect(self._check_notifications)
             self._notif_timer.start(15_000)
 
+        # ── Auto-expire leaves past their end date ────────────────────
+        try:
+            self._backend.auto_expire_leaves()
+        except Exception:
+            pass
+        self._leave_timer = QTimer(self)
+        self._leave_timer.timeout.connect(lambda: self._backend.auto_expire_leaves())
+        self._leave_timer.start(300_000)  # check every 5 minutes
+
     # ── Sidebar ────────────────────────────────────────────────────────
     def _build_sidebar(self) -> QWidget:
         sidebar = QWidget()

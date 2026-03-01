@@ -151,15 +151,6 @@ class AnalyticsPage(QWidget):
         tc.addWidget(self._lbl("Data Analytics & Reports", "bannerTitle"))
         tc.addWidget(self._lbl("Hospital performance, revenue, trends, and insights", "bannerSubtitle"))
         banner_lay.addLayout(tc); banner_lay.addStretch()
-
-        if self._role == "Admin":
-            for text, slot in [
-                ("↻ Refresh", self._on_refresh),
-            ]:
-                btn = QPushButton(text); btn.setObjectName("bannerBtn")
-                btn.setMinimumHeight(42); btn.setCursor(Qt.CursorShape.PointingHandCursor)
-                btn.clicked.connect(slot)
-                banner_lay.addWidget(btn, alignment=Qt.AlignmentFlag.AlignVCenter)
         lay.addWidget(banner)
 
         # ── Doctor-only view: own performance & revenue ───────────

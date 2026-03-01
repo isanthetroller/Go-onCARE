@@ -35,7 +35,7 @@ class _BarChartWidget(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         w = self.width()
-        bar_h, spacing, label_w, padding_r = 22, 38, 36, 40
+        bar_h, spacing, label_w, padding_r = 22, 38, 80, 40
         for i, (label, value) in enumerate(self._data):
             y = i * spacing + 6
             painter.setPen(QColor("#7F8C8D"))
@@ -98,15 +98,25 @@ class DashboardPage(QWidget):
             ("active_staff",    "Active Staff",         "#C2EDCE"),
         ]
         for key, title, color in self._kpi_cards_data:
+            # HR should not see Active Patients or Today's Appointments
+            if self._role == "HR" and key in ("today_appts", "active_patients"):
+                continue
             kpi_row.addWidget(self._make_kpi_card(key, title, color))
         lay.addLayout(kpi_row)
 
         # Quick actions
         act_row = QHBoxLayout(); act_row.setSpacing(12)
-        for text, pi in [
+        quick_actions = [
             ("\u2795  New Patient", 1), ("\U0001F4C5  New Appointment", 2),
             ("\U0001F3E5  Clinical Queue", 3), ("\U0001F4CA  Analytics", 4),
-        ]:
+        ]
+        for text, pi in quick_actions:
+            # Doctor cannot add patients or create appointments
+            if self._role == "Doctor" and pi in (1, 2):
+                continue
+            # HR has no access to these pages
+            if self._role == "HR" and pi in (1, 2, 3, 4):
+                continue
             btn = QPushButton(text)
             btn.setObjectName("actionBtn")
             btn.setMinimumHeight(44)
@@ -162,6 +172,10 @@ class DashboardPage(QWidget):
         cols.addWidget(self._schedule_card(), 3)
         cols.addWidget(self._chart_card(), 2)
         lay.addLayout(cols)
+
+        # Recent Activity feed (Admin & HR only)
+        if self._role in ("Admin",):
+            lay.addWidget(self._recent_activity_card())
 
         lay.addStretch()
         scroll.setWidget(inner)
@@ -317,6 +331,47 @@ class DashboardPage(QWidget):
         vbox.addLayout(summary)
         return card
 
+    # ── Recent Activity card ──────────────────────────────────────
+    def _recent_activity_card(self):
+        card = QFrame(); card.setObjectName("card")
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(18); shadow.setOffset(0, 3)
+        shadow.setColor(QColor(0, 0, 0, 12))
+        card.setGraphicsEffect(shadow)
+
+        vbox = QVBoxLayout(card)
+        vbox.setContentsMargins(20, 18, 20, 14); vbox.setSpacing(12)
+
+        hdr = QHBoxLayout()
+        title = QLabel("Recent Activity"); title.setObjectName("cardTitle")
+        hdr.addWidget(title); hdr.addStretch()
+        self._activity_badge = QLabel("0 entries")
+        self._activity_badge.setStyleSheet(
+            "background-color:#BADFE7; color:#388087; border-radius:10px;"
+            "padding:3px 10px; font-size:11px; font-weight:bold;")
+        hdr.addWidget(self._activity_badge)
+        vbox.addLayout(hdr)
+
+        self._activity_table = QTableWidget(0, 5)
+        self._activity_table.setHorizontalHeaderLabels(
+            ["Time", "User", "Action", "Type", "Detail"])
+        self._activity_table.horizontalHeader().setStretchLastSection(True)
+        self._activity_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Stretch)
+        self._activity_table.verticalHeader().setVisible(False)
+        self._activity_table.setEditTriggers(
+            QTableWidget.EditTrigger.NoEditTriggers)
+        self._activity_table.setSelectionMode(
+            QTableWidget.SelectionMode.NoSelection)
+        self._activity_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._activity_table.setMinimumHeight(240)
+        self._activity_table.setMaximumHeight(340)
+        self._activity_table.verticalHeader().setDefaultSectionSize(44)
+        self._activity_table.setAlternatingRowColors(True)
+        configure_table(self._activity_table)
+        vbox.addWidget(self._activity_table)
+        return card
+
     # ── Helpers ───────────────────────────────────────────────────
     @staticmethod
     def _white_lbl(text, size, bold=False, alpha=1.0):
@@ -428,10 +483,42 @@ class DashboardPage(QWidget):
         self._chart_summary["avg"].setText(str(avg))
         self._chart_summary["peak"].setText(str(peak))
 
+    def _refresh_recent_activity(self):
+        if not self._backend or not hasattr(self, "_activity_table"):
+            return
+        rows = self._backend.get_activity_log(limit=8) or []
+        self._activity_badge.setText(f"{len(rows)} recent")
+        self._activity_table.setRowCount(len(rows))
+        action_colors = {
+            "Login": "#388087", "Created": "#5CB85C", "Edited": "#E8B931",
+            "Deleted": "#D9534F", "Voided": "#D9534F", "Merged": "#6FB3B8",
+        }
+        for r, row in enumerate(rows):
+            ts = row.get("created_at", "")
+            if hasattr(ts, "strftime"):
+                ts = ts.strftime("%I:%M %p")
+            else:
+                ts = str(ts)[-8:]  # fallback: last 8 chars (time part)
+            cells = [
+                ts,
+                row.get("user_email", "").split("@")[0],
+                row.get("action", ""),
+                row.get("record_type", ""),
+                row.get("record_detail", "") or "",
+            ]
+            for c, val in enumerate(cells):
+                item = QTableWidgetItem(val)
+                if c == 2:
+                    clr = action_colors.get(val, "#2C3E50")
+                    item.setForeground(QColor(clr))
+                self._activity_table.setItem(r, c, item)
+
     def refresh(self):
         self._refresh_kpis()
         self._refresh_schedule()
         self._refresh_chart()
+        if self._role in ("Admin",):
+            self._refresh_recent_activity()
         if self._role not in ("Admin", "HR"):
             self._refresh_my_leave()
 
