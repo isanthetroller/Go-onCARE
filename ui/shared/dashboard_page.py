@@ -4,13 +4,16 @@ from datetime import datetime
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
-    QTableWidget, QTableWidgetItem, QHeaderView, QGraphicsDropShadowEffect,
-    QScrollArea, QPushButton, QDialog, QDateEdit, QTextEdit, QFormLayout,
+    QTableWidget, QTableWidgetItem, QHeaderView,
+    QPushButton, QDialog, QDateEdit, QTextEdit, QFormLayout,
     QMessageBox,
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QDate
-from PyQt6.QtGui import QColor, QPainter
-from ui.styles import configure_table
+from PyQt6.QtGui import QColor
+from ui.styles import (
+    configure_table, make_page_layout, finish_page, make_card,
+    make_read_only_table, ACTION_COLORS,
+)
 from ui.shared.chart_widgets import BarChartWidget
 
 
@@ -36,12 +39,7 @@ class DashboardPage(QWidget):
 
     # ── Layout ────────────────────────────────────────────────────
     def _build(self):
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        inner = QWidget(); inner.setObjectName("pageInner")
-        lay = QVBoxLayout(inner)
-        lay.setSpacing(20); lay.setContentsMargins(28, 28, 28, 28)
+        scroll, lay = make_page_layout()
 
         lay.addWidget(self._build_banner())
 
@@ -77,12 +75,8 @@ class DashboardPage(QWidget):
         act_row.addStretch()
         lay.addLayout(act_row)
 
-        if self._role not in ("Admin", "HR", "Cashier"):
-            leave_card = QFrame(); leave_card.setObjectName("card")
-            leave_shadow = QGraphicsDropShadowEffect()
-            leave_shadow.setBlurRadius(18); leave_shadow.setOffset(0, 3)
-            leave_shadow.setColor(QColor(0, 0, 0, 12))
-            leave_card.setGraphicsEffect(leave_shadow)
+        if self._role not in ("HR",):
+            leave_card = make_card()
             lv_lay = QVBoxLayout(leave_card)
             lv_lay.setContentsMargins(20, 18, 20, 14); lv_lay.setSpacing(12)
 
@@ -98,22 +92,9 @@ class DashboardPage(QWidget):
             lv_hdr.addWidget(req_btn)
             lv_lay.addLayout(lv_hdr)
 
-            self._my_leave_table = QTableWidget(0, 6)
-            self._my_leave_table.setHorizontalHeaderLabels([
-                "From", "Until", "Reason", "Status", "HR Note", "Submitted"])
-            self._my_leave_table.horizontalHeader().setSectionResizeMode(
-                QHeaderView.ResizeMode.Stretch)
-            self._my_leave_table.verticalHeader().setVisible(False)
-            self._my_leave_table.setEditTriggers(
-                QTableWidget.EditTrigger.NoEditTriggers)
-            self._my_leave_table.setSelectionMode(
-                QTableWidget.SelectionMode.NoSelection)
-            self._my_leave_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-            self._my_leave_table.setAlternatingRowColors(True)
-            self._my_leave_table.setMinimumHeight(140)
-            self._my_leave_table.setMaximumHeight(220)
-            self._my_leave_table.verticalHeader().setDefaultSectionSize(44)
-            configure_table(self._my_leave_table)
+            self._my_leave_table = make_read_only_table(
+                ["From", "Until", "Reason", "Status", "HR Note", "Submitted"],
+                min_h=140, max_h=220, row_h=44)
             lv_lay.addWidget(self._my_leave_table)
             lay.addWidget(leave_card)
 
@@ -126,10 +107,7 @@ class DashboardPage(QWidget):
             lay.addWidget(self._recent_activity_card())
 
         lay.addStretch()
-        scroll.setWidget(inner)
-        wrapper = QVBoxLayout(self)
-        wrapper.setContentsMargins(0, 0, 0, 0)
-        wrapper.addWidget(scroll)
+        finish_page(self, scroll)
         self.refresh()
 
     def _build_banner(self):
@@ -142,10 +120,10 @@ class DashboardPage(QWidget):
         banner = QFrame()
         banner.setObjectName("pageBanner")
         banner.setFrameShape(QFrame.Shape.NoFrame)
-        banner.setMinimumHeight(140)
+        banner.setMinimumHeight(160)
 
         vl = QVBoxLayout(banner)
-        vl.setContentsMargins(32, 28, 32, 28); vl.setSpacing(8)
+        vl.setContentsMargins(36, 34, 36, 34); vl.setSpacing(6)
         now = datetime.now()
         greeting = "Good Morning" if now.hour < 12 else (
             "Good Afternoon" if now.hour < 17 else "Good Evening")
@@ -156,8 +134,14 @@ class DashboardPage(QWidget):
 
         self._date_label = QLabel(
             now.strftime("%I:%M %p  \u2022  %B %d, %Y"))
-        self._date_label.setObjectName("bannerSubtitle")
+        self._date_label.setObjectName("bannerDate")
         vl.addWidget(self._date_label)
+
+        # Thin accent separator
+        sep = QFrame()
+        sep.setFixedHeight(1)
+        sep.setStyleSheet("background: rgba(255,255,255,0.25); border: none;")
+        vl.addWidget(sep)
 
         desc = QLabel("Here's what's happening at the hospital today.")
         desc.setObjectName("bannerSubtitle")
@@ -167,12 +151,7 @@ class DashboardPage(QWidget):
         return wrapper
 
     def _make_kpi_card(self, key, title, color):
-        card = QFrame(); card.setObjectName("card"); card.setMinimumHeight(110)
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20); shadow.setOffset(0, 4)
-        shadow.setColor(QColor(0, 0, 0, 18))
-        card.setGraphicsEffect(shadow)
-
+        card = make_card(min_height=110)
         vbox = QVBoxLayout(card)
         vbox.setContentsMargins(18, 14, 18, 14); vbox.setSpacing(4)
 
@@ -197,12 +176,7 @@ class DashboardPage(QWidget):
         return card
 
     def _schedule_card(self):
-        card = QFrame(); card.setObjectName("card")
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(18); shadow.setOffset(0, 3)
-        shadow.setColor(QColor(0, 0, 0, 12))
-        card.setGraphicsEffect(shadow)
-
+        card = make_card()
         vbox = QVBoxLayout(card)
         vbox.setContentsMargins(20, 18, 20, 14); vbox.setSpacing(12)
 
@@ -211,48 +185,24 @@ class DashboardPage(QWidget):
         title.setObjectName("cardTitle")
         hdr.addWidget(title); hdr.addStretch()
         self._sched_badge = QLabel("0 upcoming")
-        self._sched_badge.setStyleSheet(
-            "background-color:#BADFE7; color:#388087; border-radius:10px;"
-            "padding:3px 10px; font-size:11px; font-weight:bold;")
+        self._sched_badge.setObjectName("pillBadge")
         hdr.addWidget(self._sched_badge)
         vbox.addLayout(hdr)
 
-        self._sched_table = QTableWidget(0, 4)
-        self._sched_table.setHorizontalHeaderLabels(
-            ["Time", "Patient", "Doctor", "Status"])
-        self._sched_table.horizontalHeader().setStretchLastSection(True)
-        self._sched_table.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.Stretch)
-        self._sched_table.verticalHeader().setVisible(False)
-        self._sched_table.setEditTriggers(
-            QTableWidget.EditTrigger.NoEditTriggers)
-        self._sched_table.setSelectionMode(
-            QTableWidget.SelectionMode.NoSelection)
-        self._sched_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self._sched_table.setMinimumHeight(240)
-        self._sched_table.setMaximumHeight(300)
-        self._sched_table.verticalHeader().setDefaultSectionSize(44)
-        self._sched_table.setAlternatingRowColors(True)
-        configure_table(self._sched_table)
+        self._sched_table = make_read_only_table(
+            ["Time", "Patient", "Doctor", "Status"],
+            min_h=240, max_h=300, row_h=44)
         vbox.addWidget(self._sched_table)
 
         view_all = QPushButton("View all appointments \u2192")
+        view_all.setObjectName("linkBtn")
         view_all.setCursor(Qt.CursorShape.PointingHandCursor)
-        view_all.setStyleSheet(
-            "QPushButton { background: transparent; border: none; color: #388087;"
-            " font-size: 12px; font-weight: bold; padding: 4px 0; text-align: left; }"
-            " QPushButton:hover { color: #2C6A70; }")
         view_all.clicked.connect(lambda: self.navigate_to.emit(2))
         vbox.addWidget(view_all)
         return card
 
     def _chart_card(self):
-        card = QFrame(); card.setObjectName("card")
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(18); shadow.setOffset(0, 3)
-        shadow.setColor(QColor(0, 0, 0, 12))
-        card.setGraphicsEffect(shadow)
-
+        card = make_card()
         vbox = QVBoxLayout(card)
         vbox.setContentsMargins(20, 18, 20, 14); vbox.setSpacing(12)
 
@@ -286,12 +236,7 @@ class DashboardPage(QWidget):
         return card
 
     def _recent_activity_card(self):
-        card = QFrame(); card.setObjectName("card")
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(18); shadow.setOffset(0, 3)
-        shadow.setColor(QColor(0, 0, 0, 12))
-        card.setGraphicsEffect(shadow)
-
+        card = make_card()
         vbox = QVBoxLayout(card)
         vbox.setContentsMargins(20, 18, 20, 14); vbox.setSpacing(12)
 
@@ -299,44 +244,17 @@ class DashboardPage(QWidget):
         title = QLabel("Recent Activity"); title.setObjectName("cardTitle")
         hdr.addWidget(title); hdr.addStretch()
         self._activity_badge = QLabel("0 entries")
-        self._activity_badge.setStyleSheet(
-            "background-color:#BADFE7; color:#388087; border-radius:10px;"
-            "padding:3px 10px; font-size:11px; font-weight:bold;")
+        self._activity_badge.setObjectName("pillBadge")
         hdr.addWidget(self._activity_badge)
         vbox.addLayout(hdr)
 
-        self._activity_table = QTableWidget(0, 5)
-        self._activity_table.setHorizontalHeaderLabels(
-            ["Time", "User", "Action", "Type", "Detail"])
-        self._activity_table.horizontalHeader().setStretchLastSection(True)
-        self._activity_table.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.Stretch)
-        self._activity_table.verticalHeader().setVisible(False)
-        self._activity_table.setEditTriggers(
-            QTableWidget.EditTrigger.NoEditTriggers)
-        self._activity_table.setSelectionMode(
-            QTableWidget.SelectionMode.NoSelection)
-        self._activity_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self._activity_table.setMinimumHeight(240)
-        self._activity_table.setMaximumHeight(340)
-        self._activity_table.verticalHeader().setDefaultSectionSize(44)
-        self._activity_table.setAlternatingRowColors(True)
-        configure_table(self._activity_table)
+        self._activity_table = make_read_only_table(
+            ["Time", "User", "Action", "Type", "Detail"],
+            min_h=240, max_h=340, row_h=44)
         vbox.addWidget(self._activity_table)
         return card
 
     # ── Helpers ───────────────────────────────────────────────────
-    @staticmethod
-    def _white_lbl(text, size, bold=False, alpha=1.0):
-        l = QLabel(text)
-        l.setFrameShape(QFrame.Shape.NoFrame)
-        w = "bold" if bold else "normal"
-        clr = f"rgba(255,255,255,{alpha})" if alpha < 1.0 else "#FFF"
-        l.setStyleSheet(
-            f"font-size:{size}px; font-weight:{w}; color:{clr};"
-            f" background:transparent; border:none; padding:0px;")
-        return l
-
     def _update_time(self):
         now = datetime.now()
         self._date_label.setText(now.strftime("%I:%M %p  \u2022  %B %d, %Y"))
@@ -438,10 +356,6 @@ class DashboardPage(QWidget):
         rows = self._backend.get_activity_log(limit=8) or []
         self._activity_badge.setText(f"{len(rows)} recent")
         self._activity_table.setRowCount(len(rows))
-        action_colors = {
-            "Login": "#388087", "Created": "#5CB85C", "Edited": "#E8B931",
-            "Deleted": "#D9534F", "Voided": "#D9534F", "Merged": "#6FB3B8",
-        }
         for r, row in enumerate(rows):
             ts = row.get("created_at", "")
             if hasattr(ts, "strftime"):
@@ -458,17 +372,19 @@ class DashboardPage(QWidget):
             for c, val in enumerate(cells):
                 item = QTableWidgetItem(val)
                 if c == 2:
-                    clr = action_colors.get(val, "#2C3E50")
+                    clr = ACTION_COLORS.get(val, "#2C3E50")
                     item.setForeground(QColor(clr))
                 self._activity_table.setItem(r, c, item)
 
     def refresh(self):
+        if not self.isVisible():
+            return
         self._refresh_kpis()
         self._refresh_schedule()
         self._refresh_chart()
         if self._role in ("Admin",):
             self._refresh_recent_activity()
-        if self._role not in ("Admin", "HR", "Cashier"):
+        if self._role not in ("HR",):
             self._refresh_my_leave()
 
     # ── Leave Request (for non-admin/non-HR roles) ────────────────

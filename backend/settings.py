@@ -120,7 +120,14 @@ class SettingsMixin:
         return ok
 
     def delete_standard_condition(self, cond_id):
-        return self.exec("DELETE FROM standard_conditions WHERE condition_id = %s", (cond_id,))
+        # Look up name before deleting for the audit trail
+        row = self.fetch("SELECT condition_name FROM standard_conditions WHERE condition_id=%s",
+                         (cond_id,), one=True)
+        name = row["condition_name"] if row else f"#{cond_id}"
+        ok = self.exec("DELETE FROM standard_conditions WHERE condition_id = %s", (cond_id,))
+        if ok:
+            self.log_activity("Deleted", "Condition", name)
+        return ok
 
     # ── Discount Types ─────────────────────────────────────────────────
     def get_discount_types(self, active_only=False):

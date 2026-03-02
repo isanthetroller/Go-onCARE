@@ -25,11 +25,17 @@ class ClinicalMixin:
         return row if row and row.get("waiting") is not None else {"waiting": 0, "in_progress": 0, "completed": 0}
 
     def update_queue_status(self, queue_id, status):
-        return self.exec("UPDATE queue_entries SET status=%s WHERE queue_id=%s", (status, queue_id))
+        ok = self.exec("UPDATE queue_entries SET status=%s WHERE queue_id=%s", (status, queue_id))
+        if ok:
+            self.log_activity("Edited", "Queue", f"Queue #{queue_id} status → {status}")
+        return ok
 
     def update_queue_entry(self, queue_id, data):
-        return self.exec("UPDATE queue_entries SET status=%s, purpose=%s WHERE queue_id=%s",
-                         (data.get("status", "Waiting"), data.get("purpose", ""), queue_id))
+        ok = self.exec("UPDATE queue_entries SET status=%s, purpose=%s WHERE queue_id=%s",
+                       (data.get("status", "Waiting"), data.get("purpose", ""), queue_id))
+        if ok:
+            self.log_activity("Edited", "Queue", f"Queue #{queue_id} updated (status={data.get('status','Waiting')})")
+        return ok
 
     def sync_today_appointments_to_queue(self):
         try:
@@ -74,6 +80,8 @@ class ClinicalMixin:
                 if entry:
                     cur.execute("UPDATE queue_entries SET status='In Progress' WHERE queue_id=%s", (entry["queue_id"],))
                     conn.commit()
+            if entry:
+                self.log_activity("Edited", "Queue", f"Called next: {entry['patient_name']} (queue #{entry['queue_id']})")
             return entry or {}
         except Exception:
             try:
@@ -244,7 +252,10 @@ class ClinicalMixin:
         return ok
 
     def update_service(self, service_id, price):
-        return self.exec("UPDATE services SET price=%s WHERE service_id=%s", (price, service_id))
+        ok = self.exec("UPDATE services SET price=%s WHERE service_id=%s", (price, service_id))
+        if ok:
+            self.log_activity("Edited", "Service", f"Price updated for service #{service_id} → ₱{price}")
+        return ok
 
     def bulk_update_prices(self, updates):
         queries = [("UPDATE services SET price=%s WHERE service_id=%s", (price, sid)) for sid, price in updates]

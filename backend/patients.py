@@ -136,7 +136,7 @@ class PatientMixin:
             ("DELETE FROM patients WHERE patient_id=%s", (remove_id,)),
         ])
         if result is not False:
-            self.log_activity("Edited", "Patient", f"Merged patient #{remove_id} into #{keep_id}")
+            self.log_activity("Merged", "Patient", f"Merged patient #{remove_id} into #{keep_id}")
             return True
         return False
 

@@ -197,7 +197,9 @@ class PatientProfileDialog(QDialog):
 
         from PyQt6.QtWidgets import QPushButton
         close_btn = QPushButton("Close")
-        close_btn.setObjectName("bannerBtn")
+        close_btn.setObjectName("dialogSaveBtn")
+        close_btn.setMinimumHeight(38)
+        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         close_btn.clicked.connect(self.accept)
         lay.addWidget(close_btn, alignment=Qt.AlignmentFlag.AlignRight)
 

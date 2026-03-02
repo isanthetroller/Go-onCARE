@@ -2,13 +2,16 @@
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QTableWidget, QTableWidgetItem, QHeaderView, QFrame, QScrollArea,
-    QComboBox, QDialog, QGraphicsDropShadowEffect, QMessageBox, QTextEdit,
+    QTableWidgetItem, QHeaderView, QTabWidget, QScrollArea, QFrame,
+    QComboBox, QDialog, QMessageBox, QTextEdit, QInputDialog,
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor
-from ui.styles import configure_table, make_table_btn
-from ui.shared.hr_employee_dialogs import HREmployeeDialog, HREmployeeProfileDialog
+from ui.styles import (
+    make_table_btn, make_banner, make_card, make_stat_card,
+    make_read_only_table, make_interactive_table, make_action_table,
+)
+from ui.shared.hr_employee_dialogs import HREmployeeDialog, HREmployeeProfileDialog, UserAccountDialog
 from backend import AuthBackend
 
 
@@ -30,6 +33,8 @@ class HREmployeesPage(QWidget):
         self._refresh_timer.start(10_000)
 
     def _load_from_db(self):
+        if not self.isVisible():
+            return
         rows = self._backend.get_employees_detailed() or []
         self._employees = rows
         self.table.setRowCount(0)
@@ -107,239 +112,243 @@ class HREmployeesPage(QWidget):
         # Leave requests
         self._load_leave_requests()
 
+        # User accounts (Admin only)
+        if hasattr(self, "_users_table"):
+            self._load_user_accounts()
+
     def _build(self):
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(24, 16, 24, 16)
+        outer.setSpacing(12)
+
+        # ── Banner (always visible above tabs) ────────────────────
+        outer.addWidget(make_banner(
+            "HR Employee Management",
+            "Comprehensive staff management \u2013 salary, leave, performance"))
+
+        # ── Tab widget ────────────────────────────────────────────
+        self._tabs = QTabWidget()
+        self._tabs.setStyleSheet(
+            "QTabWidget::pane { background-color: #F6F6F2; }")
+        self._tabs.addTab(self._build_employees_tab(), "\U0001F465  Employees")
+        self._tabs.addTab(self._build_leave_tab(), "\U0001F4CB  Leave Management")
+        self._tabs.addTab(self._build_payroll_tab(), "\U0001F4B0  Payroll & Staffing")
+        if self._role == "Admin":
+            self._tabs.addTab(self._build_accounts_tab(), "\U0001F510  User Accounts")
+        outer.addWidget(self._tabs)
+
+    # ── Tab helpers ───────────────────────────────────────────────
+
+    @staticmethod
+    def _make_tab_scroll():
+        """Create a scrollable content area for one tab."""
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        inner = QWidget(); inner.setObjectName("pageInner")
+        scroll.setStyleSheet("QScrollArea { background: transparent; }")
+        inner = QWidget()
+        inner.setStyleSheet("background: transparent;")
         lay = QVBoxLayout(inner)
-        lay.setSpacing(14); lay.setContentsMargins(24, 20, 24, 20)
+        lay.setSpacing(14)
+        lay.setContentsMargins(20, 16, 20, 20)
+        scroll.setWidget(inner)
+        return scroll, lay
 
-        # ── Banner ────────────────────────────────────────────────
-        banner = QFrame(); banner.setObjectName("pageBanner"); banner.setMinimumHeight(100)
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20); shadow.setOffset(0, 4)
-        shadow.setColor(QColor(0, 0, 0, 15))
-        banner.setGraphicsEffect(shadow)
-        banner_lay = QHBoxLayout(banner)
-        banner_lay.setContentsMargins(32, 20, 32, 20); banner_lay.setSpacing(0)
-        tc = QVBoxLayout(); tc.setSpacing(4)
-        t = QLabel("HR Employee Management"); t.setObjectName("bannerTitle")
-        s = QLabel("Comprehensive staff management – salary, leave, performance")
-        s.setObjectName("bannerSubtitle")
-        tc.addWidget(t); tc.addWidget(s)
-        banner_lay.addLayout(tc); banner_lay.addStretch()
-        lay.addWidget(banner)
+    def _build_employees_tab(self):
+        scroll, lay = self._make_tab_scroll()
 
-        # ── Stat cards (6 cards) ──────────────────────────────────
-        stats_row = QHBoxLayout(); stats_row.setSpacing(14)
+        # ── Stat cards: row 1 (employee counts) ──────────────────
         self._stat_labels = {}
+        row1 = QHBoxLayout(); row1.setSpacing(14)
         for key, label, color in [
-            ("total",         "Total Staff",    "#388087"),
-            ("active",        "Active",         "#5CB85C"),
-            ("on_leave",      "On Leave",       "#E8B931"),
-            ("inactive",      "Inactive",       "#D9534F"),
-            ("avg_salary",    "Avg Salary",     "#6FB3B8"),
-            ("total_payroll", "Total Payroll",   "#388087"),
+            ("total",    "Total Staff", "#388087"),
+            ("active",   "Active",      "#5CB85C"),
+            ("on_leave", "On Leave",    "#E8B931"),
+            ("inactive", "Inactive",    "#D9534F"),
         ]:
-            card = QFrame(); card.setObjectName("card"); card.setMinimumHeight(80)
-            shadow2 = QGraphicsDropShadowEffect()
-            shadow2.setBlurRadius(20); shadow2.setOffset(0, 4)
-            shadow2.setColor(QColor(0, 0, 0, 18))
-            card.setGraphicsEffect(shadow2)
-            cl = QVBoxLayout(card)
-            cl.setContentsMargins(18, 14, 18, 14); cl.setSpacing(4)
-            strip = QFrame(); strip.setFixedHeight(3)
-            strip.setStyleSheet(f"background-color: {color}; border-radius: 1px;")
-            v = QLabel("0"); v.setObjectName("statValue")
-            self._stat_labels[key] = v
-            l = QLabel(label); l.setObjectName("statLabel")
-            cl.addWidget(strip); cl.addWidget(v); cl.addWidget(l)
-            stats_row.addWidget(card)
-        lay.addLayout(stats_row)
+            row1.addWidget(make_stat_card(key, label, color, self._stat_labels))
+        lay.addLayout(row1)
 
-        # ── Secondary panels row: Leave Tracker + Dept Payroll + Type Breakdown ──
-        panels_row = QHBoxLayout(); panels_row.setSpacing(16)
+        # ── Stat cards: row 2 (payroll) ──────────────────────────
+        row2 = QHBoxLayout(); row2.setSpacing(14)
+        for key, label, color in [
+            ("avg_salary",    "Avg Salary",    "#6FB3B8"),
+            ("total_payroll", "Total Payroll", "#388087"),
+        ]:
+            row2.addWidget(make_stat_card(key, label, color, self._stat_labels))
+        row2.addStretch(2)          # keep payroll cards from stretching too wide
+        lay.addLayout(row2)
 
-        # Leave tracker
-        leave_card = QFrame(); leave_card.setObjectName("card")
-        lc_shadow = QGraphicsDropShadowEffect()
-        lc_shadow.setBlurRadius(16); lc_shadow.setOffset(0, 3)
-        lc_shadow.setColor(QColor(0, 0, 0, 15))
-        leave_card.setGraphicsEffect(lc_shadow)
+        # ── Filter bar (inside a card) ───────────────────────────
+        filter_card = make_card()
+        fc_lay = QVBoxLayout(filter_card)
+        fc_lay.setContentsMargins(16, 12, 16, 12); fc_lay.setSpacing(0)
+
+        bar = QHBoxLayout(); bar.setSpacing(10)
+        self.search = QLineEdit()
+        self.search.setObjectName("searchBar")
+        self.search.setPlaceholderText("\U0001F50D  Search employees by name, role, department, email\u2026")
+        self.search.setMinimumHeight(42)
+        self.search.textChanged.connect(lambda _: self._apply_filters())
+        bar.addWidget(self.search, 2)
+
+        for attr, items, width in [
+            ("role_filter",   ["All Roles", "Doctor", "Cashier", "Receptionist",
+                               "Admin", "HR"], 130),
+            ("dept_filter",   ["All Departments", "General Medicine", "Cardiology",
+                               "Dentistry", "Pediatrics", "Laboratory",
+                               "Front Desk", "Management", "Pharmacy",
+                               "Human Resources"], 160),
+            ("status_filter", ["All Status", "Active", "On Leave", "Inactive"], 130),
+            ("type_filter",   ["All Types", "Full-time", "Part-time", "Contract"], 120),
+        ]:
+            combo = QComboBox()
+            combo.setObjectName("formCombo")
+            combo.addItems(items)
+            combo.setMinimumHeight(42); combo.setMinimumWidth(width)
+            combo.currentTextChanged.connect(lambda _: self._apply_filters())
+            setattr(self, attr, combo)
+            bar.addWidget(combo)
+
+        fc_lay.addLayout(bar)
+        lay.addWidget(filter_card)
+
+        # ── Main employee table ──────────────────────────────────
+        cols = ["ID", "Name", "Role", "Department", "Type", "Phone", "Email",
+                "Hire Date", "Salary", "Status", "Actions"]
+        self.table = make_action_table(cols, min_h=420, row_h=44,
+                                       action_col_width=130)
+        lay.addWidget(self.table)
+
+        lay.addStretch()
+        return scroll
+
+    def _build_leave_tab(self):
+        scroll, lay = self._make_tab_scroll()
+
+        # ── Leave Tracker (employees currently on leave) ─────────
+        leave_card = make_card(min_height=220)
         lc_lay = QVBoxLayout(leave_card)
-        lc_lay.setContentsMargins(16, 12, 16, 12); lc_lay.setSpacing(8)
-        lc_title = QLabel("Leave Tracker"); lc_title.setObjectName("cardTitle")
+        lc_lay.setContentsMargins(16, 14, 16, 14); lc_lay.setSpacing(10)
+        lc_title = QLabel("Leave Tracker")
+        lc_title.setObjectName("cardTitle")
         lc_lay.addWidget(lc_title)
-        self._leave_table = QTableWidget(0, 4)
-        self._leave_table.setHorizontalHeaderLabels(["Employee", "Department", "From", "Until"])
-        self._leave_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self._leave_table.verticalHeader().setVisible(False)
-        self._leave_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self._leave_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        self._leave_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self._leave_table.setAlternatingRowColors(True)
-        self._leave_table.setMaximumHeight(130)
-        self._leave_table.verticalHeader().setDefaultSectionSize(36)
-        configure_table(self._leave_table)
+        self._leave_table = make_read_only_table(
+            ["Employee", "Department", "From", "Until"],
+            min_h=160, row_h=38)
         lc_lay.addWidget(self._leave_table)
-        panels_row.addWidget(leave_card, 2)
+        lay.addWidget(leave_card)
 
-        # Department payroll
-        dept_card = QFrame(); dept_card.setObjectName("card")
-        dc_shadow = QGraphicsDropShadowEffect()
-        dc_shadow.setBlurRadius(16); dc_shadow.setOffset(0, 3)
-        dc_shadow.setColor(QColor(0, 0, 0, 15))
-        dept_card.setGraphicsEffect(dc_shadow)
-        dc_lay = QVBoxLayout(dept_card)
-        dc_lay.setContentsMargins(16, 12, 16, 12); dc_lay.setSpacing(8)
-        dc_title = QLabel("Department Payroll"); dc_title.setObjectName("cardTitle")
-        dc_lay.addWidget(dc_title)
-        self._dept_table = QTableWidget(0, 4)
-        self._dept_table.setHorizontalHeaderLabels(["Department", "Headcount", "Total Salary", "Avg Salary"])
-        self._dept_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self._dept_table.verticalHeader().setVisible(False)
-        self._dept_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self._dept_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        self._dept_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self._dept_table.setAlternatingRowColors(True)
-        self._dept_table.setMaximumHeight(130)
-        self._dept_table.verticalHeader().setDefaultSectionSize(36)
-        configure_table(self._dept_table)
-        dc_lay.addWidget(self._dept_table)
-        panels_row.addWidget(dept_card, 2)
-
-        # Employment type breakdown
-        type_card = QFrame(); type_card.setObjectName("card")
-        tc_shadow = QGraphicsDropShadowEffect()
-        tc_shadow.setBlurRadius(16); tc_shadow.setOffset(0, 3)
-        tc_shadow.setColor(QColor(0, 0, 0, 15))
-        type_card.setGraphicsEffect(tc_shadow)
-        tc_lay2 = QVBoxLayout(type_card)
-        tc_lay2.setContentsMargins(16, 12, 16, 12); tc_lay2.setSpacing(8)
-        tc_title = QLabel("Employment Types"); tc_title.setObjectName("cardTitle")
-        tc_lay2.addWidget(tc_title)
-        self._type_table = QTableWidget(0, 2)
-        self._type_table.setHorizontalHeaderLabels(["Type", "Count"])
-        self._type_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self._type_table.verticalHeader().setVisible(False)
-        self._type_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self._type_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        self._type_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self._type_table.setAlternatingRowColors(True)
-        self._type_table.setMaximumHeight(130)
-        self._type_table.verticalHeader().setDefaultSectionSize(36)
-        configure_table(self._type_table)
-        tc_lay2.addWidget(self._type_table)
-        panels_row.addWidget(type_card, 1)
-
-        lay.addLayout(panels_row)
-
-        # ── Leave Requests Management ─────────────────────────────
-        lr_card = QFrame(); lr_card.setObjectName("card")
-        lr_shadow = QGraphicsDropShadowEffect()
-        lr_shadow.setBlurRadius(20); lr_shadow.setOffset(0, 4)
-        lr_shadow.setColor(QColor(0, 0, 0, 18))
-        lr_card.setGraphicsEffect(lr_shadow)
+        # ── Leave Requests Management ────────────────────────────
+        lr_card = make_card(min_height=300)
         lr_lay = QVBoxLayout(lr_card)
-        lr_lay.setContentsMargins(16, 12, 16, 12); lr_lay.setSpacing(8)
+        lr_lay.setContentsMargins(16, 14, 16, 14); lr_lay.setSpacing(10)
+
         lr_header = QHBoxLayout()
-        lr_title = QLabel("Leave Requests"); lr_title.setObjectName("cardTitle")
+        lr_title = QLabel("Leave Requests")
+        lr_title.setObjectName("cardTitle")
         lr_header.addWidget(lr_title)
         self._lr_status_filter = QComboBox()
         self._lr_status_filter.setObjectName("formCombo")
         self._lr_status_filter.addItems(["Pending", "All", "Approved", "Declined"])
-        self._lr_status_filter.setMinimumHeight(34); self._lr_status_filter.setMinimumWidth(110)
-        self._lr_status_filter.currentTextChanged.connect(lambda _: self._load_leave_requests())
+        self._lr_status_filter.setMinimumHeight(36)
+        self._lr_status_filter.setMinimumWidth(120)
+        self._lr_status_filter.currentTextChanged.connect(
+            lambda _: self._load_leave_requests())
         lr_header.addStretch()
         lr_header.addWidget(self._lr_status_filter)
         lr_lay.addLayout(lr_header)
 
-        self._lr_table = QTableWidget(0, 8)
-        self._lr_table.setHorizontalHeaderLabels([
-            "Employee", "Role", "Department", "From", "Until", "Reason", "Status", "Actions"])
-        self._lr_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self._lr_table.horizontalHeader().setSectionResizeMode(7, QHeaderView.ResizeMode.Fixed)
-        self._lr_table.setColumnWidth(7, 170)
+        self._lr_table = make_read_only_table(
+            ["Employee", "Role", "Department", "From", "Until",
+             "Reason", "Status", "Actions"],
+            min_h=200, row_h=44)
+        self._lr_table.horizontalHeader().setSectionResizeMode(
+            7, QHeaderView.ResizeMode.Fixed)
+        self._lr_table.setColumnWidth(7, 180)
         self._lr_table.horizontalHeader().setStretchLastSection(False)
-        self._lr_table.verticalHeader().setVisible(False)
-        self._lr_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self._lr_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        self._lr_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self._lr_table.setAlternatingRowColors(True)
-        self._lr_table.setMinimumHeight(120)
-        self._lr_table.verticalHeader().setDefaultSectionSize(42)
-        configure_table(self._lr_table)
         lr_lay.addWidget(self._lr_table)
         lay.addWidget(lr_card)
 
-        # ── Filter bar ────────────────────────────────────────────
-        bar = QHBoxLayout()
-        self.search = QLineEdit()
-        self.search.setObjectName("searchBar")
-        self.search.setPlaceholderText("🔍  Search employees by name, role, department, email…")
-        self.search.setMinimumHeight(42)
-        self.search.textChanged.connect(lambda _: self._apply_filters())
-        bar.addWidget(self.search)
-
-        self.role_filter = QComboBox()
-        self.role_filter.setObjectName("formCombo")
-        self.role_filter.addItems(["All Roles", "Doctor", "Cashier", "Receptionist",
-                                   "Admin", "HR"])
-        self.role_filter.setMinimumHeight(42); self.role_filter.setMinimumWidth(140)
-        self.role_filter.currentTextChanged.connect(lambda _: self._apply_filters())
-        bar.addWidget(self.role_filter)
-
-        self.dept_filter = QComboBox()
-        self.dept_filter.setObjectName("formCombo")
-        self.dept_filter.addItems([
-            "All Departments", "General Medicine", "Cardiology", "Dentistry",
-            "Pediatrics", "Laboratory", "Front Desk", "Management", "Pharmacy",
-            "Human Resources",
-        ])
-        self.dept_filter.setMinimumHeight(42); self.dept_filter.setMinimumWidth(160)
-        self.dept_filter.currentTextChanged.connect(lambda _: self._apply_filters())
-        bar.addWidget(self.dept_filter)
-
-        self.status_filter = QComboBox()
-        self.status_filter.setObjectName("formCombo")
-        self.status_filter.addItems(["All Status", "Active", "On Leave", "Inactive"])
-        self.status_filter.setMinimumHeight(42); self.status_filter.setMinimumWidth(140)
-        self.status_filter.currentTextChanged.connect(lambda _: self._apply_filters())
-        bar.addWidget(self.status_filter)
-
-        self.type_filter = QComboBox()
-        self.type_filter.setObjectName("formCombo")
-        self.type_filter.addItems(["All Types", "Full-time", "Part-time", "Contract"])
-        self.type_filter.setMinimumHeight(42); self.type_filter.setMinimumWidth(130)
-        self.type_filter.currentTextChanged.connect(lambda _: self._apply_filters())
-        bar.addWidget(self.type_filter)
-        lay.addLayout(bar)
-
-        # ── Main Table ────────────────────────────────────────────
-        cols = ["ID", "Name", "Role", "Department", "Type", "Phone", "Email",
-                "Hire Date", "Salary", "Status", "Actions"]
-        self.table = QTableWidget(0, len(cols))
-        self.table.setHorizontalHeaderLabels(cols)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(len(cols)-1, QHeaderView.ResizeMode.Fixed)
-        self.table.setColumnWidth(len(cols)-1, 130)
-        self.table.horizontalHeader().setStretchLastSection(False)
-        self.table.verticalHeader().setVisible(False)
-        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        self.table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.table.setAlternatingRowColors(True)
-        self.table.setMinimumHeight(300)
-        self.table.verticalHeader().setDefaultSectionSize(44)
-        configure_table(self.table)
-
-        lay.addWidget(self.table)
         lay.addStretch()
-        scroll.setWidget(inner)
-        wrapper = QVBoxLayout(self)
-        wrapper.setContentsMargins(0, 0, 0, 0)
-        wrapper.addWidget(scroll)
+        return scroll
+
+    def _build_payroll_tab(self):
+        scroll, lay = self._make_tab_scroll()
+
+        # ── Department Payroll ────────────────────────────────────
+        dept_card = make_card(min_height=300)
+        dc_lay = QVBoxLayout(dept_card)
+        dc_lay.setContentsMargins(16, 14, 16, 14); dc_lay.setSpacing(10)
+        dc_title = QLabel("Department Payroll")
+        dc_title.setObjectName("cardTitle")
+        dc_lay.addWidget(dc_title)
+        self._dept_table = make_read_only_table(
+            ["Department", "Headcount", "Total Salary", "Avg Salary"],
+            min_h=220, row_h=38)
+        dc_lay.addWidget(self._dept_table)
+        lay.addWidget(dept_card)
+
+        # ── Employment Type Breakdown ────────────────────────────
+        type_card = make_card(min_height=200)
+        tc_lay = QVBoxLayout(type_card)
+        tc_lay.setContentsMargins(16, 14, 16, 14); tc_lay.setSpacing(10)
+        tc_title = QLabel("Employment Types")
+        tc_title.setObjectName("cardTitle")
+        tc_lay.addWidget(tc_title)
+        self._type_table = make_read_only_table(
+            ["Type", "Count"], min_h=160, row_h=38)
+        tc_lay.addWidget(self._type_table)
+        lay.addWidget(type_card)
+
+        lay.addStretch()
+        return scroll
+
+    def _build_accounts_tab(self):
+        scroll, lay = self._make_tab_scroll()
+
+        ua_card = make_card(min_height=300)
+        ua_lay = QVBoxLayout(ua_card)
+        ua_lay.setContentsMargins(16, 14, 16, 14); ua_lay.setSpacing(10)
+
+        ua_header = QHBoxLayout()
+        ua_title = QLabel("User Accounts")
+        ua_title.setObjectName("cardTitle")
+        ua_header.addWidget(ua_title)
+        ua_header.addStretch()
+
+        create_btn = QPushButton("\uff0b  Create Account")
+        create_btn.setObjectName("actionBtn"); create_btn.setMinimumHeight(38)
+        create_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        create_btn.setToolTip("Create a new user account for an employee")
+        create_btn.clicked.connect(self._on_create_account)
+        ua_header.addWidget(create_btn)
+
+        reset_btn = QPushButton("\U0001F511  Reset Password")
+        reset_btn.setObjectName("actionBtn"); reset_btn.setMinimumHeight(38)
+        reset_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        reset_btn.setToolTip("Reset a user's password")
+        reset_btn.clicked.connect(self._on_reset_password)
+        ua_header.addWidget(reset_btn)
+
+        del_btn = QPushButton("\U0001F5D1  Delete Account")
+        del_btn.setObjectName("dangerBtn"); del_btn.setMinimumHeight(38)
+        del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        del_btn.setToolTip("Permanently delete a user account")
+        del_btn.clicked.connect(self._on_delete_account)
+        ua_header.addWidget(del_btn)
+
+        ua_lay.addLayout(ua_header)
+
+        self._users_table = make_interactive_table(
+            ["ID", "Full Name", "Email", "Role", "Must Change PW"],
+            min_h=220, row_h=40)
+        ua_lay.addWidget(self._users_table)
+        lay.addWidget(ua_card)
+        self._user_account_ids: list[int] = []
+
+        lay.addStretch()
+        return scroll
 
     # ── Leave Request Management ────────────────────────────────
     def _load_leave_requests(self):
@@ -612,3 +621,91 @@ class HREmployeesPage(QWidget):
                 QMessageBox.information(self, "Success", f"Employee '{name}' removed.")
             else:
                 QMessageBox.warning(self, "Error", "Failed to delete employee.")
+
+    # ── User Account Management (Admin) ────────────────────
+    def _load_user_accounts(self):
+        if not hasattr(self, "_users_table"):
+            return
+        self._users_table.setRowCount(0)
+        self._user_account_ids = []
+        if not self._backend:
+            return
+        users = self._backend.get_all_user_accounts() or []
+        for u in users:
+            r = self._users_table.rowCount()
+            self._users_table.insertRow(r)
+            self._user_account_ids.append(u["user_id"])
+            self._users_table.setItem(r, 0, QTableWidgetItem(str(u["user_id"])))
+            self._users_table.setItem(r, 1, QTableWidgetItem(u.get("full_name", "")))
+            self._users_table.setItem(r, 2, QTableWidgetItem(u.get("email", "")))
+            self._users_table.setItem(r, 3, QTableWidgetItem(u.get("role_name", "")))
+            mcp = "Yes" if u.get("must_change_password") else "No"
+            mcp_item = QTableWidgetItem(mcp)
+            mcp_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            if u.get("must_change_password"):
+                mcp_item.setForeground(QColor("#E8B931"))
+            else:
+                mcp_item.setForeground(QColor("#5CB85C"))
+            self._users_table.setItem(r, 4, mcp_item)
+
+    def _on_create_account(self):
+        dlg = UserAccountDialog(self, backend=self._backend)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            d = dlg.get_data()
+            if self._backend:
+                ok, msg = self._backend.admin_create_user_account(
+                    d["full_name"], d["email"], d["password"], d["role_name"])
+                if ok:
+                    QMessageBox.information(self, "Success", msg)
+                    self._load_user_accounts()
+                else:
+                    QMessageBox.warning(self, "Error", msg)
+
+    def _on_reset_password(self):
+        if not hasattr(self, "_users_table"):
+            return
+        row = self._users_table.currentRow()
+        if row < 0 or row >= len(self._user_account_ids):
+            QMessageBox.warning(self, "Selection", "Select a user account first.")
+            return
+        uid = self._user_account_ids[row]
+        name = self._users_table.item(row, 1).text()
+        new_pw, ok_input = QInputDialog.getText(
+            self, "Reset Password", f"New password for {name}:",
+            QLineEdit.EchoMode.Password)
+        if ok_input and new_pw.strip():
+            if len(new_pw.strip()) < 4:
+                QMessageBox.warning(self, "Validation",
+                                    "Password must be at least 4 characters.")
+                return
+            ok, msg = self._backend.admin_reset_password(uid, new_pw.strip())
+            if ok:
+                QMessageBox.information(self, "Success", msg)
+                self._load_user_accounts()
+            else:
+                QMessageBox.warning(self, "Error", msg)
+
+    def _on_delete_account(self):
+        if not hasattr(self, "_users_table"):
+            return
+        row = self._users_table.currentRow()
+        if row < 0 or row >= len(self._user_account_ids):
+            QMessageBox.warning(self, "Selection", "Select a user account to delete.")
+            return
+        uid = self._user_account_ids[row]
+        name = self._users_table.item(row, 1).text()
+        email = self._users_table.item(row, 2).text()
+        if email == self._backend._current_user_email:
+            QMessageBox.warning(self, "Error", "You cannot delete your own account.")
+            return
+        reply = QMessageBox.question(
+            self, "Confirm Delete",
+            f"Delete user account '{name}'?\n\nThis cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            ok, msg = self._backend.admin_delete_user_account(uid)
+            if ok:
+                QMessageBox.information(self, "Done", msg)
+                self._load_user_accounts()
+            else:
+                QMessageBox.warning(self, "Error", msg)

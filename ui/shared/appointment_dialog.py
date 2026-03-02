@@ -71,11 +71,7 @@ class AppointmentDialog(QDialog):
         preselect_idx = 0
         _my_emp_id = None
         if self._user_role == "Doctor" and self._user_email and not data and self._backend:
-            emp = self._backend.fetch(
-                "SELECT employee_id FROM employees WHERE email=%s",
-                (self._user_email,), one=True)
-            if emp:
-                _my_emp_id = emp["employee_id"]
+            _my_emp_id = self._backend.get_employee_id_by_email(self._user_email)
         for i, doc in enumerate(self._doctors):
             self.doctor_combo.addItem(doc["doctor_name"], doc["employee_id"])
             if _my_emp_id is not None and doc["employee_id"] == _my_emp_id:

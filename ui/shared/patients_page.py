@@ -4,12 +4,14 @@ from datetime import date
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QTableWidget, QTableWidgetItem, QHeaderView, QFrame, QScrollArea,
-    QComboBox, QDialog, QGraphicsDropShadowEffect, QMessageBox,
+    QTableWidget, QTableWidgetItem, QHeaderView,
+    QComboBox, QDialog, QMessageBox,
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor
-from ui.styles import configure_table, make_table_btn, make_table_btn_danger
+from ui.styles import (
+    make_page_layout, finish_page, make_banner, make_read_only_table,
+    make_action_table, make_table_btn, make_table_btn_danger, status_color,
+)
 from ui.shared.patient_dialogs import PatientDialog, PatientProfileDialog, MergeDialog
 
 
@@ -41,29 +43,14 @@ class PatientsPage(QWidget):
         return names
 
     def _build(self):
-        scroll = QScrollArea(); scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        inner = QWidget(); inner.setObjectName("pageInner")
-        lay = QVBoxLayout(inner); lay.setSpacing(20); lay.setContentsMargins(28,28,28,28)
+        scroll, lay = make_page_layout()
 
         # ── Banner ─────────────────────────────────────────────────
-        banner = QFrame(); banner.setObjectName("pageBanner"); banner.setMinimumHeight(100)
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20); shadow.setOffset(0,4); shadow.setColor(QColor(0,0,0,15))
-        banner.setGraphicsEffect(shadow)
-        banner_lay = QHBoxLayout(banner); banner_lay.setContentsMargins(32,20,32,20); banner_lay.setSpacing(0)
-        title_col = QVBoxLayout(); title_col.setSpacing(4)
-        title = QLabel("Patient Records"); title.setObjectName("bannerTitle")
-        sub = QLabel("Manage and view all patient information"); sub.setObjectName("bannerSubtitle")
-        title_col.addWidget(title); title_col.addWidget(sub)
-        banner_lay.addLayout(title_col); banner_lay.addStretch()
-
-        if self._role not in ("Cashier", "Doctor"):
-            add_btn = QPushButton("\uff0b  Add Patient"); add_btn.setObjectName("bannerBtn")
-            add_btn.setMinimumHeight(42); add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            add_btn.clicked.connect(self._on_add)
-            banner_lay.addWidget(add_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
-        lay.addWidget(banner)
+        btn_text = "\uff0b  Add Patient" if self._role not in ("Cashier", "Doctor") else ""
+        lay.addWidget(make_banner(
+            "Patient Records", "Manage and view all patient information",
+            btn_text=btn_text, btn_slot=self._on_add,
+        ))
 
         # ── Toolbar ────────────────────────────────────────────────
         bar = QHBoxLayout(); bar.setSpacing(10)
@@ -95,6 +82,16 @@ class PatientsPage(QWidget):
         self.cond_filter.setMinimumHeight(42); self.cond_filter.setMinimumWidth(160)
         self.cond_filter.currentTextChanged.connect(self._apply_filters)
         bar.addWidget(self.cond_filter)
+
+        # Merge button (Admin / Receptionist only)
+        if self._role in ("Admin", "Receptionist"):
+            merge_btn = QPushButton("🔗  Merge")
+            merge_btn.setObjectName("actionBtn"); merge_btn.setMinimumHeight(42)
+            merge_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            merge_btn.setToolTip("Merge duplicate patient records")
+            merge_btn.clicked.connect(self._on_merge)
+            bar.addWidget(merge_btn)
+
         lay.addLayout(bar)
 
         # ── Table ──────────────────────────────────────────────────
@@ -102,32 +99,20 @@ class PatientsPage(QWidget):
                 "Conditions", "Last Visit", "Status", "Actions"]
         if self._role == "Cashier":
             cols = cols[:-1]  # no actions
-        self.table = QTableWidget(0, len(cols))
-        self.table.setHorizontalHeaderLabels(cols)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        if self._role != "Cashier":
-            self.table.horizontalHeader().setSectionResizeMode(len(cols)-1, QHeaderView.ResizeMode.Fixed)
-            self.table.setColumnWidth(len(cols)-1, 185)
-            self.table.horizontalHeader().setStretchLastSection(False)
-        self.table.verticalHeader().setVisible(False)
-        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        self.table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.table.setAlternatingRowColors(True)
-        self.table.setMinimumHeight(420)
-        self.table.verticalHeader().setDefaultSectionSize(48)
-        configure_table(self.table)
+            self.table = make_read_only_table(cols)
+        else:
+            self.table = make_action_table(cols, action_col_width=185)
         self.table.setSortingEnabled(True)
         self._load_from_db()
         lay.addWidget(self.table)
 
         lay.addStretch()
-        scroll.setWidget(inner)
-        wrapper = QVBoxLayout(self); wrapper.setContentsMargins(0,0,0,0)
-        wrapper.addWidget(scroll)
+        finish_page(self, scroll)
 
     # ── DB Load ────────────────────────────────────────────────────
     def _load_from_db(self):
+        if not self.isVisible():
+            return
         self.table.setSortingEnabled(False)
         if self._backend and self._role == "Doctor" and self._user_email:
             rows = self._backend.get_patients_for_doctor(self._user_email)

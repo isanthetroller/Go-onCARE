@@ -2,12 +2,15 @@
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QTableWidget, QTableWidgetItem, QHeaderView, QFrame, QScrollArea,
-    QComboBox, QDialog, QGraphicsDropShadowEffect, QMessageBox,
+    QTableWidget, QTableWidgetItem, QHeaderView,
+    QComboBox, QDialog, QMessageBox,
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor
-from ui.styles import configure_table, make_table_btn
+from ui.styles import (
+    make_page_layout, finish_page, make_banner, make_read_only_table,
+    make_action_table, make_card, make_stat_card, make_table_btn, status_color,
+)
 from ui.shared.employee_dialogs import EmployeeDialog, EmployeeProfileDialog
 from backend import AuthBackend
 
@@ -29,6 +32,8 @@ class EmployeesPage(QWidget):
         self._refresh_timer.start(10_000)
 
     def _load_from_db(self):
+        if not self.isVisible():
+            return
         rows = self._backend.get_employees() or []
         self._employees = rows
         self.table.setRowCount(0)
@@ -76,24 +81,14 @@ class EmployeesPage(QWidget):
             self._dept_table.setItem(r, 1, QTableWidgetItem(str(d.get("cnt", 0))))
 
     def _build(self):
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        inner = QWidget(); inner.setObjectName("pageInner")
-        lay = QVBoxLayout(inner); lay.setSpacing(20); lay.setContentsMargins(28, 28, 28, 28)
+        scroll, lay = make_page_layout()
 
         # ── Banner ────────────────────────────────────────────────
-        banner = QFrame(); banner.setObjectName("pageBanner"); banner.setMinimumHeight(100)
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20); shadow.setOffset(0, 4); shadow.setColor(QColor(0, 0, 0, 15))
-        banner.setGraphicsEffect(shadow)
-        banner_lay = QHBoxLayout(banner)
-        banner_lay.setContentsMargins(32, 20, 32, 20); banner_lay.setSpacing(0)
-        tc = QVBoxLayout(); tc.setSpacing(4)
-        t = QLabel("Employee Management"); t.setObjectName("bannerTitle")
-        s = QLabel("Manage staff, doctors, and personnel"); s.setObjectName("bannerSubtitle")
-        tc.addWidget(t); tc.addWidget(s)
-        banner_lay.addLayout(tc); banner_lay.addStretch()
+        banner = make_banner(
+            "Employee Management",
+            "Manage staff, doctors, and personnel",
+        )
+        banner_lay = banner.layout()
 
         add_btn = QPushButton("＋  Add Employee")
         add_btn.setObjectName("bannerBtn"); add_btn.setMinimumHeight(42)
@@ -111,36 +106,15 @@ class EmployeesPage(QWidget):
             ("active",   "Active",        "#5CB85C"),
             ("on_leave", "On Leave",      "#E8B931"),
         ]:
-            card = QFrame(); card.setObjectName("card"); card.setMinimumHeight(100)
-            shadow2 = QGraphicsDropShadowEffect()
-            shadow2.setBlurRadius(20); shadow2.setOffset(0, 4); shadow2.setColor(QColor(0, 0, 0, 18))
-            card.setGraphicsEffect(shadow2)
-            cl = QVBoxLayout(card); cl.setContentsMargins(18, 14, 18, 14); cl.setSpacing(4)
-            strip = QFrame(); strip.setFixedHeight(3)
-            strip.setStyleSheet(f"background-color: {color}; border-radius: 1px;")
-            v = QLabel("0"); v.setObjectName("statValue")
-            self._stat_labels[key] = v
-            l = QLabel(label); l.setObjectName("statLabel")
-            cl.addWidget(strip); cl.addWidget(v); cl.addWidget(l)
-            stats_row.addWidget(card)
+            stats_row.addWidget(make_stat_card(key, label, color, self._stat_labels))
         lay.addLayout(stats_row)
 
         # ── Department count mini-table ───────────────────────────
-        dept_card = QFrame(); dept_card.setObjectName("card")
+        dept_card = make_card()
         dc_lay = QVBoxLayout(dept_card); dc_lay.setContentsMargins(16, 12, 16, 12); dc_lay.setSpacing(8)
         dc_title = QLabel("Staff per Department"); dc_title.setObjectName("cardTitle")
         dc_lay.addWidget(dc_title)
-        self._dept_table = QTableWidget(0, 2)
-        self._dept_table.setHorizontalHeaderLabels(["Department", "Count"])
-        self._dept_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self._dept_table.verticalHeader().setVisible(False)
-        self._dept_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self._dept_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        self._dept_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self._dept_table.setAlternatingRowColors(True)
-        self._dept_table.setMaximumHeight(200)
-        self._dept_table.verticalHeader().setDefaultSectionSize(48)
-        configure_table(self._dept_table)
+        self._dept_table = make_read_only_table(["Department", "Count"], max_h=200, row_h=48)
         dc_lay.addWidget(self._dept_table)
         lay.addWidget(dept_card)
 
@@ -181,27 +155,11 @@ class EmployeesPage(QWidget):
 
         # ── Table ─────────────────────────────────────────────────
         cols = ["ID", "Name", "Role", "Department", "Type", "Phone", "Email", "Status", "Actions"]
-        self.table = QTableWidget(0, len(cols))
-        self.table.setHorizontalHeaderLabels(cols)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(len(cols)-1, QHeaderView.ResizeMode.Fixed)
-        self.table.setColumnWidth(len(cols)-1, 130)
-        self.table.horizontalHeader().setStretchLastSection(False)
-        self.table.verticalHeader().setVisible(False)
-        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        self.table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.table.setAlternatingRowColors(True)
-        self.table.setMinimumHeight(420)
-        self.table.verticalHeader().setDefaultSectionSize(48)
-        configure_table(self.table)
+        self.table = make_action_table(cols)
 
         lay.addWidget(self.table)
         lay.addStretch()
-        scroll.setWidget(inner)
-        wrapper = QVBoxLayout(self)
-        wrapper.setContentsMargins(0, 0, 0, 0)
-        wrapper.addWidget(scroll)
+        finish_page(self, scroll)
 
     # ── Filters ───────────────────────────────────────────────────
     def _apply_filters(self):
@@ -231,8 +189,7 @@ class EmployeesPage(QWidget):
 
     # ── Add ───────────────────────────────────────────────────────
     def _on_add(self):
-        is_admin = self._role in ("Admin", "HR")
-        dlg = EmployeeDialog(self, title="Add Employee", is_admin=is_admin)
+        dlg = EmployeeDialog(self, title="Add Employee")
         if dlg.exec() == QDialog.DialogCode.Accepted:
             d = dlg.get_data()
             if not d["name"].strip():
@@ -241,9 +198,7 @@ class EmployeesPage(QWidget):
             # Check for duplicate phone number
             phone = d.get("phone", "").strip()
             if phone and self._backend:
-                existing = self._backend.fetch(
-                    "SELECT employee_id, CONCAT(first_name,' ',last_name) AS full_name "
-                    "FROM employees WHERE phone=%s", (phone,), one=True)
+                existing = self._backend.check_duplicate_phone(phone)
                 if existing:
                     QMessageBox.warning(self, "Duplicate Phone",
                         f"Phone number {phone} is already assigned to "
@@ -271,10 +226,7 @@ class EmployeesPage(QWidget):
             item = self.table.item(row, c)
             data[key] = item.text() if item else ""
 
-        is_admin = self._role in ("Admin", "HR")
-
-        dlg = EmployeeDialog(self, title="Edit Employee", data=data,
-                             is_admin=is_admin)
+        dlg = EmployeeDialog(self, title="Edit Employee", data=data)
         result = dlg.exec()
         if dlg.fired:
             self._on_delete(row); return

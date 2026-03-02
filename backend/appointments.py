@@ -190,5 +190,9 @@ class AppointmentMixin:
         return ok
 
     def update_reminder_sent(self, appointment_id, sent):
-        return self.exec("UPDATE appointments SET reminder_sent=%s WHERE appointment_id=%s",
-                         (1 if sent else 0, appointment_id))
+        ok = self.exec("UPDATE appointments SET reminder_sent=%s WHERE appointment_id=%s",
+                       (1 if sent else 0, appointment_id))
+        if ok:
+            state = "sent" if sent else "cleared"
+            self.log_activity("Edited", "Appointment", f"Reminder {state} for appt #{appointment_id}")
+        return ok

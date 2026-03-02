@@ -96,6 +96,12 @@ class EmployeeMixin:
             return True
         return False
 
+    def check_duplicate_phone(self, phone):
+        """Return dict with employee_id & full_name if phone is already used, else None."""
+        return self.fetch(
+            "SELECT employee_id, CONCAT(first_name,' ',last_name) AS full_name "
+            "FROM employees WHERE phone=%s", (phone,), one=True)
+
     def add_employee(self, data):
         first, last = self._split_name(data["name"])
         role_id = self._lookup_role_id(data["role"])
@@ -286,6 +292,7 @@ class EmployeeMixin:
         # Try updating existing user
         result = self.exec("UPDATE users SET password=%s WHERE email=%s", (new_password, email))
         if result:
+            self.log_activity("Edited", "User", f"Password updated for {email}")
             return True
         # No user record found — create one
         row = self.fetch(
@@ -295,6 +302,7 @@ class EmployeeMixin:
             self.exec(
                 "INSERT INTO users (email, password, full_name, role_id) VALUES (%s,%s,%s,%s)",
                 (email, new_password, row["full_name"], row["role_id"]))
+            self.log_activity("Created", "User", f"User account created for {email}")
             return True
         return False
 
@@ -461,13 +469,18 @@ class EmployeeMixin:
 
     def mark_notifications_read(self, employee_id):
         """Mark all notifications as read for an employee."""
-        self.exec("UPDATE notifications SET is_read=1 WHERE employee_id=%s AND is_read=0",
-                  (employee_id,))
+        ok = self.exec("UPDATE notifications SET is_read=1 WHERE employee_id=%s AND is_read=0",
+                       (employee_id,))
+        if ok:
+            self.log_activity("Edited", "Notification", f"Marked notifications read for employee #{employee_id}")
 
     # ── Leave Auto-Expiry ─────────────────────────────────────
 
     def auto_expire_leaves(self):
         """Restore employees to Active whose leave_until date has passed."""
-        return self.exec(
+        ok = self.exec(
             "UPDATE employees SET status='Active', leave_from=NULL, leave_until=NULL "
             "WHERE status='On Leave' AND leave_until IS NOT NULL AND leave_until < CURDATE()")
+        if ok:
+            self.log_activity("Edited", "Employee", "Auto-expired past-due leave(s), restored to Active")
+        return ok

@@ -1,23 +1,28 @@
-# Settings page - db cleanup, dark mode, password change
+# Settings page - db cleanup, user accounts, password change
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFrame, QScrollArea, QGraphicsDropShadowEffect, QMessageBox,
+    QFrame, QMessageBox,
     QTableWidget, QTableWidgetItem, QHeaderView, QDateEdit, QComboBox,
-    QLineEdit, QCheckBox, QDoubleSpinBox, QDialog, QFormLayout,
+    QLineEdit, QDoubleSpinBox, QDialog, QFormLayout, QInputDialog,
+    QCheckBox,
 )
 from PyQt6.QtCore import Qt, QDate, QTimer
 from PyQt6.QtGui import QColor
-from ui.styles import configure_table, style_dialog_btns
+from ui.styles import (
+    configure_table, make_page_layout, finish_page, make_banner, make_card,
+    make_read_only_table, make_interactive_table, style_dialog_btns,
+)
 
 
 class SettingsPage(QWidget):
     """Admin settings + self-service profile for all roles."""
 
-    def __init__(self, backend=None, user_email: str = ""):
+    def __init__(self, backend=None, user_email: str = "", role: str = "Admin"):
         super().__init__()
         self._backend = backend
         self._user_email = user_email
+        self._role = role
         self._build()
         # Auto-refresh data every 10 seconds
         self._refresh_timer = QTimer(self)
@@ -26,41 +31,17 @@ class SettingsPage(QWidget):
 
     # ── UI ─────────────────────────────────────────────────────────────
     def _build(self):
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        inner = QWidget(); inner.setObjectName("pageInner")
-        lay = QVBoxLayout(inner); lay.setSpacing(20); lay.setContentsMargins(28, 28, 28, 28)
+        scroll, lay = make_page_layout()
 
         # ── Banner ─────────────────────────────────────────────────
-        banner = QFrame(); banner.setObjectName("pageBanner"); banner.setMinimumHeight(100)
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20); shadow.setOffset(0, 4); shadow.setColor(QColor(0, 0, 0, 15))
-        banner.setGraphicsEffect(shadow)
-        bl = QHBoxLayout(banner); bl.setContentsMargins(32, 20, 32, 20)
-        tc = QVBoxLayout(); tc.setSpacing(4)
-        t = QLabel("Settings"); t.setObjectName("bannerTitle")
-        s = QLabel("Database maintenance, appearance, and profile"); s.setObjectName("bannerSubtitle")
-        tc.addWidget(t); tc.addWidget(s)
-        bl.addLayout(tc); bl.addStretch()
-        lay.addWidget(banner)
+        lay.addWidget(make_banner(
+            "Settings", "Database maintenance, user accounts, and profile",
+        ))
 
-        # ── Profile & Appearance Card ──────────────────────────────
-        lay.addWidget(self._section("Profile & Appearance"))
+        # ── Profile Card ──────────────────────────────────────────────────
+        lay.addWidget(self._section("Profile"))
         prof_card = self._card()
         pl = QVBoxLayout(prof_card); pl.setContentsMargins(20, 16, 20, 16); pl.setSpacing(14)
-
-        # Dark mode toggle
-        dm_row = QHBoxLayout(); dm_row.setSpacing(12)
-        dm_row.addWidget(QLabel("🌙  Dark Mode"))
-        self._dark_toggle = QCheckBox("Enable dark theme")
-        self._dark_toggle.setStyleSheet("font-size: 13px;")
-        if self._backend and self._user_email:
-            self._dark_toggle.setChecked(self._backend.get_dark_mode(self._user_email))
-        self._dark_toggle.toggled.connect(self._on_dark_toggle)
-        dm_row.addWidget(self._dark_toggle)
-        dm_row.addStretch()
-        pl.addLayout(dm_row)
 
         # Change password
         pw_lbl = QLabel("🔒  Change Password")
@@ -99,20 +80,9 @@ class SettingsPage(QWidget):
         disc_info.setWordWrap(True)
         dl.addWidget(disc_info)
 
-        self._disc_table = QTableWidget(0, 4)
-        self._disc_table.setHorizontalHeaderLabels(["Type Name", "Discount %", "Legal Basis", "Active"])
-        h = self._disc_table.horizontalHeader()
-        h.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self._disc_table.verticalHeader().setVisible(False)
-        self._disc_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self._disc_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
-        self._disc_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self._disc_table.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self._disc_table.setAlternatingRowColors(True)
-        self._disc_table.verticalHeader().setDefaultSectionSize(40)
-        self._disc_table.setMinimumHeight(160)
-        self._disc_table.setMaximumHeight(220)
-        configure_table(self._disc_table)
+        self._disc_table = make_interactive_table(
+            ["Type Name", "Discount %", "Legal Basis", "Active"],
+            min_h=160, max_h=220, row_h=40)
         dl.addWidget(self._disc_table)
 
         disc_btn_row = QHBoxLayout(); disc_btn_row.setSpacing(8)
@@ -135,17 +105,8 @@ class SettingsPage(QWidget):
 
         # ── Database Overview ──────────────────────────────────────
         lay.addWidget(self._section("Database Overview"))
-        self.counts_table = QTableWidget(0, 2)
-        self.counts_table.setHorizontalHeaderLabels(["Table", "Row Count"])
-        self.counts_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self.counts_table.verticalHeader().setVisible(False)
-        self.counts_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.counts_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        self.counts_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.counts_table.setAlternatingRowColors(True)
-        self.counts_table.verticalHeader().setDefaultSectionSize(40)
-        self.counts_table.setMinimumHeight(300)
-        configure_table(self.counts_table)
+        self.counts_table = make_read_only_table(
+            ["Table", "Row Count"], min_h=300, row_h=40)
         lay.addWidget(self.counts_table)
 
         # ── Cleanup actions ────────────────────────────────────────
@@ -193,9 +154,7 @@ class SettingsPage(QWidget):
         lay.addWidget(card4)
 
         lay.addStretch()
-        scroll.setWidget(inner)
-        wrapper = QVBoxLayout(self); wrapper.setContentsMargins(0, 0, 0, 0)
-        wrapper.addWidget(scroll)
+        finish_page(self, scroll)
         self._refresh_counts()
 
     # ── Helpers ────────────────────────────────────────────────────────
@@ -205,10 +164,7 @@ class SettingsPage(QWidget):
 
     @staticmethod
     def _card() -> QFrame:
-        f = QFrame(); f.setObjectName("cleanupCard")
-        sh = QGraphicsDropShadowEffect()
-        sh.setBlurRadius(12); sh.setOffset(0, 3); sh.setColor(QColor(0, 0, 0, 10))
-        f.setGraphicsEffect(sh); return f
+        return make_card()
 
     @staticmethod
     def _cleanup_lbl(text: str) -> QLabel:
@@ -222,11 +178,7 @@ class SettingsPage(QWidget):
 
     # ── Slots ──────────────────────────────────────────────────────────
     def _on_dark_toggle(self, checked: bool):
-        if self._backend and self._user_email:
-            self._backend.set_dark_mode(self._user_email, checked)
-            QMessageBox.information(self, "Theme",
-                                    "Dark mode preference saved.\n"
-                                    "Restart the application to apply the full theme change.")
+        pass  # Dark mode removed
 
     def _change_password(self):
         cur = self._cur_pw.text().strip()
@@ -250,7 +202,7 @@ class SettingsPage(QWidget):
             QMessageBox.warning(self, "Error", msg)
 
     def _refresh_counts(self):
-        if not self._backend:
+        if not self.isVisible() or not self._backend:
             return
         counts = self._backend.get_table_counts()
         self.counts_table.setRowCount(len(counts))
@@ -342,9 +294,14 @@ class SettingsPage(QWidget):
                 QMessageBox.warning(self, "Validation", "Type name is required.")
                 return
             if self._backend:
-                self._backend.add_discount_type(d["name"], d["percent"], d["legal_basis"])
-            self._load_discount_types()
-            QMessageBox.information(self, "Success", f"Discount type '{d['name']}' added.")
+                ok = self._backend.add_discount_type(d["name"], d["percent"], d["legal_basis"])
+                self._load_discount_types()
+                if ok:
+                    QMessageBox.information(self, "Success", f"Discount type '{d['name']}' added.")
+                else:
+                    QMessageBox.warning(self, "Error",
+                        f"Failed to add '{d['name']}'.\n\n"
+                        "A discount type with that name may already exist.")
 
     def _on_edit_discount(self):
         row = self._disc_table.currentRow()
@@ -365,10 +322,14 @@ class SettingsPage(QWidget):
                 QMessageBox.warning(self, "Validation", "Type name is required.")
                 return
             if self._backend:
-                self._backend.update_discount_type(
+                ok = self._backend.update_discount_type(
                     did, d["name"], d["percent"], d["legal_basis"], 1 if d["is_active"] else 0)
-            self._load_discount_types()
-            QMessageBox.information(self, "Success", f"Discount type '{d['name']}' updated.")
+                self._load_discount_types()
+                if ok:
+                    QMessageBox.information(self, "Success", f"Discount type '{d['name']}' updated.")
+                else:
+                    QMessageBox.warning(self, "Error",
+                        f"Failed to update '{d['name']}'.\nA discount type with that name may already exist.")
 
     def _on_delete_discount(self):
         row = self._disc_table.currentRow()
@@ -385,10 +346,12 @@ class SettingsPage(QWidget):
         if reply == QMessageBox.StandardButton.Yes:
             did = self._discount_ids[row]
             if self._backend:
-                self._backend.delete_discount_type(did)
-            self._load_discount_types()
-            QMessageBox.information(self, "Done", f"Discount type '{name}' deleted.")
-
+                ok = self._backend.delete_discount_type(did)
+                self._load_discount_types()
+                if ok:
+                    QMessageBox.information(self, "Done", f"Discount type '{name}' deleted.")
+                else:
+                    QMessageBox.warning(self, "Error", f"Failed to delete '{name}'.")
 
 # ══════════════════════════════════════════════════════════════════════
 #  Discount Type Add/Edit Dialog

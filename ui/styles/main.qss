@@ -752,17 +752,26 @@ QFrame#pageBanner {
 
 /* Banner main title */
 QLabel#bannerTitle {
-    font-size: 22px;
+    font-size: 28px;
     font-weight: bold;
     color: #FFFFFF;
     background: transparent;
     padding: 2px 0px;
 }
 
+/* Banner date line – more prominent than description */
+QLabel#bannerDate {
+    font-size: 14px;
+    font-weight: 600;
+    color: #FFFFFF;
+    background: transparent;
+    padding: 1px 0px;
+}
+
 /* Banner subtitle / description */
 QLabel#bannerSubtitle {
-    font-size: 13px;
-    color: rgba(255,255,255,0.8);
+    font-size: 12px;
+    color: rgba(255,255,255,0.65);
     background: transparent;
     padding: 1px 0px;
 }
@@ -931,12 +940,6 @@ QLabel#sectionHeader {
     margin-top: 4px;
 }
 
-/* Cleanup action card */
-QFrame#cleanupCard {
-    background: #FFFFFF;
-    border-radius: 10px;
-}
-
 /* Label inside a cleanup card */
 QLabel#cleanupLabel {
     color: #2C3E50;
@@ -973,6 +976,41 @@ QPushButton#truncateBtn:hover {
 
 
 /* ================================================================
+   QMESSAGEBOX & QINPUTDIALOG STYLING
+   ================================================================ */
+
+QMessageBox, QInputDialog {
+    background-color: #FFFFFF;
+}
+
+QMessageBox QLabel, QInputDialog QLabel {
+    color: #2C3E50;
+    font-size: 13px;
+    min-width: 260px;
+}
+
+QMessageBox QPushButton, QInputDialog QPushButton {
+    background-color: #388087;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 24px;
+    font-size: 12px;
+    font-weight: bold;
+    min-height: 32px;
+    min-width: 80px;
+}
+
+QMessageBox QPushButton:hover, QInputDialog QPushButton:hover {
+    background-color: #2C6A70;
+}
+
+QMessageBox QPushButton:pressed, QInputDialog QPushButton:pressed {
+    background-color: #245558;
+}
+
+
+/* ================================================================
    ANALYTICS & REPORTS TOTAL LABELS
    ================================================================ */
 
@@ -996,4 +1034,61 @@ QLabel#totalLabelSm {
     font-size: 14px;
     font-weight: bold;
     color: #388087;
+}
+
+
+/* ================================================================
+   PILL BADGES  (schedule-badge, activity-badge, etc.)
+   ================================================================ */
+
+QLabel#pillBadge {
+    background-color: #BADFE7;
+    color: #388087;
+    border-radius: 10px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+/* ================================================================
+   PROFILE / INFO DIALOG LABELS
+   ================================================================ */
+
+QLabel#profileValue {
+    color: #2C3E50;
+    font-size: 13px;
+}
+
+QLabel#profileValueBold {
+    color: #388087;
+    font-size: 16px;
+    font-weight: bold;
+}
+
+/* ================================================================
+   LINK-STYLE TEXT BUTTONS  ("View all appointments →")
+   ================================================================ */
+
+QPushButton#linkBtn {
+    background: transparent;
+    border: none;
+    color: #388087;
+    font-size: 12px;
+    font-weight: bold;
+    padding: 4px 0;
+    text-align: left;
+}
+
+QPushButton#linkBtn:hover {
+    color: #2C6A70;
+}
+
+/* ================================================================
+   MUTED SUMMARY TEXT
+   ================================================================ */
+
+QLabel#mutedSummary {
+    font-size: 13px;
+    color: #7F8C8D;
+    padding: 2px 0;
 }

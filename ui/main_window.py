@@ -42,6 +42,18 @@ _ROLE_ACCESS = {
 }
 
 
+_NAV_TOOLTIPS = {
+    "Dashboard":      "Overview, KPIs, and schedule",
+    "Patients":       "Manage patient records",
+    "Appointments":   "Schedule and track appointments",
+    "Clinical & POS": "Queue, billing, and records",
+    "Data Analytics": "Reports, charts, and insights",
+    "Employees":      "Staff directory and management",
+    "Activity Log":   "Audit trail of system actions",
+    "Settings":       "Database, accounts, and profile",
+}
+
+
 class MainWindow(QMainWindow):
     """Primary application window shown after successful login."""
 
@@ -149,6 +161,7 @@ class MainWindow(QMainWindow):
             btn.setObjectName("navBtn")
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setMinimumHeight(44)
+            btn.setToolTip(_NAV_TOOLTIPS.get(label, label))
             btn.clicked.connect(lambda checked, i=nav_idx: self._select_nav(i))
             self._nav_buttons.append(btn)
             lay.addWidget(btn)
@@ -199,6 +212,7 @@ class MainWindow(QMainWindow):
         logout_btn.setObjectName("logoutBtn")
         logout_btn.setMinimumHeight(36)
         logout_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        logout_btn.setToolTip("Sign out and return to login")
         logout_btn.clicked.connect(self.logout_requested.emit)
         user_card_lay.addWidget(logout_btn)
 
@@ -277,8 +291,8 @@ class MainWindow(QMainWindow):
         self._analytics_page = AnalyticsPage(backend=self._backend, role=self._role, user_email=self._user)
         self.stack.addWidget(self._analytics_page)
 
-        # 5 – Employees (HR gets enhanced page)
-        if self._role == "HR":
+        # 5 – Employees (Admin & HR get enhanced page with salary/leave data)
+        if self._role in ("HR", "Admin"):
             self._employees_page = HREmployeesPage(backend=self._backend, role=self._role)
         else:
             self._employees_page = EmployeesPage(backend=self._backend, role=self._role)
@@ -289,7 +303,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self._activity_log_page)
 
         # 7 – Settings
-        self._settings_page = SettingsPage(backend=self._backend, user_email=self._user)
+        self._settings_page = SettingsPage(backend=self._backend, user_email=self._user, role=self._role)
         self.stack.addWidget(self._settings_page)
 
         # Page-refresh map: stack index → (page_ref, refresh_method_name)
@@ -310,12 +324,10 @@ class MainWindow(QMainWindow):
     # ── Live user-name refresh ─────────────────────────────────────
     def _refresh_user_display_name(self):
         """Re-read the user's full_name from DB and update sidebar + dashboard."""
-        row = self._backend.fetch(
-            "SELECT full_name FROM users WHERE email=%s",
-            (self._user,), one=True)
+        row = self._backend.get_user_full_name(self._user)
         if not row:
             return
-        new_name = row["full_name"]
+        new_name = row
         if new_name == self._user_name:
             return
         self._user_name = new_name

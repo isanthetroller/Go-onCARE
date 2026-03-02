@@ -1,4 +1,4 @@
-# Color palette and style helpers
+# Color palette, style helpers, and UI factory functions
 #
 # Colors:
 # Primary:   #388087  (dark teal)
@@ -34,6 +34,19 @@ COLORS = {
     "sidebar_hv": "#BADFE7",
     "sidebar_sel": "#388087",
     "mint":       "#C2EDCE",
+}
+
+# ── Centralised status → colour maps ──────────────────────────────────
+STATUS_COLORS = {
+    "Active": "#5CB85C", "On Leave": "#E8B931", "Inactive": "#D9534F",
+    "Completed": "#5CB85C", "Confirmed": "#388087", "Pending": "#E8B931",
+    "Cancelled": "#D9534F", "In Progress": "#6FB3B8",
+}
+
+ACTION_COLORS = {
+    "Login": "#388087", "Created": "#5CB85C", "Edited": "#E8B931",
+    "Deleted": "#D9534F", "Voided": "#D9534F", "Merged": "#6FB3B8",
+    "Requested": "#9B59B6", "Approved": "#27AE60", "Declined": "#C0392B",
 }
 
 # ── QSS loader ────────────────────────────────────────────────────────
@@ -110,6 +123,234 @@ def configure_table(table):
     pal.setColor(QPalette.ColorRole.Window, QColor(_active_colors["card"]))
     table.setPalette(pal)
     table.setAutoFillBackground(True)
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  UI Factory Functions — eliminate repeated boilerplate across pages
+# ══════════════════════════════════════════════════════════════════════
+
+def make_page_layout():
+    """Create the standard scrollable page wrapper used by every page.
+
+    Returns (scroll_widget, content_layout) — add widgets to *content_layout*,
+    then set *scroll_widget* as the child of an outer QVBoxLayout on self.
+    """
+    from PyQt6.QtWidgets import QScrollArea, QWidget, QVBoxLayout, QFrame
+    scroll = QScrollArea()
+    scroll.setWidgetResizable(True)
+    scroll.setFrameShape(QFrame.Shape.NoFrame)
+    inner = QWidget()
+    inner.setObjectName("pageInner")
+    lay = QVBoxLayout(inner)
+    lay.setSpacing(20)
+    lay.setContentsMargins(28, 28, 28, 28)
+    scroll.setWidget(inner)
+    return scroll, lay
+
+
+def finish_page(page_widget, scroll):
+    """Set the scroll area as the only child of *page_widget*."""
+    from PyQt6.QtWidgets import QVBoxLayout
+    wrapper = QVBoxLayout(page_widget)
+    wrapper.setContentsMargins(0, 0, 0, 0)
+    wrapper.addWidget(scroll)
+
+
+def make_card(min_height: int = 0):
+    """Return a styled QFrame card with a subtle drop-shadow."""
+    from PyQt6.QtWidgets import QFrame, QGraphicsDropShadowEffect
+    from PyQt6.QtGui import QColor
+    card = QFrame()
+    card.setObjectName("card")
+    if min_height:
+        card.setMinimumHeight(min_height)
+    shadow = QGraphicsDropShadowEffect()
+    shadow.setBlurRadius(18)
+    shadow.setOffset(0, 3)
+    shadow.setColor(QColor(0, 0, 0, 12))
+    card.setGraphicsEffect(shadow)
+    return card
+
+
+def make_banner(title_text: str, subtitle_text: str,
+                btn_text: str = "", btn_slot=None):
+    """Build a standard page banner (teal header bar).
+
+    Returns the banner QFrame.  If *btn_text* is given a bannerBtn is added to
+    the right side (connected to *btn_slot*).
+    """
+    from PyQt6.QtWidgets import (QFrame, QHBoxLayout, QVBoxLayout, QLabel,
+                                 QPushButton, QGraphicsDropShadowEffect)
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtGui import QColor
+
+    banner = QFrame()
+    banner.setObjectName("pageBanner")
+    banner.setMinimumHeight(100)
+    shadow = QGraphicsDropShadowEffect()
+    shadow.setBlurRadius(20)
+    shadow.setOffset(0, 4)
+    shadow.setColor(QColor(0, 0, 0, 15))
+    banner.setGraphicsEffect(shadow)
+
+    banner_lay = QHBoxLayout(banner)
+    banner_lay.setContentsMargins(32, 20, 32, 20)
+    banner_lay.setSpacing(0)
+    tc = QVBoxLayout()
+    tc.setSpacing(4)
+    t = QLabel(title_text)
+    t.setObjectName("bannerTitle")
+    s = QLabel(subtitle_text)
+    s.setObjectName("bannerSubtitle")
+    tc.addWidget(t)
+    tc.addWidget(s)
+    banner_lay.addLayout(tc)
+    banner_lay.addStretch()
+
+    if btn_text and btn_slot:
+        btn = QPushButton(btn_text)
+        btn.setObjectName("bannerBtn")
+        btn.setMinimumHeight(42)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setToolTip(btn_text.replace("\uff0b", "").strip())
+        btn.clicked.connect(btn_slot)
+        banner_lay.addWidget(btn, alignment=Qt.AlignmentFlag.AlignVCenter)
+
+    return banner
+
+
+def make_read_only_table(headers: list[str], *, min_h: int = 420,
+                         max_h: int = 0, row_h: int = 48):
+    """Create and return a fully-configured read-only QTableWidget.
+
+    Handles: column headers, stretch mode, no edit/select, alternating rows,
+    row height, palette, and minimum height.
+    """
+    from PyQt6.QtWidgets import QTableWidget, QHeaderView
+    from PyQt6.QtCore import Qt
+    table = QTableWidget(0, len(headers))
+    table.setHorizontalHeaderLabels(headers)
+    table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+    table.horizontalHeader().setStretchLastSection(True)
+    table.verticalHeader().setVisible(False)
+    table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+    table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+    table.setAlternatingRowColors(True)
+    table.setMinimumHeight(min_h)
+    if max_h:
+        table.setMaximumHeight(max_h)
+    table.verticalHeader().setDefaultSectionSize(row_h)
+    configure_table(table)
+    return table
+
+
+def make_interactive_table(headers: list[str], *, min_h: int = 160,
+                          max_h: int = 0, row_h: int = 40):
+    """Create a row-selectable table (for edit/delete workflows).
+
+    SingleSelection + SelectRows + StrongFocus so the user can pick a row
+    before clicking an action button.
+    """
+    from PyQt6.QtWidgets import QTableWidget, QHeaderView
+    from PyQt6.QtCore import Qt
+    table = QTableWidget(0, len(headers))
+    table.setHorizontalHeaderLabels(headers)
+    table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+    table.horizontalHeader().setStretchLastSection(True)
+    table.verticalHeader().setVisible(False)
+    table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+    table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+    table.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+    table.setAlternatingRowColors(True)
+    table.setMinimumHeight(min_h)
+    if max_h:
+        table.setMaximumHeight(max_h)
+    table.verticalHeader().setDefaultSectionSize(row_h)
+    configure_table(table)
+    return table
+
+
+def make_action_table(headers: list[str], *, min_h: int = 420,
+                     row_h: int = 48, action_col_width: int = 130):
+    """Create a display table whose last column holds action-button widgets.
+
+    NoSelection + NoFocus like read-only tables, but the last column is
+    fixed-width instead of stretched so View/Edit buttons have room.
+    """
+    from PyQt6.QtWidgets import QTableWidget, QHeaderView
+    from PyQt6.QtCore import Qt
+    table = QTableWidget(0, len(headers))
+    table.setHorizontalHeaderLabels(headers)
+    table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+    table.horizontalHeader().setSectionResizeMode(
+        len(headers) - 1, QHeaderView.ResizeMode.Fixed)
+    table.setColumnWidth(len(headers) - 1, action_col_width)
+    table.horizontalHeader().setStretchLastSection(False)
+    table.verticalHeader().setVisible(False)
+    table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
+    table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+    table.setAlternatingRowColors(True)
+    table.setMinimumHeight(min_h)
+    table.verticalHeader().setDefaultSectionSize(row_h)
+    configure_table(table)
+    return table
+
+
+def make_stat_card(key: str, title: str, color: str, labels_dict: dict):
+    """Build a KPI card (color strip + value + label). Stores the value QLabel
+    in *labels_dict[key]*. Returns the card QFrame."""
+    from PyQt6.QtWidgets import QFrame, QVBoxLayout, QLabel
+    card = make_card(min_height=100)
+    cl = QVBoxLayout(card)
+    cl.setContentsMargins(18, 14, 18, 14)
+    cl.setSpacing(4)
+    strip = QFrame()
+    strip.setFixedHeight(3)
+    strip.setStyleSheet(f"background-color: {color}; border-radius: 1px;")
+    v = QLabel("0")
+    v.setObjectName("statValue")
+    labels_dict[key] = v
+    l = QLabel(title)
+    l.setObjectName("statLabel")
+    cl.addWidget(strip)
+    cl.addWidget(v)
+    cl.addWidget(l)
+    return card
+
+
+def format_timedelta(td) -> str:
+    """Convert a MySQL TIME / timedelta to 'HH:MM' string."""
+    if hasattr(td, "total_seconds"):
+        total = int(td.total_seconds())
+        h, m = divmod(total // 60, 60)
+        return f"{h:02d}:{m:02d}"
+    if hasattr(td, "strftime"):
+        return td.strftime("%H:%M")
+    return str(td) if td else ""
+
+
+def status_color(status: str) -> str:
+    """Look up the colour for a status string, with a sensible fallback."""
+    return STATUS_COLORS.get(status, COLORS["text"])
+
+
+# ── Loading cursor context manager ────────────────────────────────────
+from contextlib import contextmanager
+
+
+@contextmanager
+def busy_cursor():
+    """Show a wait cursor while a block of code runs, then restore."""
+    from PyQt6.QtWidgets import QApplication
+    from PyQt6.QtCore import Qt
+    QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+    try:
+        yield
+    finally:
+        QApplication.restoreOverrideCursor()
 
 
 # ── Table button helper ───────────────────────────────────────────────

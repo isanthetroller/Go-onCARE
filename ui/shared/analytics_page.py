@@ -3,13 +3,16 @@
 import math
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QScrollArea,
-    QGraphicsDropShadowEffect, QGridLayout, QTableWidget, QTableWidgetItem,
-    QHeaderView, QSizePolicy, QPushButton, QDateEdit, QComboBox,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
+    QGridLayout, QTableWidget, QTableWidgetItem,
+    QHeaderView, QPushButton, QDateEdit, QComboBox,
 )
-from PyQt6.QtCore import Qt, QRectF, QDate, QTimer
-from PyQt6.QtGui import QColor, QPainter, QPen, QBrush, QFont, QPainterPath
-from ui.styles import configure_table
+from PyQt6.QtCore import Qt, QDate, QTimer
+from PyQt6.QtGui import QColor
+from ui.styles import (
+    configure_table, make_page_layout, finish_page, make_banner,
+    make_card, make_read_only_table, busy_cursor,
+)
 from ui.shared.chart_widgets import (
     PieChartWidget, HBarChartWidget,
     CONDITION_COLORS, STATUS_COLORS, DEPT_COLORS, DEMO_COLORS, RETENTION_COLORS,
@@ -38,54 +41,39 @@ class AnalyticsPage(QWidget):
     def _load_data(self):
         if not self._backend:
             return {}
-        return {
-            "stats":          self._backend.get_summary_stats(),
-            "monthly_rev":    self._backend.get_monthly_revenue(6),
-            "doctors":        self._backend.get_doctor_performance(),
-            "services":       self._backend.get_top_services(),
-            "appt_status":    self._backend.get_appointment_status_counts(),
-            "conditions":     self._backend.get_patient_condition_counts(),
-            "demographics":   self._backend.get_patient_demographics(),
-            "dept_revenue":   self._backend.get_revenue_by_department(),
-            "active_doctors": self._backend.get_active_doctor_count(),
-            "monthly_appts":  self._backend.get_monthly_appointment_stats(6),
-            "retention":      self._backend.get_patient_retention(6),
-            "cancel_trend":   self._backend.get_cancellation_rate_trend(6),
-            "period_cmp":     self._backend.get_period_comparison(),
-        }
+        with busy_cursor():
+            return {
+                "stats":          self._backend.get_summary_stats(),
+                "monthly_rev":    self._backend.get_monthly_revenue(6),
+                "doctors":        self._backend.get_doctor_performance(),
+                "services":       self._backend.get_top_services(),
+                "appt_status":    self._backend.get_appointment_status_counts(),
+                "conditions":     self._backend.get_patient_condition_counts(),
+                "demographics":   self._backend.get_patient_demographics(),
+                "dept_revenue":   self._backend.get_revenue_by_department(),
+                "active_doctors": self._backend.get_active_doctor_count(),
+                "monthly_appts":  self._backend.get_monthly_appointment_stats(6),
+                "retention":      self._backend.get_patient_retention(6),
+                "cancel_trend":   self._backend.get_cancellation_rate_trend(6),
+                "period_cmp":     self._backend.get_period_comparison(),
+            }
 
     # ── Build ─────────────────────────────────────────────────────
     def _build(self):
         data = self._load_data()
         stats = data.get("stats", {})
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        inner = QWidget(); inner.setObjectName("pageInner")
-        lay = QVBoxLayout(inner); lay.setSpacing(20); lay.setContentsMargins(28, 28, 28, 28)
+        scroll, lay = make_page_layout()
 
-        # ── Banner ────────────────────────────────────────────────
-        banner = QFrame(); banner.setObjectName("pageBanner"); banner.setMinimumHeight(100)
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20); shadow.setOffset(0, 4); shadow.setColor(QColor(0, 0, 0, 15))
-        banner.setGraphicsEffect(shadow)
-        banner_lay = QHBoxLayout(banner)
-        banner_lay.setContentsMargins(32, 20, 32, 20); banner_lay.setSpacing(0)
-        tc = QVBoxLayout(); tc.setSpacing(4)
-        tc.addWidget(self._lbl("Data Analytics & Reports", "bannerTitle"))
-        tc.addWidget(self._lbl("Hospital performance, revenue, trends, and insights", "bannerSubtitle"))
-        banner_lay.addLayout(tc); banner_lay.addStretch()
-        lay.addWidget(banner)
+        lay.addWidget(make_banner(
+            "Data Analytics & Reports",
+            "Hospital performance, revenue, trends, and insights"))
 
         # ── Doctor-only view: own performance & revenue ───────────
         if self._role == "Doctor":
             self._build_doctor_view(lay)
             lay.addStretch()
-            scroll.setWidget(inner)
-            wrapper = QVBoxLayout(self)
-            wrapper.setContentsMargins(0, 0, 0, 0)
-            wrapper.addWidget(scroll)
+            finish_page(self, scroll)
             return
 
         if self._role == "Admin":
@@ -147,10 +135,7 @@ class AnalyticsPage(QWidget):
             lay.addWidget(self._summary_table_card(data))
 
         lay.addStretch()
-        scroll.setWidget(inner)
-        wrapper = QVBoxLayout(self)
-        wrapper.setContentsMargins(0, 0, 0, 0)
-        wrapper.addWidget(scroll)
+        finish_page(self, scroll)
 
     # ── helpers ───────────────────────────────────────────────────
     @staticmethod
@@ -207,10 +192,7 @@ class AnalyticsPage(QWidget):
         lay.addLayout(kpi_row)
 
         # ── Info card (department, employment type) ───────────────
-        info_card = QFrame(); info_card.setObjectName("card")
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20); shadow.setOffset(0, 4); shadow.setColor(QColor(0, 0, 0, 18))
-        info_card.setGraphicsEffect(shadow)
+        info_card = make_card()
         info_vbox = QVBoxLayout(info_card)
         info_vbox.setContentsMargins(20, 18, 20, 14); info_vbox.setSpacing(8)
         info_vbox.addWidget(self._lbl(f"Dr. {doc_name}", "cardTitle"))
@@ -232,10 +214,7 @@ class AnalyticsPage(QWidget):
 
         # ── Monthly Revenue Trend (own) ───────────────────────────
         if monthly:
-            rev_card = QFrame(); rev_card.setObjectName("card")
-            shadow2 = QGraphicsDropShadowEffect()
-            shadow2.setBlurRadius(20); shadow2.setOffset(0, 4); shadow2.setColor(QColor(0, 0, 0, 18))
-            rev_card.setGraphicsEffect(shadow2)
+            rev_card = make_card()
             vbox = QVBoxLayout(rev_card); vbox.setContentsMargins(20, 18, 20, 14); vbox.setSpacing(12)
             vbox.addWidget(self._lbl("Your Monthly Revenue", "cardTitle"))
             vbox.addWidget(self._lbl("Revenue from completed appointments over the last 6 months", "mutedSubtext"))
@@ -254,10 +233,7 @@ class AnalyticsPage(QWidget):
 
         # ── Monthly breakdown table ───────────────────────────────
         if monthly:
-            tbl_card = QFrame(); tbl_card.setObjectName("card")
-            shadow3 = QGraphicsDropShadowEffect()
-            shadow3.setBlurRadius(20); shadow3.setOffset(0, 4); shadow3.setColor(QColor(0, 0, 0, 18))
-            tbl_card.setGraphicsEffect(shadow3)
+            tbl_card = make_card()
             vbox2 = QVBoxLayout(tbl_card); vbox2.setContentsMargins(20, 18, 20, 14); vbox2.setSpacing(12)
             vbox2.addWidget(self._lbl("Monthly Breakdown", "cardTitle"))
             vbox2.addWidget(self._lbl("Appointments and revenue per month", "mutedSubtext"))
@@ -283,10 +259,7 @@ class AnalyticsPage(QWidget):
 
     @staticmethod
     def _kpi_card(label, value, color, delta=None) -> QFrame:
-        card = QFrame(); card.setObjectName("card"); card.setMinimumHeight(110)
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20); shadow.setOffset(0, 4); shadow.setColor(QColor(0, 0, 0, 18))
-        card.setGraphicsEffect(shadow)
+        card = make_card(min_height=110)
         vbox = QVBoxLayout(card); vbox.setContentsMargins(18, 14, 18, 14); vbox.setSpacing(4)
         strip = QFrame(); strip.setFixedHeight(3)
         strip.setStyleSheet(f"background-color: {color}; border-radius: 1px;")
@@ -303,6 +276,8 @@ class AnalyticsPage(QWidget):
 
     # ── Refresh / Export ──────────────────────────────────────────
     def _on_refresh(self):
+        if not self.isVisible():
+            return
         old = self.layout()
         if old:
             while old.count():
@@ -317,10 +292,7 @@ class AnalyticsPage(QWidget):
     # ── Pie card ──────────────────────────────────────────────────
     @staticmethod
     def _pie_card(title_text, subtitle_text, data) -> QFrame:
-        card = QFrame(); card.setObjectName("card"); card.setMinimumHeight(340)
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20); shadow.setOffset(0, 4); shadow.setColor(QColor(0, 0, 0, 18))
-        card.setGraphicsEffect(shadow)
+        card = make_card(min_height=340)
         vbox = QVBoxLayout(card); vbox.setContentsMargins(20, 18, 20, 14); vbox.setSpacing(8)
         t = QLabel(title_text); t.setObjectName("cardTitle")
         s = QLabel(subtitle_text); s.setObjectName("mutedSubtext")
@@ -350,10 +322,7 @@ class AnalyticsPage(QWidget):
 
     # ── Patient Retention card ────────────────────────────────────
     def _retention_card(self, retention: list) -> QFrame:
-        card = QFrame(); card.setObjectName("card")
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20); shadow.setOffset(0, 4); shadow.setColor(QColor(0, 0, 0, 18))
-        card.setGraphicsEffect(shadow)
+        card = make_card()
         vbox = QVBoxLayout(card); vbox.setContentsMargins(20, 18, 20, 14); vbox.setSpacing(12)
         vbox.addWidget(self._lbl("Patient Retention", "cardTitle"))
         vbox.addWidget(self._lbl("New vs returning patients per month", "mutedSubtext"))
@@ -384,10 +353,7 @@ class AnalyticsPage(QWidget):
 
     # ── Cancellation Rate card ────────────────────────────────────
     def _cancellation_card(self, cancel_trend: list) -> QFrame:
-        card = QFrame(); card.setObjectName("card")
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20); shadow.setOffset(0, 4); shadow.setColor(QColor(0, 0, 0, 18))
-        card.setGraphicsEffect(shadow)
+        card = make_card()
         vbox = QVBoxLayout(card); vbox.setContentsMargins(20, 18, 20, 14); vbox.setSpacing(12)
         vbox.addWidget(self._lbl("Cancellation Rate Trend", "cardTitle"))
         vbox.addWidget(self._lbl("Monthly cancellation rate over time", "mutedSubtext"))
@@ -419,10 +385,7 @@ class AnalyticsPage(QWidget):
 
     # ── Doctor Performance ────────────────────────────────────────
     def _doctor_perf_card(self, doctors: list) -> QFrame:
-        card = QFrame(); card.setObjectName("card")
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20); shadow.setOffset(0, 4); shadow.setColor(QColor(0, 0, 0, 18))
-        card.setGraphicsEffect(shadow)
+        card = make_card()
         vbox = QVBoxLayout(card); vbox.setContentsMargins(20, 18, 20, 14); vbox.setSpacing(12)
         vbox.addWidget(self._lbl("Doctor Performance", "cardTitle"))
         vbox.addWidget(self._lbl("Appointments, completions, and revenue generated", "mutedSubtext"))
@@ -450,10 +413,7 @@ class AnalyticsPage(QWidget):
 
     # ── Top Services ──────────────────────────────────────────────
     def _top_services_card(self, services: list) -> QFrame:
-        card = QFrame(); card.setObjectName("card")
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20); shadow.setOffset(0, 4); shadow.setColor(QColor(0, 0, 0, 18))
-        card.setGraphicsEffect(shadow)
+        card = make_card()
         vbox = QVBoxLayout(card); vbox.setContentsMargins(20, 18, 20, 14); vbox.setSpacing(12)
         vbox.addWidget(self._lbl("Top Services", "cardTitle"))
         vbox.addWidget(self._lbl("Most requested services and revenue contribution", "mutedSubtext"))
@@ -479,10 +439,7 @@ class AnalyticsPage(QWidget):
 
     # ── Monthly Revenue ───────────────────────────────────────────
     def _monthly_revenue_card(self, monthly: list) -> QFrame:
-        card = QFrame(); card.setObjectName("card")
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20); shadow.setOffset(0, 4); shadow.setColor(QColor(0, 0, 0, 18))
-        card.setGraphicsEffect(shadow)
+        card = make_card()
         vbox = QVBoxLayout(card); vbox.setContentsMargins(20, 18, 20, 14); vbox.setSpacing(12)
         vbox.addWidget(self._lbl("Monthly Revenue Trend", "cardTitle"))
         vbox.addWidget(self._lbl("Revenue over the last 6 months", "mutedSubtext"))
@@ -513,10 +470,7 @@ class AnalyticsPage(QWidget):
 
     # ── Summary / KPI Table ───────────────────────────────────────
     def _summary_table_card(self, data: dict) -> QFrame:
-        card = QFrame(); card.setObjectName("card")
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20); shadow.setOffset(0, 4); shadow.setColor(QColor(0, 0, 0, 18))
-        card.setGraphicsEffect(shadow)
+        card = make_card()
         vbox = QVBoxLayout(card); vbox.setContentsMargins(20, 18, 20, 14); vbox.setSpacing(12)
 
         hdr = QHBoxLayout()

@@ -2,12 +2,15 @@
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFrame, QScrollArea, QGraphicsDropShadowEffect, QTableWidget,
-    QTableWidgetItem, QHeaderView, QLineEdit, QComboBox, QDateEdit,
+    QTableWidget, QTableWidgetItem, QHeaderView,
+    QLineEdit, QComboBox, QDateEdit,
 )
 from PyQt6.QtCore import Qt, QDate, QTimer
 from PyQt6.QtGui import QColor
-from ui.styles import configure_table
+from ui.styles import (
+    make_page_layout, finish_page, make_banner, make_card,
+    make_read_only_table, ACTION_COLORS,
+)
 
 
 class ActivityLogPage(QWidget):
@@ -21,33 +24,14 @@ class ActivityLogPage(QWidget):
         self._build()
 
     def _build(self):
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        inner = QWidget(); inner.setObjectName("pageInner")
-        lay = QVBoxLayout(inner); lay.setSpacing(20); lay.setContentsMargins(28, 28, 28, 28)
+        scroll, lay = make_page_layout()
 
         # ── Banner ────────────────────────────────────────────────
-        banner = QFrame(); banner.setObjectName("pageBanner"); banner.setMinimumHeight(100)
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20); shadow.setOffset(0, 4); shadow.setColor(QColor(0, 0, 0, 15))
-        banner.setGraphicsEffect(shadow)
-        bl = QHBoxLayout(banner); bl.setContentsMargins(32, 20, 32, 20)
-        tc = QVBoxLayout(); tc.setSpacing(4)
-        t = QLabel("Activity Log"); t.setObjectName("bannerTitle")
-        if self._role == "HR":
-            s = QLabel("Login activity of Doctors and Receptionists"); s.setObjectName("bannerSubtitle")
-        else:
-            s = QLabel("Audit trail of all system actions"); s.setObjectName("bannerSubtitle")
-        tc.addWidget(t); tc.addWidget(s)
-        bl.addLayout(tc); bl.addStretch()
-        lay.addWidget(banner)
+        sub = "Login activity of Doctors and Receptionists" if self._role == "HR" else "Audit trail of all system actions"
+        lay.addWidget(make_banner("Activity Log", sub))
 
         # ── Filters row ──────────────────────────────────────────
-        filt_card = QFrame(); filt_card.setObjectName("card")
-        shadow2 = QGraphicsDropShadowEffect()
-        shadow2.setBlurRadius(12); shadow2.setOffset(0, 2); shadow2.setColor(QColor(0, 0, 0, 10))
-        filt_card.setGraphicsEffect(shadow2)
+        filt_card = make_card()
         fr = QHBoxLayout(filt_card); fr.setContentsMargins(16, 12, 16, 12); fr.setSpacing(12)
 
         fr.addWidget(QLabel("User:"))
@@ -61,14 +45,17 @@ class ActivityLogPage(QWidget):
         fr.addWidget(self._action_label)
         self._action_combo = QComboBox(); self._action_combo.setObjectName("formCombo")
         self._action_combo.setMinimumHeight(36)
-        self._action_combo.addItems(["All", "Login", "Created", "Edited", "Deleted", "Voided", "Merged"])
+        self._action_combo.addItems(["All", "Login", "Created", "Edited", "Deleted",
+                                       "Voided", "Merged", "Requested", "Approved", "Declined"])
         fr.addWidget(self._action_combo)
 
         self._type_label = QLabel("Type:")
         fr.addWidget(self._type_label)
         self._type_combo = QComboBox(); self._type_combo.setObjectName("formCombo")
         self._type_combo.setMinimumHeight(36)
-        self._type_combo.addItems(["All", "User", "Patient", "Appointment", "Invoice", "Service", "Employee", "Queue"])
+        self._type_combo.addItems(["All", "User", "Patient", "Appointment", "Invoice",
+                                    "Service", "Employee", "Queue", "Leave",
+                                    "Condition", "Discount Type", "Notification", "System"])
         fr.addWidget(self._type_combo)
 
         # Hide Action & Type filters for HR role
@@ -98,24 +85,12 @@ class ActivityLogPage(QWidget):
         lay.addWidget(filt_card)
 
         # ── Table ────────────────────────────────────────────────
-        self._table = QTableWidget(0, 6)
-        self._table.setHorizontalHeaderLabels(["Timestamp", "User", "Role", "Action", "Type", "Detail"])
-        self._table.horizontalHeader().setStretchLastSection(True)
-        self._table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self._table.verticalHeader().setVisible(False)
-        self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self._table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        self._table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self._table.setAlternatingRowColors(True)
-        self._table.setMinimumHeight(420)
-        self._table.verticalHeader().setDefaultSectionSize(48)
-        configure_table(self._table)
+        self._table = make_read_only_table(
+            ["Timestamp", "User", "Role", "Action", "Type", "Detail"])
         lay.addWidget(self._table)
 
         lay.addStretch()
-        scroll.setWidget(inner)
-        wrapper = QVBoxLayout(self); wrapper.setContentsMargins(0, 0, 0, 0)
-        wrapper.addWidget(scroll)
+        finish_page(self, scroll)
         self.refresh()
 
     def _check_for_new_entries(self):
@@ -159,10 +134,7 @@ class ActivityLogPage(QWidget):
                 to_date=to_d,
             )
         self._table.setRowCount(len(rows))
-        action_colors = {
-            "Login": "#388087", "Created": "#5CB85C", "Edited": "#E8B931",
-            "Deleted": "#D9534F", "Voided": "#D9534F", "Merged": "#6FB3B8",
-        }
+        action_colors = ACTION_COLORS
         for r, row in enumerate(rows):
             ts = row.get("created_at", "")
             if hasattr(ts, "strftime"):

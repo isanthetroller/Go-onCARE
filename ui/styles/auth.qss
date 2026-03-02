@@ -113,3 +113,36 @@ QFrame#separator {
     background-color: #BADFE7;
     max-height: 1px;
 }
+
+
+/* ── Message box popups ─────────────────────────────────────────────
+   Styled buttons for QMessageBox shown on the auth screen.         */
+QMessageBox {
+    background-color: #FFFFFF;
+}
+
+QMessageBox QLabel {
+    color: #2C3E50;
+    font-size: 13px;
+    min-width: 260px;
+}
+
+QMessageBox QPushButton {
+    background-color: #388087;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 24px;
+    font-size: 12px;
+    font-weight: bold;
+    min-height: 32px;
+    min-width: 80px;
+}
+
+QMessageBox QPushButton:hover {
+    background-color: #2C6A70;
+}
+
+QMessageBox QPushButton:pressed {
+    background-color: #245558;
+}

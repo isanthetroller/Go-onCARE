@@ -8,101 +8,27 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QDate, QEvent
 from PyQt6.QtGui import QColor
-from ui.styles import configure_table
+from ui.styles import configure_table, style_dialog_btns
+from ui.shared.employee_dialogs import EmployeeDialog
 
 
 # ══════════════════════════════════════════════════════════════════════
-#  HR Employee Add/Edit Dialog (extended with salary & emergency contact)
+#  HR Employee Add/Edit Dialog (extends EmployeeDialog with salary &
+#  emergency contact fields)
 # ══════════════════════════════════════════════════════════════════════
-class HREmployeeDialog(QDialog):
-    _INPUT_STYLE = (
-        "QLineEdit, QTextEdit { padding: 10px 14px; border: 2px solid #BADFE7;"
-        " border-radius: 10px; font-size: 13px; background-color: #FFFFFF;"
-        " color: #2C3E50; }"
-        "QLineEdit:focus, QTextEdit:focus { border: 2px solid #388087; }"
-    )
+class HREmployeeDialog(EmployeeDialog):
 
     def __init__(self, parent=None, *, title="Add Employee", data=None):
-        super().__init__(parent)
-        self.setWindowTitle(title)
+        super().__init__(parent, title=title, data=data)
         self.setMinimumWidth(640)
-        self._fired = False
 
-        form = QFormLayout(self)
-        form.setSpacing(14)
-        form.setContentsMargins(28, 28, 28, 28)
+    # ── Override hooks ────────────────────────────────────────────
+    def _build_fields(self, form):
+        super()._build_fields(form)
+        # Insert salary & emergency contact before Notes (last row)
+        # Using insertRow avoids the removeRow C++ widget deletion bug
+        notes_row = form.rowCount() - 1  # Notes is the last row from parent
 
-        self.name_edit = QLineEdit()
-        self.name_edit.setStyleSheet(self._INPUT_STYLE)
-        self.name_edit.setPlaceholderText("Full name")
-        self.name_edit.setMinimumHeight(38)
-        self.name_edit.setMinimumWidth(320)
-
-        self.role_combo = QComboBox(); self.role_combo.setObjectName("formCombo")
-        self.role_combo.addItems(["Doctor", "Cashier", "Receptionist", "Admin", "HR"])
-        self.role_combo.setMinimumHeight(38)
-
-        self.dept_combo = QComboBox(); self.dept_combo.setObjectName("formCombo")
-        self.dept_combo.addItems([
-            "General Medicine", "Cardiology", "Dentistry", "Pediatrics",
-            "Laboratory", "Front Desk", "Management", "Pharmacy", "Human Resources",
-        ])
-        self.dept_combo.setMinimumHeight(38)
-
-        self.type_combo = QComboBox(); self.type_combo.setObjectName("formCombo")
-        self.type_combo.addItems(["Full-time", "Part-time", "Contract"])
-        self.type_combo.setMinimumHeight(38)
-
-        # Phone: container frame with unified border
-        self._phone_frame = QFrame()
-        self._phone_frame.setObjectName("phoneFrame")
-        self._phone_normal_ss = (
-            "QFrame#phoneFrame { border: 2px solid #BADFE7; border-radius: 10px;"
-            " background: #FFFFFF; }"
-        )
-        self._phone_focus_ss = (
-            "QFrame#phoneFrame { border: 2px solid #388087; border-radius: 10px;"
-            " background: #FFFFFF; }"
-        )
-        self._phone_frame.setStyleSheet(self._phone_normal_ss)
-        self._phone_frame.setFixedHeight(42)
-        phone_lay = QHBoxLayout(self._phone_frame)
-        phone_lay.setContentsMargins(0, 0, 0, 0)
-        phone_lay.setSpacing(0)
-        self._phone_prefix = QLabel("+63")
-        self._phone_prefix.setStyleSheet(
-            "QLabel { padding: 0px 10px; border: none;"
-            " font-size: 13px; font-weight: bold; background: #F0F7F8;"
-            " border-top-left-radius: 8px; border-bottom-left-radius: 8px;"
-            " color: #2C3E50; }"
-        )
-        self.phone_edit = QLineEdit()
-        self.phone_edit.setStyleSheet(
-            "QLineEdit { padding: 0px 14px; border: none;"
-            " font-size: 13px; background-color: transparent; color: #2C3E50; }"
-        )
-        self.phone_edit.setPlaceholderText("9XXXXXXXXX")
-        self.phone_edit.setMaxLength(10)
-        self.phone_edit.installEventFilter(self)
-        phone_lay.addWidget(self._phone_prefix)
-        phone_lay.addWidget(self.phone_edit, 1)
-
-        self.email_edit = QLineEdit()
-        self.email_edit.setStyleSheet(self._INPUT_STYLE)
-        self.email_edit.setPlaceholderText("Email")
-        self.email_edit.setMinimumHeight(38)
-        self.email_edit.setMinimumWidth(320)
-
-        self.hire_date = QDateEdit(); self.hire_date.setCalendarPopup(True)
-        self.hire_date.setDate(QDate.currentDate()); self.hire_date.setObjectName("formCombo")
-        self.hire_date.setMaximumDate(QDate.currentDate())
-        self.hire_date.setMinimumHeight(38)
-
-        self.status_combo = QComboBox(); self.status_combo.setObjectName("formCombo")
-        self.status_combo.addItems(["Active", "On Leave", "Inactive"])
-        self.status_combo.setMinimumHeight(38)
-
-        # HR-specific fields
         self.salary_spin = QDoubleSpinBox()
         self.salary_spin.setObjectName("formCombo")
         self.salary_spin.setRange(0, 999999.99)
@@ -116,114 +42,25 @@ class HREmployeeDialog(QDialog):
         self.emergency_edit.setPlaceholderText("Emergency contact (name – phone)")
         self.emergency_edit.setMinimumHeight(38)
 
-        self.notes_edit = QTextEdit()
-        self.notes_edit.setStyleSheet(self._INPUT_STYLE)
-        self.notes_edit.setMaximumHeight(70)
+        form.insertRow(notes_row, "Monthly Salary",    self.salary_spin)
+        form.insertRow(notes_row + 1, "Emergency Contact", self.emergency_edit)
 
-        form.addRow("Full Name",          self.name_edit)
-        form.addRow("Role",               self.role_combo)
-        form.addRow("Department",         self.dept_combo)
-        form.addRow("Type",               self.type_combo)
-        form.addRow("Phone",              self._phone_frame)
-        form.addRow("Email",              self.email_edit)
-        form.addRow("Hire Date",          self.hire_date)
-        form.addRow("Status",             self.status_combo)
-        form.addRow("Monthly Salary",     self.salary_spin)
-        form.addRow("Emergency Contact",  self.emergency_edit)
-        form.addRow("Notes",              self.notes_edit)
-
-        # Buttons
-        btn_row = QHBoxLayout(); btn_row.setSpacing(12)
-        if data:
-            fire_btn = QPushButton("🔥  Fire")
-            fire_btn.setMinimumHeight(32); fire_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            fire_btn.setObjectName("dialogDangerBtn")
-            fire_btn.clicked.connect(self._on_fire)
-            btn_row.addWidget(fire_btn)
-        btn_row.addStretch()
-
-        cancel_btn = QPushButton("Cancel"); cancel_btn.setMinimumHeight(32)
-        cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        cancel_btn.setObjectName("dialogCancelBtn")
-        cancel_btn.clicked.connect(self.reject)
-
-        save_btn = QPushButton("Save"); save_btn.setMinimumHeight(32)
-        save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        save_btn.setObjectName("dialogSaveBtn")
-        save_btn.clicked.connect(self.accept)
-
-        btn_row.addWidget(cancel_btn); btn_row.addWidget(save_btn)
-        form.addRow(btn_row)
-
-        # Pre-fill data
-        if data:
-            self.name_edit.setText(data.get("name", ""))
-            for combo, key in [
-                (self.role_combo, "role"), (self.dept_combo, "dept"),
-                (self.type_combo, "type"), (self.status_combo, "status"),
-            ]:
-                idx = combo.findText(data.get(key, ""))
-                if idx >= 0:
-                    combo.setCurrentIndex(idx)
-            raw_phone = data.get("phone", "")
-            if raw_phone.startswith("+63"):
-                raw_phone = raw_phone[3:]
-            self.phone_edit.setText(raw_phone)
-            self.email_edit.setText(data.get("email", ""))
-            self.emergency_edit.setText(data.get("emergency_contact", ""))
-            try:
-                self.salary_spin.setValue(float(data.get("salary", 0) or 0))
-            except (ValueError, TypeError):
-                self.salary_spin.setValue(0)
-            if data.get("notes"):
-                self.notes_edit.setPlainText(data["notes"])
-
-    def _on_fire(self):
-        self._fired = True; self.reject()
-
-    @property
-    def fired(self) -> bool:
-        return self._fired
-
-    def eventFilter(self, obj, event):
-        if obj is self.phone_edit:
-            if event.type() == QEvent.Type.FocusIn:
-                self._phone_frame.setStyleSheet(self._phone_focus_ss)
-            elif event.type() == QEvent.Type.FocusOut:
-                self._phone_frame.setStyleSheet(self._phone_normal_ss)
-        return super().eventFilter(obj, event)
-
-    def accept(self):
-        import re
-        if not self.name_edit.text().strip():
-            QMessageBox.warning(self, "Validation", "Full Name is required."); return
-        if not self.phone_edit.text().strip():
-            QMessageBox.warning(self, "Validation", "Phone number is required."); return
-        if not self.email_edit.text().strip():
-            QMessageBox.warning(self, "Validation", "Email is required."); return
-        digits = self.phone_edit.text().strip()
-        if not re.match(r'^\d{10}$', digits):
-            QMessageBox.warning(self, "Validation",
-                                "Enter exactly 10 digits after +63\n"
-                                "Example: 9171234567")
-            return
-        super().accept()
+    def _prefill(self, data):
+        super()._prefill(data)
+        self.emergency_edit.setText(data.get("emergency_contact", ""))
+        try:
+            self.salary_spin.setValue(float(data.get("salary", 0) or 0))
+        except (ValueError, TypeError):
+            self.salary_spin.setValue(0)
+        if data.get("notes"):
+            self.notes_edit.setPlainText(data["notes"])
 
     def get_data(self) -> dict:
+        d = super().get_data()
         sal = self.salary_spin.value()
-        return {
-            "name":              self.name_edit.text(),
-            "role":              self.role_combo.currentText(),
-            "dept":              self.dept_combo.currentText(),
-            "type":              self.type_combo.currentText(),
-            "phone":             "+63" + self.phone_edit.text().strip(),
-            "email":             self.email_edit.text(),
-            "hire_date":         self.hire_date.date().toString("yyyy-MM-dd"),
-            "status":            self.status_combo.currentText(),
-            "salary":            sal if sal > 0 else None,
-            "emergency_contact": self.emergency_edit.text(),
-            "notes":             self.notes_edit.toPlainText(),
-        }
+        d["salary"] = sal if sal > 0 else None
+        d["emergency_contact"] = self.emergency_edit.text()
+        return d
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -362,5 +199,112 @@ class HREmployeeProfileDialog(QDialog):
         lay.addWidget(tabs)
         close_btn = QPushButton("Close"); close_btn.setMinimumHeight(38)
         close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_btn.setObjectName("dialogSaveBtn")
         close_btn.clicked.connect(self.accept)
         lay.addWidget(close_btn, alignment=Qt.AlignmentFlag.AlignRight)
+
+
+# ══════════════════════════════════════════════════════════════════
+#  User Account Create Dialog (with validation)
+# ══════════════════════════════════════════════════════════════════
+class UserAccountDialog(QDialog):
+    """Dialog to create a new user account with proper validation."""
+
+    def __init__(self, parent=None, backend=None):
+        super().__init__(parent)
+        self.setWindowTitle("Create User Account")
+        self.setMinimumWidth(500)
+
+        form = QFormLayout(self)
+        form.setSpacing(14)
+        form.setContentsMargins(28, 28, 28, 28)
+
+        self.name_edit = QLineEdit()
+        self.name_edit.setObjectName("formInput")
+        self.name_edit.setMinimumHeight(38)
+        self.name_edit.setPlaceholderText("Full name")
+
+        self.email_edit = QLineEdit()
+        self.email_edit.setObjectName("formInput")
+        self.email_edit.setMinimumHeight(38)
+        self.email_edit.setPlaceholderText("email@carecrud.com")
+
+        self.pw_edit = QLineEdit()
+        self.pw_edit.setObjectName("formInput")
+        self.pw_edit.setMinimumHeight(38)
+        self.pw_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.pw_edit.setPlaceholderText("Temporary password (min 4 chars)")
+
+        self.pw_confirm = QLineEdit()
+        self.pw_confirm.setObjectName("formInput")
+        self.pw_confirm.setMinimumHeight(38)
+        self.pw_confirm.setEchoMode(QLineEdit.EchoMode.Password)
+        self.pw_confirm.setPlaceholderText("Confirm password")
+
+        self.role_combo = QComboBox()
+        self.role_combo.setObjectName("formCombo")
+        self.role_combo.setMinimumHeight(38)
+        if backend:
+            role_names = backend.get_all_roles()
+            for rn in role_names:
+                self.role_combo.addItem(rn)
+        else:
+            self.role_combo.addItems(
+                ["Admin", "HR", "Doctor", "Cashier", "Receptionist"])
+
+        note = QLabel(
+            "⚠️  The user will be required to change their password on first login.")
+        note.setStyleSheet("font-size: 11px; color: #7F8C8D; padding-top: 4px;")
+        note.setWordWrap(True)
+
+        form.addRow("Full Name", self.name_edit)
+        form.addRow("Email", self.email_edit)
+        form.addRow("Password", self.pw_edit)
+        form.addRow("Confirm Password", self.pw_confirm)
+        form.addRow("Role", self.role_combo)
+        form.addRow("", note)
+
+        from PyQt6.QtWidgets import QDialogButtonBox
+        btns = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        style_dialog_btns(btns)
+        btns.accepted.connect(self.accept)
+        btns.rejected.connect(self.reject)
+        form.addRow(btns)
+
+    def accept(self):
+        import re
+        name = self.name_edit.text().strip()
+        email = self.email_edit.text().strip()
+        pw = self.pw_edit.text().strip()
+        pw2 = self.pw_confirm.text().strip()
+
+        if not name:
+            QMessageBox.warning(self, "Validation", "Full Name is required.")
+            return
+        if not email:
+            QMessageBox.warning(self, "Validation", "Email is required.")
+            return
+        if not re.match(r'^[\w.+-]+@[\w-]+\.[\w.]+$', email):
+            QMessageBox.warning(self, "Validation",
+                                "Enter a valid email address.\nExample: doctor@carecrud.com")
+            return
+        if not pw:
+            QMessageBox.warning(self, "Validation", "Password is required.")
+            return
+        if len(pw) < 4:
+            QMessageBox.warning(self, "Validation",
+                                "Password must be at least 4 characters.")
+            return
+        if pw != pw2:
+            QMessageBox.warning(self, "Validation", "Passwords do not match.")
+            return
+        super().accept()
+
+    def get_data(self) -> dict:
+        return {
+            "full_name": self.name_edit.text().strip(),
+            "email": self.email_edit.text().strip(),
+            "password": self.pw_edit.text().strip(),
+            "role_name": self.role_combo.currentText(),
+        }

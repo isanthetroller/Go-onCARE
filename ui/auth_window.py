@@ -105,7 +105,7 @@ class AuthWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("CareCRUD – Login")
-        self.setFixedSize(500, 520)
+        self.setFixedSize(500, 680)
         self.setStyleSheet(AUTH_STYLE)
         self._backend = AuthBackend()
 
@@ -158,6 +158,46 @@ class AuthWindow(QMainWindow):
         btn.clicked.connect(self._on_login)
         lay.addWidget(btn)
 
+        # ── BEGIN QUICK LOGIN (TEMPORARY – delete this block to remove) ──
+        lay.addSpacing(8)
+        ql_sep = QFrame(); ql_sep.setFrameShape(QFrame.Shape.HLine)
+        ql_sep.setStyleSheet("color: #BADFE7;")
+        lay.addWidget(ql_sep)
+        ql_label = QLabel("⚡ Quick Login (dev only)")
+        ql_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        ql_label.setStyleSheet(
+            "font-size: 11px; font-weight: bold; color: #7F8C8D; letter-spacing: 1px;")
+        lay.addWidget(ql_label)
+        _quick_accounts = [
+            ("Admin",        "admin@carecrud.com",       "admin123",     "#388087"),
+            ("Doctor",       "ana.reyes@carecrud.com",   "doctor123",    "#5CB85C"),
+            ("Cashier",      "sofia.reyes@carecrud.com", "cashier123",   "#6FB3B8"),
+            ("Receptionist", "james.cruz@carecrud.com",  "reception123", "#E8B931"),
+            ("HR",           "hr@carecrud.com",          "hr123",        "#C2EDCE"),
+        ]
+        ql_row1 = QHBoxLayout(); ql_row1.setSpacing(6)
+        ql_row2 = QHBoxLayout(); ql_row2.setSpacing(6)
+        for i, (role, email, pw, color) in enumerate(_quick_accounts):
+            qb = QPushButton(role)
+            qb.setMinimumHeight(36)
+            qb.setCursor(Qt.CursorShape.PointingHandCursor)
+            fg = "#FFFFFF" if role != "HR" else "#2C3E50"
+            qb.setStyleSheet(
+                f"QPushButton {{ background-color: {color}; color: {fg};"
+                f" border: none; border-radius: 8px; padding: 6px 10px;"
+                f" font-size: 12px; font-weight: bold; }}"
+                f" QPushButton:hover {{ opacity: 0.85; }}")
+            qb.clicked.connect(
+                lambda checked, e=email, p=pw: self._quick_login(e, p))
+            if i < 3:
+                ql_row1.addWidget(qb)
+            else:
+                ql_row2.addWidget(qb)
+        ql_row2.addStretch()
+        lay.addLayout(ql_row1)
+        lay.addLayout(ql_row2)
+        # ── END QUICK LOGIN (TEMPORARY) ──────────────────────────────
+
         return card
 
     # ── Handlers ───────────────────────────────────────────────────────
@@ -182,6 +222,14 @@ class AuthWindow(QMainWindow):
             if dlg.exec() != QDialog.DialogCode.Accepted:
                 return  # User cancelled — don't log in
         self.login_success.emit(email, role, full_name)
+
+    # ── BEGIN QUICK LOGIN handler (TEMPORARY – delete to remove) ───
+    def _quick_login(self, email: str, password: str):
+        """Bypass the input fields and log in directly."""
+        self.login_email.setText(email)
+        self.login_pw.setText(password)
+        self._on_login()
+    # ── END QUICK LOGIN handler ────────────────────────────────────
 
     # ── Widget helpers ─────────────────────────────────────────────────
     def _card(self) -> QWidget:
@@ -321,9 +369,7 @@ class _ForcePasswordChangeDialog(QDialog):
             QMessageBox.warning(self, "Validation", "Passwords do not match.")
             return
         # Update password and clear the must_change flag
-        self._backend.exec(
-            "UPDATE users SET password=%s, must_change_password=0 WHERE email=%s",
-            (new_pw, self._email))
+        self._backend.force_change_password(self._email, new_pw)
         QMessageBox.information(self, "Success", "Password changed successfully!\nYou can now log in with your new password.")
         self.accept()
 

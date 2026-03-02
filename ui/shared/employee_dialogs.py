@@ -22,8 +22,7 @@ class EmployeeDialog(QDialog):
         "QLineEdit:focus, QTextEdit:focus { border: 2px solid #388087; }"
     )
 
-    def __init__(self, parent=None, *, title="Add Employee", data=None,
-                 is_admin: bool = False):
+    def __init__(self, parent=None, *, title="Add Employee", data=None):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setMinimumWidth(600)
@@ -33,6 +32,14 @@ class EmployeeDialog(QDialog):
         form.setSpacing(14)
         form.setContentsMargins(28, 28, 28, 28)
 
+        self._build_fields(form)
+        self._build_buttons(form, data)
+        if data:
+            self._prefill(data)
+
+    # ── Overridable hooks ─────────────────────────────────────────
+    def _build_fields(self, form):
+        """Create all form widgets and attach them to *form*."""
         self.name_edit = QLineEdit()
         self.name_edit.setStyleSheet(self._INPUT_STYLE)
         self.name_edit.setPlaceholderText("Full name")
@@ -117,9 +124,7 @@ class EmployeeDialog(QDialog):
         form.addRow("Status",      self.status_combo)
         form.addRow("Notes",       self.notes_edit)
 
-        self._is_admin = is_admin
-
-        # Buttons
+    def _build_buttons(self, form, data):
         btn_row = QHBoxLayout(); btn_row.setSpacing(12)
         if data:
             fire_btn = QPushButton("🔥  Fire")
@@ -142,21 +147,20 @@ class EmployeeDialog(QDialog):
         btn_row.addWidget(cancel_btn); btn_row.addWidget(save_btn)
         form.addRow(btn_row)
 
-        # Pre-fill data
-        if data:
-            self.name_edit.setText(data.get("name", ""))
-            for combo, key in [
-                (self.role_combo, "role"), (self.dept_combo, "dept"),
-                (self.type_combo, "type"), (self.status_combo, "status"),
-            ]:
-                idx = combo.findText(data.get(key, ""))
-                if idx >= 0:
-                    combo.setCurrentIndex(idx)
-            raw_phone = data.get("phone", "")
-            if raw_phone.startswith("+63"):
-                raw_phone = raw_phone[3:]
-            self.phone_edit.setText(raw_phone)
-            self.email_edit.setText(data.get("email", ""))
+    def _prefill(self, data):
+        self.name_edit.setText(data.get("name", ""))
+        for combo, key in [
+            (self.role_combo, "role"), (self.dept_combo, "dept"),
+            (self.type_combo, "type"), (self.status_combo, "status"),
+        ]:
+            idx = combo.findText(data.get(key, ""))
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+        raw_phone = data.get("phone", "")
+        if raw_phone.startswith("+63"):
+            raw_phone = raw_phone[3:]
+        self.phone_edit.setText(raw_phone)
+        self.email_edit.setText(data.get("email", ""))
 
     def _on_fire(self):
         self._fired = True; self.reject()
@@ -296,5 +300,6 @@ class EmployeeProfileDialog(QDialog):
         lay.addWidget(tabs)
         close_btn = QPushButton("Close"); close_btn.setMinimumHeight(38)
         close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_btn.setObjectName("dialogSaveBtn")
         close_btn.clicked.connect(self.accept)
         lay.addWidget(close_btn, alignment=Qt.AlignmentFlag.AlignRight)

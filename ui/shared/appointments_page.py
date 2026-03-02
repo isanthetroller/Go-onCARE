@@ -4,12 +4,15 @@ from datetime import date, datetime, timedelta
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QTableWidget, QTableWidgetItem, QHeaderView, QFrame, QScrollArea,
-    QComboBox, QDialog, QMessageBox, QGraphicsDropShadowEffect,
+    QTableWidget, QTableWidgetItem, QHeaderView,
+    QComboBox, QDialog, QMessageBox,
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor, QFont
-from ui.styles import configure_table, make_table_btn
+from ui.styles import (
+    make_page_layout, finish_page, make_banner, make_read_only_table,
+    make_action_table, make_table_btn, format_timedelta, status_color,
+)
 from ui.shared.appointment_dialog import (
     AppointmentDialog, _pretty_date, _relative_label,
 )
@@ -48,6 +51,8 @@ class AppointmentsPage(QWidget):
         self._patient_names = names
 
     def _load_from_db(self):
+        if not self.isVisible():
+            return
         if not self._backend:
             self._all_appointments = []; return
         # Doctor sees only their own appointments
@@ -60,11 +65,8 @@ class AppointmentsPage(QWidget):
             if hasattr(d, "strftime"): appt["appointment_date"] = d.strftime("%Y-%m-%d")
             elif d is not None: appt["appointment_date"] = str(d)
             t = appt.get("appointment_time")
-            if hasattr(t, "total_seconds"):
-                total = int(t.total_seconds()); h, m = divmod(total // 60, 60)
-                appt["appointment_time"] = f"{h:02d}:{m:02d}:00"
-            elif hasattr(t, "strftime"): appt["appointment_time"] = t.strftime("%H:%M:%S")
-            elif t is not None: appt["appointment_time"] = str(t)
+            appt["appointment_time"] = format_timedelta(t) + ":00" if hasattr(t, "total_seconds") else (
+                t.strftime("%H:%M:%S") if hasattr(t, "strftime") else str(t) if t else "")
         self._update_doctor_filter()
 
     def _update_doctor_filter(self):
@@ -78,26 +80,16 @@ class AppointmentsPage(QWidget):
         self.doc_filter.blockSignals(False)
 
     def _build(self):
-        scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setFrameShape(QFrame.Shape.NoFrame)
-        inner = QWidget(); inner.setObjectName("pageInner")
-        lay = QVBoxLayout(inner); lay.setSpacing(16); lay.setContentsMargins(28,28,28,28)
+        scroll, lay = make_page_layout()
+        lay.setSpacing(16)
 
         # Banner
-        banner = QFrame(); banner.setObjectName("pageBanner"); banner.setMinimumHeight(100)
-        shadow = QGraphicsDropShadowEffect(); shadow.setBlurRadius(20); shadow.setOffset(0,4); shadow.setColor(QColor(0,0,0,15))
-        banner.setGraphicsEffect(shadow)
-        banner_lay = QHBoxLayout(banner); banner_lay.setContentsMargins(32,20,32,20)
-        tc = QVBoxLayout(); tc.setSpacing(4)
-        title = QLabel("Appointment Scheduling"); title.setObjectName("bannerTitle")
-        sub = QLabel("View and manage all doctor-patient appointments"); sub.setObjectName("bannerSubtitle")
-        tc.addWidget(title); tc.addWidget(sub)
-        banner_lay.addLayout(tc); banner_lay.addStretch()
-        if self._role not in ("Cashier", "Doctor"):
-            add_btn = QPushButton("\uff0b  New Appointment"); add_btn.setObjectName("bannerBtn")
-            add_btn.setMinimumHeight(42); add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            add_btn.clicked.connect(self._on_new)
-            banner_lay.addWidget(add_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
-        lay.addWidget(banner)
+        btn_text = "\uff0b  New Appointment" if self._role not in ("Cashier", "Doctor") else ""
+        lay.addWidget(make_banner(
+            "Appointment Scheduling",
+            "View and manage all doctor-patient appointments",
+            btn_text=btn_text, btn_slot=self._on_new,
+        ))
 
         # Quick-filter tabs
         tab_row = QHBoxLayout(); tab_row.setSpacing(8)
@@ -108,7 +100,7 @@ class AppointmentsPage(QWidget):
         tab_row.addStretch(); lay.addLayout(tab_row)
 
         self._summary_label = QLabel()
-        self._summary_label.setStyleSheet("font-size:13px;color:#7F8C8D;padding:2px 0;")
+        self._summary_label.setObjectName("mutedSummary")
         lay.addWidget(self._summary_label)
 
         # Filter bar
@@ -131,21 +123,16 @@ class AppointmentsPage(QWidget):
         cols = ["Day & Date", "Time", "Patient", "Doctor", "Service", "Notes", "Status"]
         if self._role != "Doctor": cols.append("Billing")
         if self._role != "Cashier": cols.append("Actions")
-        self.table = QTableWidget(0, len(cols)); self.table.setHorizontalHeaderLabels(cols)
-        hdr = self.table.horizontalHeader(); hdr.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive); self.table.setColumnWidth(0, 260)
         if self._role != "Cashier":
-            hdr.setSectionResizeMode(len(cols)-1, QHeaderView.ResizeMode.Fixed); self.table.setColumnWidth(len(cols)-1, 80)
-            hdr.setStretchLastSection(False)
-        self.table.verticalHeader().setVisible(False)
-        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        self.table.setFocusPolicy(Qt.FocusPolicy.NoFocus); self.table.setAlternatingRowColors(True)
-        self.table.verticalHeader().setDefaultSectionSize(48); self.table.setMinimumHeight(420)
-        configure_table(self.table); lay.addWidget(self.table)
+            self.table = make_action_table(cols, action_col_width=80)
+        else:
+            self.table = make_read_only_table(cols)
+        hdr = self.table.horizontalHeader()
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive); self.table.setColumnWidth(0, 260)
+        lay.addWidget(self.table)
 
-        lay.addStretch(); scroll.setWidget(inner)
-        wrapper = QVBoxLayout(self); wrapper.setContentsMargins(0,0,0,0); wrapper.addWidget(scroll)
+        lay.addStretch()
+        finish_page(self, scroll)
         self._load_from_db(); self._switch_tab("Today")
 
     def _switch_tab(self, label: str):

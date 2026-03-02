@@ -4,13 +4,17 @@ from datetime import datetime
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QTableWidget, QTableWidgetItem, QHeaderView, QFrame, QScrollArea,
-    QComboBox, QStackedWidget, QGraphicsDropShadowEffect, QDialog,
+    QTableWidget, QTableWidgetItem, QHeaderView, QFrame,
+    QComboBox, QStackedWidget, QDialog,
     QMessageBox,
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor
-from ui.styles import configure_table, make_table_btn, make_table_btn_danger
+from ui.styles import (
+    configure_table, make_page_layout, finish_page, make_banner, make_read_only_table,
+    make_table_btn, make_table_btn_danger, make_action_table,
+    format_timedelta, status_color,
+)
 from ui.shared.clinical_dialogs import (
     QueueEditDialog, ServiceEditDialog, NewInvoiceDialog,
     PaymentDialog, BulkPriceDialog,
@@ -46,6 +50,8 @@ class ClinicalPage(QWidget):
 
     def refresh(self):
         """Reload data for all clinical tabs, auto-sync appointments."""
+        if not self.isVisible():
+            return
         try:
             if self._backend:
                 self._backend.sync_today_appointments_to_queue()
@@ -63,33 +69,13 @@ class ClinicalPage(QWidget):
 
     # ── Build ──────────────────────────────────────────────────────
     def _build(self):
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        inner = QWidget()
-        inner.setObjectName("pageInner")
-        lay = QVBoxLayout(inner)
-        lay.setSpacing(20)
-        lay.setContentsMargins(28, 28, 28, 28)
+        scroll, lay = make_page_layout()
 
         # ── Header Banner ─────────────────────────────────────────
-        banner = QFrame()
-        banner.setObjectName("pageBanner")
-        banner.setMinimumHeight(100)
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20); shadow.setOffset(0, 4)
-        shadow.setColor(QColor(0, 0, 0, 15))
-        banner.setGraphicsEffect(shadow)
-        banner_lay = QHBoxLayout(banner)
-        banner_lay.setContentsMargins(32, 20, 32, 20)
-        banner_lay.setSpacing(0)
-        tc = QVBoxLayout(); tc.setSpacing(4)
-        title = QLabel("Clinical Workflow & Billing")
-        title.setObjectName("bannerTitle")
-        sub = QLabel("Patient queue, consultations, and point-of-sale")
-        sub.setObjectName("bannerSubtitle")
-        tc.addWidget(title); tc.addWidget(sub)
-        banner_lay.addLayout(tc)
+        banner = make_banner(
+            "Clinical Workflow & Billing",
+            "Patient queue, consultations, and point-of-sale",
+        )
         lay.addWidget(banner)
 
         # ── Tab row ───────────────────────────────────────────────
@@ -120,10 +106,7 @@ class ClinicalPage(QWidget):
             self._switch_tab(0, tab_labels[0])
 
         lay.addStretch()
-        scroll.setWidget(inner)
-        wrapper = QVBoxLayout(self)
-        wrapper.setContentsMargins(0, 0, 0, 0)
-        wrapper.addWidget(scroll)
+        finish_page(self, scroll)
 
     def _switch_tab(self, index: int, label: str):
         self._stack.setCurrentIndex(index)
@@ -180,6 +163,8 @@ class ClinicalPage(QWidget):
         call_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         call_btn.clicked.connect(self._on_call_next)
         toolbar.addWidget(call_btn)
+        if self._role == "Admin":
+            call_btn.setVisible(False)
 
         toolbar.addStretch()
 
@@ -196,20 +181,7 @@ class ClinicalPage(QWidget):
 
         # Queue table
         cols = ["Queue #", "Patient", "Time", "Doctor", "Purpose", "Status", "Actions"]
-        self._queue_table = QTableWidget(0, len(cols))
-        self._queue_table.setHorizontalHeaderLabels(cols)
-        self._queue_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self._queue_table.horizontalHeader().setSectionResizeMode(len(cols)-1, QHeaderView.ResizeMode.Fixed)
-        self._queue_table.setColumnWidth(len(cols)-1, 80)
-        self._queue_table.horizontalHeader().setStretchLastSection(False)
-        self._queue_table.verticalHeader().setVisible(False)
-        self._queue_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self._queue_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        self._queue_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self._queue_table.setAlternatingRowColors(True)
-        self._queue_table.setMinimumHeight(420)
-        self._queue_table.verticalHeader().setDefaultSectionSize(48)
-        configure_table(self._queue_table)
+        self._queue_table = make_action_table(cols, min_h=420, row_h=48, action_col_width=80)
         # Auto-sync appointments into queue on first load
         if self._backend:
             try:
@@ -258,6 +230,8 @@ class ClinicalPage(QWidget):
             act_lay.setContentsMargins(0,0,0,0); act_lay.setSpacing(6)
             edit_btn = make_table_btn("Edit"); edit_btn.setFixedWidth(52)
             edit_btn.clicked.connect(lambda checked, ri=r: self._on_edit_queue(ri))
+            if self._role == "Admin":
+                edit_btn.setVisible(False)
             act_lay.addWidget(edit_btn)
             self._queue_table.setCellWidget(r, 6, act_w)
 
@@ -332,6 +306,8 @@ class ClinicalPage(QWidget):
         new_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         new_btn.clicked.connect(self._on_new_invoice)
         bar.addWidget(new_btn)
+        if self._role == "Admin":
+            new_btn.setVisible(False)
         lay.addLayout(bar)
 
         # ── Sort & filter bar ─────────────────────────────────────
@@ -362,20 +338,7 @@ class ClinicalPage(QWidget):
         lay.addLayout(sort_bar)
 
         cols = ["Inv #", "Patient", "Services", "Total", "Paid", "Status", "Actions"]
-        self._billing_table = QTableWidget(0, len(cols))
-        self._billing_table.setHorizontalHeaderLabels(cols)
-        self._billing_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self._billing_table.horizontalHeader().setSectionResizeMode(len(cols)-1, QHeaderView.ResizeMode.Fixed)
-        self._billing_table.setColumnWidth(len(cols)-1, 160)
-        self._billing_table.horizontalHeader().setStretchLastSection(False)
-        self._billing_table.verticalHeader().setVisible(False)
-        self._billing_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self._billing_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        self._billing_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self._billing_table.setAlternatingRowColors(True)
-        self._billing_table.setMinimumHeight(420)
-        self._billing_table.verticalHeader().setDefaultSectionSize(48)
-        configure_table(self._billing_table)
+        self._billing_table = make_action_table(cols, min_h=420, row_h=48, action_col_width=160)
         self._all_invoices: list[dict] = []
         self._load_billing()
         lay.addWidget(self._billing_table)
@@ -458,7 +421,7 @@ class ClinicalPage(QWidget):
             # Actions: Pay | Print | Void
             act_w = QWidget()
             act_lay = QHBoxLayout(act_w); act_lay.setContentsMargins(0,0,0,0); act_lay.setSpacing(6)
-            if status not in ("Paid", "Voided"):
+            if status not in ("Paid", "Voided") and self._role != "Admin":
                 pay_btn = make_table_btn("Pay"); pay_btn.setFixedWidth(46)
                 pay_btn.clicked.connect(lambda checked, iid=inv_id: self._on_add_payment(iid))
                 act_lay.addWidget(pay_btn)
@@ -466,7 +429,7 @@ class ClinicalPage(QWidget):
                 prt_btn = make_table_btn("Print"); prt_btn.setFixedWidth(52)
                 prt_btn.clicked.connect(lambda checked, iid=inv_id: self._on_print_receipt(iid))
                 act_lay.addWidget(prt_btn)
-            if status != "Voided":
+            if status != "Voided" and self._role in ("Admin", "Cashier", "Receptionist"):
                 void_btn = make_table_btn_danger("Void"); void_btn.setFixedWidth(46)
                 void_btn.clicked.connect(lambda checked, iid=inv_id: self._on_void_invoice(iid))
                 act_lay.addWidget(void_btn)
@@ -641,20 +604,7 @@ class ClinicalPage(QWidget):
         lay.addLayout(bar)
 
         cols = ["Service Name", "Category", "Price", "Usage", "Active", "Actions"]
-        self._svc_table = QTableWidget(0, len(cols))
-        self._svc_table.setHorizontalHeaderLabels(cols)
-        self._svc_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        self._svc_table.horizontalHeader().setSectionResizeMode(len(cols)-1, QHeaderView.ResizeMode.Fixed)
-        self._svc_table.setColumnWidth(len(cols)-1, 80)
-        self._svc_table.horizontalHeader().setStretchLastSection(False)
-        self._svc_table.verticalHeader().setVisible(False)
-        self._svc_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self._svc_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        self._svc_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self._svc_table.setAlternatingRowColors(True)
-        self._svc_table.setMinimumHeight(420)
-        self._svc_table.verticalHeader().setDefaultSectionSize(48)
-        configure_table(self._svc_table)
+        self._svc_table = make_action_table(cols, min_h=420, row_h=48, action_col_width=80)
         self._load_services()
         lay.addWidget(self._svc_table)
         return page
