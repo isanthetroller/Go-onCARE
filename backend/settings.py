@@ -9,7 +9,7 @@ class SettingsMixin:
             "queue_entries", "invoices", "invoice_items",
             "employees", "users", "services",
             "departments", "roles", "payment_methods",
-            "activity_log", "standard_conditions",
+            "activity_log", "standard_conditions", "discount_types",
         ]
         results = []
         try:
@@ -121,3 +121,46 @@ class SettingsMixin:
 
     def delete_standard_condition(self, cond_id):
         return self.exec("DELETE FROM standard_conditions WHERE condition_id = %s", (cond_id,))
+
+    # ── Discount Types ─────────────────────────────────────────────────
+    def get_discount_types(self, active_only=False):
+        sql = "SELECT discount_id, type_name, discount_percent, legal_basis, is_active FROM discount_types"
+        if active_only:
+            sql += " WHERE is_active = 1"
+        sql += " ORDER BY type_name"
+        return self.fetch(sql)
+
+    def add_discount_type(self, name, percent, legal_basis=""):
+        ok = self.exec(
+            "INSERT INTO discount_types (type_name, discount_percent, legal_basis) VALUES (%s,%s,%s)",
+            (name, percent, legal_basis))
+        if ok:
+            self.log_activity("Created", "Discount Type", f"{name} ({percent}%)")
+        return ok
+
+    def update_discount_type(self, discount_id, name, percent, legal_basis="", is_active=1):
+        ok = self.exec(
+            "UPDATE discount_types SET type_name=%s, discount_percent=%s, legal_basis=%s, is_active=%s WHERE discount_id=%s",
+            (name, percent, legal_basis, is_active, discount_id))
+        if ok:
+            self.log_activity("Edited", "Discount Type", f"{name} ({percent}%)")
+        return ok
+
+    def delete_discount_type(self, discount_id):
+        # Set patients referencing this to NULL first
+        self.exec("UPDATE patients SET discount_type_id = NULL WHERE discount_type_id = %s", (discount_id,))
+        ok = self.exec("DELETE FROM discount_types WHERE discount_id = %s", (discount_id,))
+        if ok:
+            self.log_activity("Deleted", "Discount Type", f"ID {discount_id}")
+        return ok
+
+    def get_patient_discount_percent(self, patient_name):
+        """Get the discount percentage for a patient based on their discount type."""
+        row = self.fetch("""
+            SELECT COALESCE(dt.discount_percent, 0) AS discount_percent,
+                   COALESCE(dt.type_name, '') AS discount_type
+            FROM patients p
+            LEFT JOIN discount_types dt ON p.discount_type_id = dt.discount_id AND dt.is_active = 1
+            WHERE CONCAT(p.first_name,' ',p.last_name) = %s LIMIT 1
+        """, (patient_name,), one=True)
+        return row if row else {"discount_percent": 0, "discount_type": ""}

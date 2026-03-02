@@ -66,7 +66,7 @@ class DashboardPage(QWidget):
         for text, pi in quick_actions:
             if self._role == "Doctor" and pi in (1, 2):
                 continue
-            if self._role == "HR" and pi in (1, 2, 3, 4):
+            if self._role in ("HR", "Cashier") and pi in (1, 2, 3, 4):
                 continue
             btn = QPushButton(text)
             btn.setObjectName("actionBtn")
@@ -77,7 +77,7 @@ class DashboardPage(QWidget):
         act_row.addStretch()
         lay.addLayout(act_row)
 
-        if self._role not in ("Admin", "HR"):
+        if self._role not in ("Admin", "HR", "Cashier"):
             leave_card = QFrame(); leave_card.setObjectName("card")
             leave_shadow = QGraphicsDropShadowEffect()
             leave_shadow.setBlurRadius(18); leave_shadow.setOffset(0, 3)
@@ -133,28 +133,38 @@ class DashboardPage(QWidget):
         self.refresh()
 
     def _build_banner(self):
+        # Outer wrapper holds the drop-shadow so it doesn't affect text rendering
+        wrapper = QWidget()
+        wrapper.setContentsMargins(0, 0, 0, 0)
+        wrapper_lay = QVBoxLayout(wrapper)
+        wrapper_lay.setContentsMargins(0, 0, 0, 0)
+
         banner = QFrame()
         banner.setObjectName("pageBanner")
-        banner.setMinimumHeight(100)
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20); shadow.setOffset(0, 4)
-        shadow.setColor(QColor(0, 0, 0, 15))
-        banner.setGraphicsEffect(shadow)
+        banner.setFrameShape(QFrame.Shape.NoFrame)
+        banner.setMinimumHeight(140)
 
         vl = QVBoxLayout(banner)
-        vl.setContentsMargins(32, 24, 32, 24); vl.setSpacing(6)
+        vl.setContentsMargins(32, 28, 32, 28); vl.setSpacing(8)
         now = datetime.now()
         greeting = "Good Morning" if now.hour < 12 else (
             "Good Afternoon" if now.hour < 17 else "Good Evening")
-        self._greeting_label = self._white_lbl(
-            f"{greeting}, {self._user_name}!", 24, True)
+
+        self._greeting_label = QLabel(f"{greeting}, {self._user_name}!")
+        self._greeting_label.setObjectName("bannerTitle")
         vl.addWidget(self._greeting_label)
-        self._date_label = self._white_lbl(
-            now.strftime("%I:%M %p  \u2022  %B %d, %Y"), 14, False, 0.85)
+
+        self._date_label = QLabel(
+            now.strftime("%I:%M %p  \u2022  %B %d, %Y"))
+        self._date_label.setObjectName("bannerSubtitle")
         vl.addWidget(self._date_label)
-        vl.addWidget(self._white_lbl(
-            "Here's what's happening at the hospital today.", 13, False, 0.7))
-        return banner
+
+        desc = QLabel("Here's what's happening at the hospital today.")
+        desc.setObjectName("bannerSubtitle")
+        vl.addWidget(desc)
+
+        wrapper_lay.addWidget(banner)
+        return wrapper
 
     def _make_kpi_card(self, key, title, color):
         card = QFrame(); card.setObjectName("card"); card.setMinimumHeight(110)
@@ -319,10 +329,12 @@ class DashboardPage(QWidget):
     @staticmethod
     def _white_lbl(text, size, bold=False, alpha=1.0):
         l = QLabel(text)
+        l.setFrameShape(QFrame.Shape.NoFrame)
         w = "bold" if bold else "normal"
         clr = f"rgba(255,255,255,{alpha})" if alpha < 1.0 else "#FFF"
         l.setStyleSheet(
-            f"font-size:{size}px; font-weight:{w}; color:{clr}; background:transparent;")
+            f"font-size:{size}px; font-weight:{w}; color:{clr};"
+            f" background:transparent; border:none; padding:0px;")
         return l
 
     def _update_time(self):
@@ -456,7 +468,7 @@ class DashboardPage(QWidget):
         self._refresh_chart()
         if self._role in ("Admin",):
             self._refresh_recent_activity()
-        if self._role not in ("Admin", "HR"):
+        if self._role not in ("Admin", "HR", "Cashier"):
             self._refresh_my_leave()
 
     # ── Leave Request (for non-admin/non-HR roles) ────────────────

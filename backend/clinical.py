@@ -105,11 +105,20 @@ class ClinicalMixin:
         try:
             conn = self._get_connection()
             with conn.cursor() as cur:
-                cur.execute("SELECT patient_id FROM patients WHERE CONCAT(first_name,' ',last_name)=%s LIMIT 1", (data["patient_name"],))
+                cur.execute("SELECT patient_id, discount_type_id FROM patients WHERE CONCAT(first_name,' ',last_name)=%s LIMIT 1", (data["patient_name"],))
                 prow = cur.fetchone()
                 if not prow:
                     return False
                 patient_id = prow[0]
+                discount_type_id = prow[1]
+
+                # Always resolve the actual discount % from DB (admin-controlled)
+                enforced_discount = 0.0
+                if discount_type_id:
+                    cur.execute("SELECT discount_percent FROM discount_types WHERE discount_id=%s AND is_active=1", (discount_type_id,))
+                    dt_row = cur.fetchone()
+                    if dt_row:
+                        enforced_discount = float(dt_row[0])
 
                 items = data.get("items", [])
                 if not items and data.get("service_id"):
@@ -121,7 +130,8 @@ class ClinicalMixin:
                     srow = cur.fetchone()
                     up = float(srow[0]) if srow else 0
                     qty = int(item.get("quantity", 1))
-                    disc = float(item.get("discount", 0))
+                    # Use the DB-enforced discount instead of trusting UI value
+                    disc = enforced_discount
                     sub_raw = up * qty
                     sub = sub_raw * (1 - disc / 100)
                     total_before_discount += sub_raw
@@ -205,12 +215,15 @@ class ClinicalMixin:
 
     def get_today_completed_appointments_for_patient(self, patient_name):
         return self.fetch("""
-            SELECT a.appointment_id, a.appointment_time, s.service_name
+            SELECT a.appointment_id, a.appointment_time, s.service_name,
+                   CONCAT(e.first_name,' ',e.last_name) AS doctor_name
             FROM appointments a
             INNER JOIN patients p ON a.patient_id = p.patient_id
             INNER JOIN services s ON a.service_id = s.service_id
+            INNER JOIN employees e ON a.doctor_id = e.employee_id
             WHERE CONCAT(p.first_name,' ',p.last_name)=%s
-              AND a.appointment_date = CURDATE() AND a.status = 'Completed'
+              AND a.appointment_date = CURDATE()
+              AND a.status IN ('Completed','Confirmed')
         """, (patient_name,))
 
     def get_payment_methods(self):

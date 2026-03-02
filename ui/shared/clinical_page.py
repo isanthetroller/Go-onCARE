@@ -324,7 +324,7 @@ class ClinicalPage(QWidget):
         self._billing_search.setObjectName("searchBar")
         self._billing_search.setPlaceholderText("🔍  Search invoices…")
         self._billing_search.setMinimumHeight(42)
-        self._billing_search.textChanged.connect(self._on_billing_search)
+        self._billing_search.textChanged.connect(self._apply_billing_filters)
         bar.addWidget(self._billing_search)
 
         new_btn = QPushButton("＋  New Invoice")
@@ -333,6 +333,33 @@ class ClinicalPage(QWidget):
         new_btn.clicked.connect(self._on_new_invoice)
         bar.addWidget(new_btn)
         lay.addLayout(bar)
+
+        # ── Sort & filter bar ─────────────────────────────────────
+        sort_bar = QHBoxLayout(); sort_bar.setSpacing(10)
+
+        self._billing_sort_combo = QComboBox()
+        self._billing_sort_combo.setObjectName("formCombo")
+        self._billing_sort_combo.addItems(["Sort By", "Patient", "Services", "Total", "Status"])
+        self._billing_sort_combo.setMinimumHeight(42); self._billing_sort_combo.setMinimumWidth(140)
+        self._billing_sort_combo.currentTextChanged.connect(self._apply_billing_filters)
+        sort_bar.addWidget(self._billing_sort_combo)
+
+        self._billing_order_combo = QComboBox()
+        self._billing_order_combo.setObjectName("formCombo")
+        self._billing_order_combo.addItems(["↑ Ascending", "↓ Descending"])
+        self._billing_order_combo.setMinimumHeight(42); self._billing_order_combo.setMinimumWidth(140)
+        self._billing_order_combo.currentTextChanged.connect(self._apply_billing_filters)
+        sort_bar.addWidget(self._billing_order_combo)
+
+        self._billing_status_filter = QComboBox()
+        self._billing_status_filter.setObjectName("formCombo")
+        self._billing_status_filter.addItems(["All Status", "Paid", "Unpaid", "Partial", "Voided"])
+        self._billing_status_filter.setMinimumHeight(42); self._billing_status_filter.setMinimumWidth(140)
+        self._billing_status_filter.currentTextChanged.connect(self._apply_billing_filters)
+        sort_bar.addWidget(self._billing_status_filter)
+
+        sort_bar.addStretch()
+        lay.addLayout(sort_bar)
 
         cols = ["Inv #", "Patient", "Services", "Total", "Paid", "Status", "Actions"]
         self._billing_table = QTableWidget(0, len(cols))
@@ -349,17 +376,62 @@ class ClinicalPage(QWidget):
         self._billing_table.setMinimumHeight(420)
         self._billing_table.verticalHeader().setDefaultSectionSize(48)
         configure_table(self._billing_table)
+        self._all_invoices: list[dict] = []
         self._load_billing()
         lay.addWidget(self._billing_table)
         return page
 
     def _load_billing(self):
-        self._billing_table.setRowCount(0)
+        self._all_invoices = []
         self._invoice_ids = []
         if not self._backend:
+            self._render_billing_table([])
             return
-        rows = self._backend.get_invoices() or []
-        for inv in rows:
+        self._all_invoices = self._backend.get_invoices() or []
+        self._apply_billing_filters()
+
+    def _apply_billing_filters(self, _=None):
+        """Filter by search text + status, then sort, then render."""
+        text = self._billing_search.text().strip().lower()
+        status_filter = self._billing_status_filter.currentText()
+        sort_by = self._billing_sort_combo.currentText()
+        descending = self._billing_order_combo.currentText().startswith("↓")
+
+        # ── Filter ────────────────────────────────────────────────
+        filtered = []
+        for inv in self._all_invoices:
+            # Status filter
+            if status_filter != "All Status" and inv.get("status", "") != status_filter:
+                continue
+            # Text search
+            if text:
+                haystack = " ".join([
+                    str(inv.get("invoice_id", "")),
+                    inv.get("patient_name", ""),
+                    inv.get("service_name", "") or "",
+                    inv.get("status", ""),
+                ]).lower()
+                if text not in haystack:
+                    continue
+            filtered.append(inv)
+
+        # ── Sort ──────────────────────────────────────────────────
+        sort_key_map = {
+            "Patient":  lambda inv: (inv.get("patient_name", "") or "").lower(),
+            "Services": lambda inv: (inv.get("service_name", "") or "").lower(),
+            "Total":    lambda inv: float(inv.get("total_amount", 0) or 0),
+            "Status":   lambda inv: (inv.get("status", "") or "").lower(),
+        }
+        if sort_by in sort_key_map:
+            filtered.sort(key=sort_key_map[sort_by], reverse=descending)
+
+        self._render_billing_table(filtered)
+
+    def _render_billing_table(self, invoices: list[dict]):
+        """Populate the billing table with the given (sorted/filtered) invoices."""
+        self._billing_table.setRowCount(0)
+        self._invoice_ids = []
+        for inv in invoices:
             r = self._billing_table.rowCount()
             self._billing_table.insertRow(r)
             inv_id = inv.get("invoice_id", 0)
@@ -400,21 +472,12 @@ class ClinicalPage(QWidget):
                 act_lay.addWidget(void_btn)
             self._billing_table.setCellWidget(r, 6, act_w)
 
-    def _on_billing_search(self, text: str):
-        text = text.lower()
-        for r in range(self._billing_table.rowCount()):
-            match = any(
-                text in (self._billing_table.item(r, c).text().lower() if self._billing_table.item(r, c) else "")
-                for c in range(self._billing_table.columnCount() - 1)
-            )
-            self._billing_table.setRowHidden(r, not match)
-
     def _on_new_invoice(self):
         services = self._backend.get_services_list() if self._backend else []
         methods = self._backend.get_payment_methods() if self._backend else []
         patients = self._backend.get_active_patients() if self._backend else []
         dlg = NewInvoiceDialog(self, services=services, payment_methods=methods,
-                               patients=patients, backend=self._backend)
+                               patients=patients, backend=self._backend, role=self._role)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             d = dlg.get_data()
             if self._backend:
@@ -433,13 +496,21 @@ class ClinicalPage(QWidget):
             return
         info = detail["info"]
         balance = float(info["total_amount"]) - float(info["amount_paid"])
+        if balance <= 0:
+            QMessageBox.information(self, "Paid", "This invoice is already fully paid.")
+            return
         methods = self._backend.get_payment_methods()
         dlg = PaymentDialog(self, invoice_id=invoice_id, balance=balance, payment_methods=methods)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             d = dlg.get_data()
             self._backend.add_payment(invoice_id, d["amount"], d.get("method_id"))
             self._load_billing()
-            QMessageBox.information(self, "Success", f"Payment of ₱{d['amount']:,.2f} recorded.")
+            msg = f"Payment recorded.\n\n"
+            msg += f"  Amount Tendered:  ₱{d['tendered']:,.2f}\n"
+            msg += f"  Applied to Invoice:  ₱{d['amount']:,.2f}\n"
+            if d.get("change", 0) > 0:
+                msg += f"  Change:  ₱{d['change']:,.2f}\n"
+            QMessageBox.information(self, "Payment Recorded", msg)
 
     def _on_void_invoice(self, invoice_id: int):
         reply = QMessageBox.question(
@@ -462,34 +533,71 @@ class ClinicalPage(QWidget):
             return
         info = detail["info"]
         items = detail["items"]
+
+        total_amount = float(info.get("total_amount", 0))
+        amount_paid = float(info.get("amount_paid", 0))
+        discount_pct = float(info.get("discount_percent", 0))
+
+        # Calculate raw subtotal from line items
+        raw_subtotal = sum(
+            float(it.get("unit_price", 0)) * int(it.get("quantity", 1))
+            for it in items
+        )
+        discount_amount = raw_subtotal - total_amount
+
+        balance = total_amount - amount_paid
+        # If fully paid, the change is whatever was overpaid (stored as amount_paid == total)
+        change = max(0, amount_paid - total_amount) if info.get("status") == "Paid" else 0
+
+        w = 48  # receipt width
         lines = [
-            "=" * 44,
-            "               C A R E C R U D",
-            "          HEALTHCARE MANAGEMENT SYSTEM",
-            "=" * 44,
+            "=" * w,
+            "C A R E C R U D".center(w),
+            "HEALTHCARE MANAGEMENT SYSTEM".center(w),
+            "=" * w,
             f"  Invoice #:     {info.get('invoice_id', '')}",
             f"  Date:          {info.get('created_at', '')}",
             f"  Patient:       {info.get('patient_name', '')}",
             f"  Phone:         {info.get('phone', '') or '—'}",
-            f"  Payment:       {info.get('payment_method', '—')}",
-            "-" * 44,
-            f"  {'Service':<20} {'Qty':>4} {'Unit':>8} {'Sub':>8}",
-            "-" * 44,
+            f"  Payment Mode:  {info.get('payment_method', '—')}",
+            "-" * w,
+            f"  {'Service':<20} {'Qty':>4} {'Unit':>9} {'Sub':>9}",
+            "-" * w,
         ]
         for it in items:
+            sname = it.get("service_name", "")
+            qty = int(it.get("quantity", 1))
+            unit = float(it.get("unit_price", 0))
+            sub = float(it.get("subtotal", 0))
+            # Truncate long service names
+            if len(sname) > 20:
+                sname = sname[:18] + ".."
             lines.append(
-                f"  {it.get('service_name',''):<20} {it.get('quantity',1):>4} "
-                f"₱{float(it.get('unit_price',0)):>7,.0f} ₱{float(it.get('subtotal',0)):>7,.0f}"
+                f"  {sname:<20} {qty:>4} ₱{unit:>8,.2f} ₱{sub:>8,.2f}"
             )
+
+        lines.append("-" * w)
+
+        if discount_amount > 0:
+            lines.append(f"  {'Subtotal':<28} ₱{raw_subtotal:>12,.2f}")
+            lines.append(f"  {'Discount':<28} -₱{discount_amount:>11,.2f}")
+
         lines += [
-            "-" * 44,
-            f"  {'TOTAL':<28} ₱{float(info.get('total_amount', 0)):>10,.2f}",
-            f"  {'PAID':<28} ₱{float(info.get('amount_paid', 0)):>10,.2f}",
-            f"  {'BALANCE':<28} ₱{float(info.get('total_amount',0)) - float(info.get('amount_paid',0)):>10,.2f}",
+            f"  {'TOTAL':<28} ₱{total_amount:>12,.2f}",
+            f"  {'AMOUNT PAID':<28} ₱{amount_paid:>12,.2f}",
+        ]
+
+        if balance > 0:
+            lines.append(f"  {'BALANCE DUE':<28} ₱{balance:>12,.2f}")
+
+        if change > 0:
+            lines.append(f"  {'CHANGE':<28} ₱{change:>12,.2f}")
+
+        lines += [
             f"  Status: {info.get('status', '')}",
-            "=" * 44,
-            "            Thank you for choosing us!",
-            "=" * 44,
+            "=" * w,
+            "Thank you for choosing us!".center(w),
+            "=" * w,
         ]
         text = "\n".join(lines)
         QMessageBox.information(self, f"Receipt – Invoice #{invoice_id}", text)

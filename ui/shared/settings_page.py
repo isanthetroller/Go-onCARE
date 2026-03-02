@@ -4,11 +4,11 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QScrollArea, QGraphicsDropShadowEffect, QMessageBox,
     QTableWidget, QTableWidgetItem, QHeaderView, QDateEdit, QComboBox,
-    QLineEdit, QCheckBox,
+    QLineEdit, QCheckBox, QDoubleSpinBox, QDialog, QFormLayout,
 )
 from PyQt6.QtCore import Qt, QDate, QTimer
 from PyQt6.QtGui import QColor
-from ui.styles import configure_table
+from ui.styles import configure_table, style_dialog_btns
 
 
 class SettingsPage(QWidget):
@@ -85,6 +85,53 @@ class SettingsPage(QWidget):
         pw_row.addWidget(pw_btn)
         pl.addLayout(pw_row)
         lay.addWidget(prof_card)
+
+        # ── Discount Management ────────────────────────────────────
+        lay.addWidget(self._section("Discount Management"))
+        disc_card = self._card()
+        dl = QVBoxLayout(disc_card); dl.setContentsMargins(20, 16, 20, 16); dl.setSpacing(12)
+
+        disc_info = QLabel(
+            "Manage discount categories applied to patients (e.g. PWD, Senior Citizen).\n"
+            "Based on Philippine law: RA 9994 (Senior Citizen 20%) and RA 10754 (PWD 20%)."
+        )
+        disc_info.setStyleSheet("font-size: 12px; color: #7F8C8D;")
+        disc_info.setWordWrap(True)
+        dl.addWidget(disc_info)
+
+        self._disc_table = QTableWidget(0, 4)
+        self._disc_table.setHorizontalHeaderLabels(["Type Name", "Discount %", "Legal Basis", "Active"])
+        h = self._disc_table.horizontalHeader()
+        h.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self._disc_table.verticalHeader().setVisible(False)
+        self._disc_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self._disc_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self._disc_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self._disc_table.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self._disc_table.setAlternatingRowColors(True)
+        self._disc_table.verticalHeader().setDefaultSectionSize(40)
+        self._disc_table.setMinimumHeight(160)
+        self._disc_table.setMaximumHeight(220)
+        configure_table(self._disc_table)
+        dl.addWidget(self._disc_table)
+
+        disc_btn_row = QHBoxLayout(); disc_btn_row.setSpacing(8)
+        add_disc_btn = self._action_btn("Add Discount Type")
+        add_disc_btn.clicked.connect(self._on_add_discount)
+        disc_btn_row.addWidget(add_disc_btn)
+        edit_disc_btn = self._action_btn("Edit Selected")
+        edit_disc_btn.clicked.connect(self._on_edit_discount)
+        disc_btn_row.addWidget(edit_disc_btn)
+        del_disc_btn = self._action_btn("Delete Selected", danger=True)
+        del_disc_btn.clicked.connect(self._on_delete_discount)
+        disc_btn_row.addWidget(del_disc_btn)
+        disc_btn_row.addStretch()
+        dl.addLayout(disc_btn_row)
+
+        lay.addWidget(disc_card)
+
+        self._discount_ids: list[int] = []
+        self._load_discount_types()
 
         # ── Database Overview ──────────────────────────────────────
         lay.addWidget(self._section("Database Overview"))
@@ -262,3 +309,145 @@ class SettingsPage(QWidget):
             else:
                 QMessageBox.critical(self, "Error", f"Failed to truncate '{table}'.")
             self._refresh_counts()
+
+    # ── Discount Management ────────────────────────────────────────────
+    def _load_discount_types(self):
+        self._disc_table.setRowCount(0)
+        self._discount_ids.clear()
+        if not self._backend:
+            return
+        types = self._backend.get_discount_types() or []
+        for dt in types:
+            r = self._disc_table.rowCount()
+            self._disc_table.insertRow(r)
+            self._discount_ids.append(dt["discount_id"])
+            self._disc_table.setItem(r, 0, QTableWidgetItem(dt["type_name"]))
+            pct_item = QTableWidgetItem(f"{float(dt['discount_percent']):.1f}%")
+            pct_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._disc_table.setItem(r, 1, pct_item)
+            self._disc_table.setItem(r, 2, QTableWidgetItem(dt.get("legal_basis", "") or ""))
+            active_item = QTableWidgetItem("Yes" if dt.get("is_active") else "No")
+            active_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            if not dt.get("is_active"):
+                active_item.setForeground(QColor("#D9534F"))
+            else:
+                active_item.setForeground(QColor("#5CB85C"))
+            self._disc_table.setItem(r, 3, active_item)
+
+    def _on_add_discount(self):
+        dlg = _DiscountTypeDialog(self)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            d = dlg.get_data()
+            if not d["name"].strip():
+                QMessageBox.warning(self, "Validation", "Type name is required.")
+                return
+            if self._backend:
+                self._backend.add_discount_type(d["name"], d["percent"], d["legal_basis"])
+            self._load_discount_types()
+            QMessageBox.information(self, "Success", f"Discount type '{d['name']}' added.")
+
+    def _on_edit_discount(self):
+        row = self._disc_table.currentRow()
+        if row < 0 or row >= len(self._discount_ids):
+            QMessageBox.warning(self, "Selection", "Select a discount type to edit.")
+            return
+        did = self._discount_ids[row]
+        current = {
+            "name": self._disc_table.item(row, 0).text(),
+            "percent": float(self._disc_table.item(row, 1).text().replace("%", "")),
+            "legal_basis": self._disc_table.item(row, 2).text(),
+            "is_active": self._disc_table.item(row, 3).text() == "Yes",
+        }
+        dlg = _DiscountTypeDialog(self, data=current)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            d = dlg.get_data()
+            if not d["name"].strip():
+                QMessageBox.warning(self, "Validation", "Type name is required.")
+                return
+            if self._backend:
+                self._backend.update_discount_type(
+                    did, d["name"], d["percent"], d["legal_basis"], 1 if d["is_active"] else 0)
+            self._load_discount_types()
+            QMessageBox.information(self, "Success", f"Discount type '{d['name']}' updated.")
+
+    def _on_delete_discount(self):
+        row = self._disc_table.currentRow()
+        if row < 0 or row >= len(self._discount_ids):
+            QMessageBox.warning(self, "Selection", "Select a discount type to delete.")
+            return
+        name = self._disc_table.item(row, 0).text()
+        reply = QMessageBox.question(
+            self, "Confirm Delete",
+            f"Delete discount type '{name}'?\n\n"
+            "Patients using this type will have their discount removed.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            did = self._discount_ids[row]
+            if self._backend:
+                self._backend.delete_discount_type(did)
+            self._load_discount_types()
+            QMessageBox.information(self, "Done", f"Discount type '{name}' deleted.")
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  Discount Type Add/Edit Dialog
+# ══════════════════════════════════════════════════════════════════════
+class _DiscountTypeDialog(QDialog):
+    """Dialog to add or edit a discount type."""
+
+    def __init__(self, parent=None, data=None):
+        super().__init__(parent)
+        self.setWindowTitle("Edit Discount Type" if data else "Add Discount Type")
+        self.setMinimumWidth(480)
+
+        form = QFormLayout(self)
+        form.setSpacing(14)
+        form.setContentsMargins(28, 28, 28, 28)
+
+        self.name_edit = QLineEdit()
+        self.name_edit.setObjectName("formInput")
+        self.name_edit.setMinimumHeight(38)
+        self.name_edit.setPlaceholderText("e.g. Senior Citizen, PWD, Pregnant")
+
+        self.percent_spin = QDoubleSpinBox()
+        self.percent_spin.setMinimum(0)
+        self.percent_spin.setMaximum(100)
+        self.percent_spin.setDecimals(2)
+        self.percent_spin.setSuffix(" %")
+        self.percent_spin.setMinimumHeight(38)
+
+        self.legal_edit = QLineEdit()
+        self.legal_edit.setObjectName("formInput")
+        self.legal_edit.setMinimumHeight(38)
+        self.legal_edit.setPlaceholderText("e.g. RA 9994 – Expanded Senior Citizens Act")
+
+        self.active_check = QCheckBox("Active")
+        self.active_check.setChecked(True)
+
+        form.addRow("Type Name", self.name_edit)
+        form.addRow("Discount %", self.percent_spin)
+        form.addRow("Legal Basis", self.legal_edit)
+        form.addRow("", self.active_check)
+
+        from PyQt6.QtWidgets import QDialogButtonBox
+        btns = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        style_dialog_btns(btns)
+        btns.accepted.connect(self.accept)
+        btns.rejected.connect(self.reject)
+        form.addRow(btns)
+
+        if data:
+            self.name_edit.setText(data.get("name", ""))
+            self.percent_spin.setValue(data.get("percent", 0))
+            self.legal_edit.setText(data.get("legal_basis", ""))
+            self.active_check.setChecked(data.get("is_active", True))
+
+    def get_data(self) -> dict:
+        return {
+            "name": self.name_edit.text().strip(),
+            "percent": self.percent_spin.value(),
+            "legal_basis": self.legal_edit.text().strip(),
+            "is_active": self.active_check.isChecked(),
+        }

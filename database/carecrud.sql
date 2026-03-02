@@ -1,6 +1,6 @@
 
-
-CREATE DATABASE IF NOT EXISTS carecrud_db;
+DROP DATABASE IF EXISTS carecrud_db;
+CREATE DATABASE carecrud_db;
 USE carecrud_db;
 
 
@@ -39,6 +39,15 @@ CREATE TABLE payment_methods (
 CREATE TABLE standard_conditions (
     condition_id   INT AUTO_INCREMENT PRIMARY KEY,
     condition_name VARCHAR(100) NOT NULL UNIQUE
+);
+
+-- Discount types (PWD, Senior Citizen, etc.)
+CREATE TABLE discount_types (
+    discount_id      INT AUTO_INCREMENT PRIMARY KEY,
+    type_name        VARCHAR(100) NOT NULL UNIQUE,
+    discount_percent DECIMAL(5, 2) NOT NULL DEFAULT 0.00,
+    legal_basis      VARCHAR(255) DEFAULT '',
+    is_active        TINYINT(1) NOT NULL DEFAULT 1
 );
 
 
@@ -101,9 +110,13 @@ CREATE TABLE patients (
     email             VARCHAR(150),
     emergency_contact VARCHAR(200) DEFAULT '',
     blood_type        ENUM('A+','A-','B+','B-','AB+','AB-','O+','O-','Unknown') DEFAULT 'Unknown',
+    discount_type_id  INT DEFAULT NULL,
     status            ENUM('Active', 'Inactive') NOT NULL DEFAULT 'Active',
     notes             TEXT,
-    created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (discount_type_id) REFERENCES discount_types(discount_id)
+        ON DELETE SET NULL
 );
 
 -- Patient conditions (separate table so one patient can have multiple)
@@ -303,6 +316,12 @@ INSERT INTO standard_conditions (condition_name) VALUES
     ('Cancer'), ('Stroke'), ('HIV/AIDS'), ('Tuberculosis'),
     ('Hepatitis'), ('None');
 
+-- Default discount types (based on Philippine law)
+INSERT INTO discount_types (type_name, discount_percent, legal_basis) VALUES
+    ('Senior Citizen', 20.00, 'RA 9994 – Expanded Senior Citizens Act of 2010'),
+    ('PWD',            20.00, 'RA 10754 – Act Expanding Benefits and Privileges of Persons with Disability'),
+    ('Pregnant',        0.00, 'Courtesy discount – configurable by admin');
+
 -- Default user accounts (one per role for testing)
 INSERT INTO users (email, password, full_name, role_id) VALUES
     ('admin@carecrud.com',         'admin123',     'Carlo Santos',  4),
@@ -347,35 +366,35 @@ INSERT INTO patient_conditions (patient_id, condition_name) VALUES
     (7, 'Allergies'),
     (8, 'Arthritis');
 
--- Sample appointments (today = Feb 25, 2026)
+-- Sample appointments (today = Mar 2, 2026)
 INSERT INTO appointments (patient_id, doctor_id, service_id, appointment_date, appointment_time, status) VALUES
-    (1,  1, 1,  '2026-02-25', '09:00:00', 'Confirmed'),
-    (2,  2, 2,  '2026-02-25', '09:30:00', 'Confirmed'),
-    (3,  1, 11, '2026-02-25', '10:00:00', 'Pending'),
-    (4,  3, 5,  '2026-02-25', '10:30:00', 'Confirmed'),
-    (5,  2, 9,  '2026-02-25', '11:00:00', 'Pending'),
-    (6,  1, 10, '2026-02-26', '08:30:00', 'Confirmed'),
-    (7,  3, 12, '2026-02-26', '09:00:00', 'Pending'),
-    (12, 2, 9,  '2026-02-26', '10:00:00', 'Confirmed'),
-    (8,  2, 13, '2026-02-27', '10:00:00', 'Confirmed'),
-    (9,  1, 1,  '2026-02-18', '09:00:00', 'Completed'),
-    (10, 3, 5,  '2026-02-15', '14:00:00', 'Completed'),
-    (11, 2, 2,  '2026-01-28', '10:00:00', 'Completed'),
-    (1,  1, 11, '2026-01-22', '09:30:00', 'Completed'),
-    (3,  3, 12, '2026-01-15', '11:00:00', 'Completed'),
-    (4,  1, 10, '2026-01-10', '08:30:00', 'Completed'),
-    (2,  2, 13, '2025-12-18', '09:00:00', 'Completed'),
-    (5,  1, 1,  '2025-12-10', '10:30:00', 'Completed'),
-    (6,  3, 5,  '2025-12-05', '14:00:00', 'Completed'),
-    (7,  2, 9,  '2025-11-20', '09:30:00', 'Completed'),
-    (8,  1, 2,  '2025-11-12', '10:00:00', 'Completed');
+    (1,  1, 1,  '2026-03-02', '09:00:00', 'Confirmed'),
+    (2,  2, 2,  '2026-03-02', '09:30:00', 'Confirmed'),
+    (3,  1, 11, '2026-03-02', '10:00:00', 'Pending'),
+    (4,  3, 5,  '2026-03-02', '10:30:00', 'Confirmed'),
+    (5,  2, 9,  '2026-03-02', '11:00:00', 'Pending'),
+    (6,  1, 10, '2026-03-03', '08:30:00', 'Confirmed'),
+    (7,  3, 12, '2026-03-03', '09:00:00', 'Pending'),
+    (12, 2, 9,  '2026-03-03', '10:00:00', 'Confirmed'),
+    (8,  2, 13, '2026-03-04', '10:00:00', 'Confirmed'),
+    (9,  1, 1,  '2026-02-23', '09:00:00', 'Completed'),
+    (10, 3, 5,  '2026-02-20', '14:00:00', 'Completed'),
+    (11, 2, 2,  '2026-02-10', '10:00:00', 'Completed'),
+    (1,  1, 11, '2026-02-05', '09:30:00', 'Completed'),
+    (3,  3, 12, '2026-01-28', '11:00:00', 'Completed'),
+    (4,  1, 10, '2026-01-20', '08:30:00', 'Completed'),
+    (2,  2, 13, '2026-01-08', '09:00:00', 'Completed'),
+    (5,  1, 1,  '2025-12-18', '10:30:00', 'Completed'),
+    (6,  3, 5,  '2025-12-10', '14:00:00', 'Completed'),
+    (7,  2, 9,  '2025-11-25', '09:30:00', 'Completed'),
+    (8,  1, 2,  '2025-11-15', '10:00:00', 'Completed');
 
 -- Queue entries (today)
 INSERT INTO queue_entries (patient_id, doctor_id, appointment_id, queue_time, purpose, status, created_at) VALUES
-    (1, 1, 1, '09:00:00', 'General Checkup',    'Waiting',     '2026-02-25'),
-    (2, 2, 2, '09:30:00', 'Follow-up Visit',    'In Progress', '2026-02-25'),
-    (3, 1, 3, '10:00:00', 'Lab Results Review',  'Waiting',     '2026-02-25'),
-    (4, 3, 4, '10:30:00', 'Dental Cleaning',     'Waiting',     '2026-02-25');
+    (1, 1, 1, '09:00:00', 'General Checkup',    'Waiting',     '2026-03-02'),
+    (2, 2, 2, '09:30:00', 'Follow-up Visit',    'In Progress', '2026-03-02'),
+    (3, 1, 3, '10:00:00', 'Lab Results Review',  'Waiting',     '2026-03-02'),
+    (4, 3, 4, '10:30:00', 'Dental Cleaning',     'Waiting',     '2026-03-02');
 
 -- Invoices
 INSERT INTO invoices (patient_id, appointment_id, method_id, discount_percent, total_amount, amount_paid, status) VALUES

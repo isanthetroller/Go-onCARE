@@ -747,6 +747,7 @@ QWidget#pageInner {
 QFrame#pageBanner {
     background-color: #388087;
     border-radius: 12px;
+    border: none;
 }
 
 /* Banner main title */
@@ -755,6 +756,7 @@ QLabel#bannerTitle {
     font-weight: bold;
     color: #FFFFFF;
     background: transparent;
+    padding: 2px 0px;
 }
 
 /* Banner subtitle / description */
@@ -762,6 +764,7 @@ QLabel#bannerSubtitle {
     font-size: 13px;
     color: rgba(255,255,255,0.8);
     background: transparent;
+    padding: 1px 0px;
 }
 
 /* Translucent button placed inside the banner */

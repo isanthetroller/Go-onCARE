@@ -41,6 +41,16 @@ class PatientDialog(QDialog):
         self.blood_combo = QComboBox(); self.blood_combo.setObjectName("formCombo")
         self.blood_combo.addItems(["Unknown", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"])
 
+        # Discount category
+        self.discount_combo = QComboBox(); self.discount_combo.setObjectName("formCombo")
+        self.discount_combo.setMinimumHeight(38)
+        self.discount_combo.addItem("— None —", None)
+        self._discount_types = self._backend.get_discount_types(active_only=True) if self._backend else []
+        for dt in self._discount_types:
+            self.discount_combo.addItem(
+                f"{dt['type_name']} ({float(dt['discount_percent']):.0f}%)",
+                dt['discount_id'])
+
         # Condition picker
         self.cond_list = QListWidget()
         self.cond_list.setMaximumHeight(120)
@@ -59,6 +69,7 @@ class PatientDialog(QDialog):
         form.addRow("Email", self.email_edit)
         form.addRow("Emergency Contact", self.emergency_edit)
         form.addRow("Blood Type", self.blood_combo)
+        form.addRow("Discount Category", self.discount_combo)
         form.addRow("Conditions", self.cond_list)
         form.addRow("Other Conditions", self.cond_custom)
         form.addRow("Status", self.status_combo)
@@ -79,6 +90,13 @@ class PatientDialog(QDialog):
             self.emergency_edit.setText(data.get("emergency_contact", ""))
             bidx = self.blood_combo.findText(data.get("blood_type", "Unknown"))
             if bidx >= 0: self.blood_combo.setCurrentIndex(bidx)
+            # Restore discount type
+            dt_id = data.get("discount_type_id")
+            if dt_id:
+                for i in range(self.discount_combo.count()):
+                    if self.discount_combo.itemData(i) == dt_id:
+                        self.discount_combo.setCurrentIndex(i)
+                        break
             sidx = self.status_combo.findText(data.get("status", "Active"))
             if sidx >= 0: self.status_combo.setCurrentIndex(sidx)
             self.notes_edit.setPlainText(data.get("notes", ""))
@@ -113,6 +131,7 @@ class PatientDialog(QDialog):
             "email": self.email_edit.text(),
             "emergency_contact": self.emergency_edit.text(),
             "blood_type": self.blood_combo.currentText(),
+            "discount_type_id": self.discount_combo.currentData(),
             "conditions": all_conds,
             "status": self.status_combo.currentText(),
             "notes": self.notes_edit.toPlainText(),

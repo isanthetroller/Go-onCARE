@@ -133,28 +133,44 @@ class ServiceEditDialog(QDialog):
 
 
 # ══════════════════════════════════════════════════════════════════════
-#  New Invoice Dialog (V2 – patient dropdown, multi-line, link-to-appt)
+#  New Invoice Dialog (V3 – appointment link with doctor, line items,
+#  per-item discount, remove items, running totals)
 # ══════════════════════════════════════════════════════════════════════
 class NewInvoiceDialog(QDialog):
     """Create an invoice with multi-item support and optional appointment link."""
 
     def __init__(self, parent=None, *, services=None, payment_methods=None,
-                 patients=None, backend=None):
+                 patients=None, backend=None, role="Admin"):
         super().__init__(parent)
         self.setWindowTitle("Create Invoice")
-        self.setMinimumWidth(640)
+        self.setMinimumWidth(700)
 
         self._services = services or []
         self._payment_methods = payment_methods or []
         self._patients = patients or []
         self._backend = backend
+        self._role = role
         self._line_items: list[dict] = []
+        self._patient_discount_pct = 0.0
+        self._patient_discount_type = ""
 
-        form = QFormLayout(self)
-        form.setSpacing(14)
-        form.setContentsMargins(28, 28, 28, 28)
+        lay = QVBoxLayout(self)
+        lay.setSpacing(14)
+        lay.setContentsMargins(28, 24, 28, 24)
 
-        # Patient dropdown
+        # ── Title ─────────────────────────────────────────────────
+        title = QLabel("Create Invoice")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #388087;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lay.addWidget(title)
+        lay.addSpacing(4)
+
+        # ── Patient + Appointment row ─────────────────────────────
+        top_form = QHBoxLayout(); top_form.setSpacing(12)
+
+        # Patient
+        pt_col = QVBoxLayout(); pt_col.setSpacing(4)
+        pt_col.addWidget(QLabel("Patient"))
         self.patient_combo = QComboBox()
         self.patient_combo.setObjectName("formCombo")
         self.patient_combo.setEditable(True)
@@ -162,95 +178,206 @@ class NewInvoiceDialog(QDialog):
         for p in self._patients:
             self.patient_combo.addItem(p["name"], p.get("patient_id"))
         self.patient_combo.currentTextChanged.connect(self._on_patient_changed)
+        pt_col.addWidget(self.patient_combo)
+        top_form.addLayout(pt_col, 1)
 
-        # Link to appointment
+        # Appointment link
+        appt_col = QVBoxLayout(); appt_col.setSpacing(4)
+        appt_col.addWidget(QLabel("Link to Appointment"))
         self.appt_combo = QComboBox()
         self.appt_combo.setObjectName("formCombo")
         self.appt_combo.setMinimumHeight(38)
         self.appt_combo.addItem("— None —", None)
+        appt_col.addWidget(self.appt_combo)
+        top_form.addLayout(appt_col, 1)
 
-        # Line items section
+        lay.addLayout(top_form)
+
+        # ── Discount info badge ───────────────────────────────────
+        self._discount_badge = QLabel("No discount applied")
+        self._discount_badge.setStyleSheet(
+            "font-size: 12px; color: #7F8C8D; padding: 6px 12px;"
+            " background: #F0F0F0; border-radius: 4px;")
+        self._discount_badge.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        lay.addWidget(self._discount_badge)
+
+        # ── Line Items Section ────────────────────────────────────
         items_frame = QFrame()
         items_frame.setObjectName("card")
         items_lay = QVBoxLayout(items_frame)
-        items_lay.setContentsMargins(12, 12, 12, 12)
-        items_lay.setSpacing(8)
+        items_lay.setContentsMargins(14, 14, 14, 14)
+        items_lay.setSpacing(10)
 
+        hdr = QHBoxLayout()
         lbl = QLabel("Line Items")
         lbl.setStyleSheet("font-weight: bold; font-size: 13px; color: #2C3E50;")
-        items_lay.addWidget(lbl)
+        hdr.addWidget(lbl)
+        hdr.addStretch()
+        items_lay.addLayout(hdr)
 
         # Add-line row
-        add_row = QHBoxLayout()
+        add_row = QHBoxLayout(); add_row.setSpacing(8)
+
+        svc_col = QVBoxLayout(); svc_col.setSpacing(2)
+        svc_col.addWidget(QLabel("Service"))
         self.svc_combo = QComboBox(); self.svc_combo.setObjectName("formCombo")
         self.svc_combo.setMinimumHeight(34)
         for svc in self._services:
-            self.svc_combo.addItem(f"{svc['service_name']} (₱{float(svc.get('price',0)):,.0f})", svc["service_id"])
-        add_row.addWidget(self.svc_combo, 2)
+            self.svc_combo.addItem(
+                f"{svc['service_name']} — ₱{float(svc.get('price', 0)):,.0f}",
+                svc["service_id"])
+        svc_col.addWidget(self.svc_combo)
+        add_row.addLayout(svc_col, 3)
+
+        qty_col = QVBoxLayout(); qty_col.setSpacing(2)
+        qty_col.addWidget(QLabel("Qty"))
         self.qty_spin = QSpinBox(); self.qty_spin.setMinimum(1); self.qty_spin.setMaximum(99)
         self.qty_spin.setValue(1); self.qty_spin.setMinimumHeight(34)
-        add_row.addWidget(self.qty_spin)
+        qty_col.addWidget(self.qty_spin)
+        add_row.addLayout(qty_col)
+
+        disc_col = QVBoxLayout(); disc_col.setSpacing(2)
+        disc_col.addWidget(QLabel("Discount"))
         self.disc_spin = QDoubleSpinBox(); self.disc_spin.setMinimum(0)
-        self.disc_spin.setMaximum(100); self.disc_spin.setSuffix(" %"); self.disc_spin.setMinimumHeight(34)
-        add_row.addWidget(self.disc_spin)
+        self.disc_spin.setMaximum(100); self.disc_spin.setSuffix(" %")
+        self.disc_spin.setMinimumHeight(34)
+        # Non-admin roles: discount is locked from patient's discount type
+        if self._role != "Admin":
+            self.disc_spin.setReadOnly(True)
+            self.disc_spin.setButtonSymbols(QDoubleSpinBox.ButtonSymbols.NoButtons)
+            self.disc_spin.setStyleSheet(
+                "QDoubleSpinBox { background: #E8E8E8; color: #555; }")
+        disc_col.addWidget(self.disc_spin)
+        add_row.addLayout(disc_col)
+
+        btn_col = QVBoxLayout(); btn_col.setSpacing(2)
+        btn_col.addWidget(QLabel(" "))  # spacer for alignment
         add_btn = QPushButton("＋ Add")
         add_btn.setMinimumHeight(34)
         add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         add_btn.setStyleSheet(
-            "QPushButton { background: #388087; color: #fff; border: none; border-radius: 4px; padding: 4px 12px; font-weight:bold; }"
-            " QPushButton:hover { background: #2C6A70; }"
-        )
+            "QPushButton { background: #388087; color: #fff; border: none;"
+            " border-radius: 4px; padding: 4px 14px; font-weight:bold; }"
+            " QPushButton:hover { background: #2C6A70; }")
         add_btn.clicked.connect(self._add_line)
-        add_row.addWidget(add_btn)
+        btn_col.addWidget(add_btn)
+        add_row.addLayout(btn_col)
+
         items_lay.addLayout(add_row)
 
-        # Items table
-        self._items_table = QTableWidget(0, 5)
-        self._items_table.setHorizontalHeaderLabels(["Service", "Qty", "Unit Price", "Discount", "Subtotal"])
-        self._items_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        # Items table (Service, Qty, Unit Price, Discount, Subtotal, Remove)
+        self._items_table = QTableWidget(0, 6)
+        self._items_table.setHorizontalHeaderLabels(
+            ["Service", "Qty", "Unit Price", "Discount", "Subtotal", ""])
+        h = self._items_table.horizontalHeader()
+        h.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        h.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
+        self._items_table.setColumnWidth(5, 50)
+        h.setStretchLastSection(False)
         self._items_table.verticalHeader().setVisible(False)
         self._items_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._items_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        self._items_table.setMaximumHeight(140)
-        self._items_table.verticalHeader().setDefaultSectionSize(32)
+        self._items_table.setMinimumHeight(120)
+        self._items_table.setMaximumHeight(200)
+        self._items_table.verticalHeader().setDefaultSectionSize(34)
         configure_table(self._items_table)
         items_lay.addWidget(self._items_table)
 
+        # Totals summary
+        totals_row = QHBoxLayout()
+        totals_row.addStretch()
+        totals_col = QVBoxLayout(); totals_col.setSpacing(2)
+        self._subtotal_lbl = QLabel("Subtotal: ₱0.00")
+        self._subtotal_lbl.setStyleSheet("font-size: 12px; color: #7F8C8D;")
+        self._subtotal_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self._discount_lbl = QLabel("Discount: − ₱0.00")
+        self._discount_lbl.setStyleSheet("font-size: 12px; color: #D9534F;")
+        self._discount_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
         self._total_lbl = QLabel("Total: ₱0.00")
-        self._total_lbl.setStyleSheet("font-weight: bold; font-size: 14px; color: #388087;")
+        self._total_lbl.setStyleSheet("font-weight: bold; font-size: 15px; color: #388087;")
         self._total_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
-        items_lay.addWidget(self._total_lbl)
+        totals_col.addWidget(self._subtotal_lbl)
+        totals_col.addWidget(self._discount_lbl)
+        totals_col.addWidget(self._total_lbl)
+        totals_row.addLayout(totals_col)
+        items_lay.addLayout(totals_row)
 
-        # Payment method
+        lay.addWidget(items_frame)
+
+        # ── Payment + Notes row ───────────────────────────────────
+        bot_form = QHBoxLayout(); bot_form.setSpacing(12)
+
+        pm_col = QVBoxLayout(); pm_col.setSpacing(4)
+        pm_col.addWidget(QLabel("Payment Method"))
         self.payment_combo = QComboBox()
         self.payment_combo.setObjectName("formCombo")
+        self.payment_combo.setMinimumHeight(38)
         for pm in self._payment_methods:
             self.payment_combo.addItem(pm["method_name"], pm["method_id"])
-        self.payment_combo.setMinimumHeight(38)
+        pm_col.addWidget(self.payment_combo)
+        bot_form.addLayout(pm_col, 1)
 
-        self.notes = QTextEdit()
+        notes_col = QVBoxLayout(); notes_col.setSpacing(4)
+        notes_col.addWidget(QLabel("Notes"))
+        self.notes = QLineEdit()
         self.notes.setObjectName("formInput")
-        self.notes.setMaximumHeight(70)
+        self.notes.setMinimumHeight(38)
+        self.notes.setPlaceholderText("Optional notes…")
+        notes_col.addWidget(self.notes)
+        bot_form.addLayout(notes_col, 2)
 
-        form.addRow("Patient", self.patient_combo)
-        form.addRow("Link to Appointment", self.appt_combo)
-        form.addRow(items_frame)
-        form.addRow("Payment Method", self.payment_combo)
-        form.addRow("Notes", self.notes)
+        lay.addLayout(bot_form)
 
-        btns = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
-        )
-        style_dialog_btns(btns)
-        btns.accepted.connect(self._validate_and_accept)
-        btns.rejected.connect(self.reject)
-        form.addRow(btns)
+        # ── Buttons ───────────────────────────────────────────────
+        btn_row = QHBoxLayout(); btn_row.setSpacing(10)
+        btn_row.addStretch()
+        cancel_btn = QPushButton("Cancel"); cancel_btn.setMinimumHeight(38)
+        cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        cancel_btn.setStyleSheet(
+            "QPushButton { background-color: #6c757d; color: #FFF; border: none;"
+            " border-radius: 6px; padding: 8px 24px; font-size: 13px; font-weight: bold; }")
+        cancel_btn.clicked.connect(self.reject)
+        save_btn = QPushButton("Create Invoice"); save_btn.setMinimumHeight(38)
+        save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        save_btn.setStyleSheet(
+            "QPushButton { background-color: #388087; color: #FFF; border: none;"
+            " border-radius: 6px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
+            " QPushButton:hover { background-color: #2C6A70; }")
+        save_btn.clicked.connect(self._validate_and_accept)
+        btn_row.addWidget(cancel_btn); btn_row.addWidget(save_btn)
+        lay.addLayout(btn_row)
 
     # ── helpers ────────────────────────────────────────────────────
     def _on_patient_changed(self, text: str):
-        """Update appointment dropdown when patient changes."""
         self.appt_combo.clear()
         self.appt_combo.addItem("— None —", None)
+        # Look up patient's discount type
+        self._patient_discount_pct = 0.0
+        self._patient_discount_type = ""
+        if self._backend and text.strip():
+            disc_info = self._backend.get_patient_discount_percent(text.strip())
+            self._patient_discount_pct = float(disc_info.get("discount_percent", 0))
+            self._patient_discount_type = disc_info.get("discount_type", "")
+        # Update discount badge
+        if self._patient_discount_pct > 0 and self._patient_discount_type:
+            self._discount_badge.setText(
+                f"🏷  {self._patient_discount_type} — {self._patient_discount_pct:.0f}% discount applied automatically")
+            self._discount_badge.setStyleSheet(
+                "font-size: 12px; color: #388087; padding: 6px 12px;"
+                " background: #E0F2F1; border-radius: 4px; font-weight: bold;")
+        else:
+            self._discount_badge.setText("No discount applied")
+            self._discount_badge.setStyleSheet(
+                "font-size: 12px; color: #7F8C8D; padding: 6px 12px;"
+                " background: #F0F0F0; border-radius: 4px;")
+        # Set the discount spin to the patient's discount (locked for non-admin)
+        if self._role != "Admin":
+            self.disc_spin.setValue(self._patient_discount_pct)
+        else:
+            self.disc_spin.setValue(self._patient_discount_pct)
+        # Re-apply discount to existing line items when patient changes
+        self._recalculate_all_items()
+        # Load appointments
         if self._backend and text.strip():
             appts = self._backend.get_today_completed_appointments_for_patient(text.strip())
             for a in appts:
@@ -259,8 +386,10 @@ class NewInvoiceDialog(QDialog):
                     total = int(t.total_seconds())
                     h, m = divmod(total // 60, 60)
                     t = f"{h:02d}:{m:02d}"
+                doc = a.get("doctor_name", "")
+                doc_part = f" – Dr. {doc.split()[-1]}" if doc else ""
                 self.appt_combo.addItem(
-                    f"#{a['appointment_id']} – {a['service_name']} @ {t}",
+                    f"#{a['appointment_id']} – {a['service_name']}{doc_part} @ {t}",
                     a["appointment_id"],
                 )
 
@@ -268,34 +397,87 @@ class NewInvoiceDialog(QDialog):
         sid = self.svc_combo.currentData()
         svc_text = self.svc_combo.currentText()
         qty = self.qty_spin.value()
-        disc = self.disc_spin.value()
-        # Find price
+        # For non-admin, always use the patient's discount (locked)
+        if self._role != "Admin":
+            disc = self._patient_discount_pct
+        else:
+            disc = self.disc_spin.value()
         price = 0
         for s in self._services:
             if s["service_id"] == sid:
                 price = float(s.get("price", 0))
                 break
-        sub = price * qty * (1 - disc / 100)
-        self._line_items.append({"service_id": sid, "quantity": qty, "discount": disc})
+        raw = price * qty
+        sub = raw * (1 - disc / 100)
+        self._line_items.append({
+            "service_id": sid, "quantity": qty, "discount": disc,
+            "unit_price": price, "raw": raw, "subtotal": sub,
+        })
         r = self._items_table.rowCount()
         self._items_table.insertRow(r)
-        name_only = svc_text.split(" (₱")[0] if " (₱" in svc_text else svc_text
+        name_only = svc_text.split(" — ₱")[0] if " — ₱" in svc_text else svc_text
         self._items_table.setItem(r, 0, QTableWidgetItem(name_only))
         self._items_table.setItem(r, 1, QTableWidgetItem(str(qty)))
         self._items_table.setItem(r, 2, QTableWidgetItem(f"₱{price:,.2f}"))
-        self._items_table.setItem(r, 3, QTableWidgetItem(f"{disc:.0f}%"))
+        disc_item = QTableWidgetItem(f"{disc:.0f}%")
+        if disc > 0:
+            disc_item.setForeground(QColor("#D9534F"))
+        self._items_table.setItem(r, 3, disc_item)
         self._items_table.setItem(r, 4, QTableWidgetItem(f"₱{sub:,.2f}"))
-        self._update_total()
+        # Remove button
+        rm_btn = QPushButton("✕")
+        rm_btn.setFixedSize(30, 28)
+        rm_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        rm_btn.setStyleSheet(
+            "QPushButton { background: #D9534F; color: #fff; border: none;"
+            " border-radius: 4px; font-weight: bold; font-size: 13px; }"
+            " QPushButton:hover { background: #C9302C; }")
+        rm_btn.clicked.connect(lambda checked, row=r: self._remove_line(row))
+        self._items_table.setCellWidget(r, 5, rm_btn)
+        self._update_totals()
+        # Reset qty only; discount stays locked for non-admin
+        self.qty_spin.setValue(1)
+        if self._role == "Admin":
+            self.disc_spin.setValue(self._patient_discount_pct)
 
-    def _update_total(self):
-        total = 0
+    def _remove_line(self, row):
+        if row < len(self._line_items):
+            self._line_items.pop(row)
+        self._items_table.removeRow(row)
+        # Rebind remove buttons with updated row indices
         for r in range(self._items_table.rowCount()):
-            txt = self._items_table.item(r, 4).text().replace("₱", "").replace(",", "")
-            try:
-                total += float(txt)
-            except ValueError:
-                pass
-        self._total_lbl.setText(f"Total: ₱{total:,.2f}")
+            rm_btn = QPushButton("✕")
+            rm_btn.setFixedSize(30, 28)
+            rm_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            rm_btn.setStyleSheet(
+                "QPushButton { background: #D9534F; color: #fff; border: none;"
+                " border-radius: 4px; font-weight: bold; font-size: 13px; }"
+                " QPushButton:hover { background: #C9302C; }")
+            rm_btn.clicked.connect(lambda checked, ri=r: self._remove_line(ri))
+            self._items_table.setCellWidget(r, 5, rm_btn)
+        self._update_totals()
+
+    def _recalculate_all_items(self):
+        """Re-apply current patient discount to all existing line items."""
+        disc = self._patient_discount_pct if self._role != "Admin" else self.disc_spin.value()
+        for i, it in enumerate(self._line_items):
+            it["discount"] = disc
+            it["subtotal"] = it["raw"] * (1 - disc / 100)
+            # Update table display
+            disc_item = QTableWidgetItem(f"{disc:.0f}%")
+            if disc > 0:
+                disc_item.setForeground(QColor("#D9534F"))
+            self._items_table.setItem(i, 3, disc_item)
+            self._items_table.setItem(i, 4, QTableWidgetItem(f"₱{it['subtotal']:,.2f}"))
+        self._update_totals()
+
+    def _update_totals(self):
+        raw_total = sum(it.get("raw", 0) for it in self._line_items)
+        disc_total = sum(it.get("raw", 0) - it.get("subtotal", 0) for it in self._line_items)
+        grand_total = raw_total - disc_total
+        self._subtotal_lbl.setText(f"Subtotal: ₱{raw_total:,.2f}")
+        self._discount_lbl.setText(f"Discount: − ₱{disc_total:,.2f}")
+        self._total_lbl.setText(f"Total: ₱{grand_total:,.2f}")
 
     def _validate_and_accept(self):
         if not self.patient_combo.currentText().strip():
@@ -309,25 +491,43 @@ class NewInvoiceDialog(QDialog):
     def get_data(self) -> dict:
         return {
             "patient_name":   self.patient_combo.currentText().strip(),
-            "items":          self._line_items,
+            "items":          [{"service_id": it["service_id"], "quantity": it["quantity"],
+                                "discount": it["discount"]} for it in self._line_items],
             "method_id":      self.payment_combo.currentData(),
-            "notes":          self.notes.toPlainText(),
+            "notes":          self.notes.text(),
             "appointment_id": self.appt_combo.currentData(),
         }
 
 
 # ══════════════════════════════════════════════════════════════════════
-#  Payment Dialog (partial payment)
+#  Payment Dialog (V2 – amount tendered, change calculation)
 # ══════════════════════════════════════════════════════════════════════
 class PaymentDialog(QDialog):
     def __init__(self, parent=None, *, invoice_id=0, balance=0.0, payment_methods=None):
         super().__init__(parent)
         self.setWindowTitle(f"Add Payment – Invoice #{invoice_id}")
-        self.setMinimumWidth(400)
-        form = QFormLayout(self)
-        form.setSpacing(14)
-        form.setContentsMargins(28, 28, 28, 28)
+        self.setMinimumWidth(440)
+        self._balance = balance
 
+        lay = QVBoxLayout(self)
+        lay.setSpacing(14)
+        lay.setContentsMargins(28, 24, 28, 24)
+
+        title = QLabel(f"Payment for Invoice #{invoice_id}")
+        title.setStyleSheet("font-size: 16px; font-weight: bold; color: #388087;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lay.addWidget(title)
+
+        # Balance due
+        bal_lbl = QLabel(f"Balance Due: ₱{balance:,.2f}")
+        bal_lbl.setStyleSheet("font-size: 14px; font-weight: bold; color: #D9534F;")
+        bal_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lay.addWidget(bal_lbl)
+        lay.addSpacing(6)
+
+        form = QFormLayout(); form.setSpacing(12)
+
+        # Amount tendered (what the customer hands over)
         self.amount_spin = QDoubleSpinBox()
         self.amount_spin.setMinimum(0.01)
         self.amount_spin.setMaximum(999999)
@@ -335,24 +535,83 @@ class PaymentDialog(QDialog):
         self.amount_spin.setPrefix("₱ ")
         self.amount_spin.setValue(balance)
         self.amount_spin.setMinimumHeight(38)
+        self.amount_spin.valueChanged.connect(self._update_change)
 
         self.method_combo = QComboBox(); self.method_combo.setObjectName("formCombo")
         self.method_combo.setMinimumHeight(38)
         for pm in (payment_methods or []):
             self.method_combo.addItem(pm["method_name"], pm["method_id"])
 
-        form.addRow("Amount", self.amount_spin)
-        form.addRow("Method", self.method_combo)
-        btns = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
-        )
-        style_dialog_btns(btns)
-        btns.accepted.connect(self.accept)
-        btns.rejected.connect(self.reject)
-        form.addRow(btns)
+        form.addRow("Amount Tendered", self.amount_spin)
+        form.addRow("Payment Method", self.method_combo)
+        lay.addLayout(form)
+
+        # Change display
+        self._change_lbl = QLabel("Change: ₱0.00")
+        self._change_lbl.setStyleSheet(
+            "font-size: 15px; font-weight: bold; color: #5CB85C;"
+            " padding: 8px; background: #E8F5E9; border-radius: 6px;")
+        self._change_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lay.addWidget(self._change_lbl)
+
+        # Effective amount applied
+        self._applied_lbl = QLabel(f"Applied to invoice: ₱{balance:,.2f}")
+        self._applied_lbl.setStyleSheet("font-size: 12px; color: #7F8C8D;")
+        self._applied_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lay.addWidget(self._applied_lbl)
+
+        # Buttons
+        btn_row = QHBoxLayout(); btn_row.setSpacing(10)
+        btn_row.addStretch()
+        cancel_btn = QPushButton("Cancel"); cancel_btn.setMinimumHeight(38)
+        cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        cancel_btn.setStyleSheet(
+            "QPushButton { background-color: #6c757d; color: #FFF; border: none;"
+            " border-radius: 6px; padding: 8px 24px; font-size: 13px; font-weight: bold; }")
+        cancel_btn.clicked.connect(self.reject)
+        pay_btn = QPushButton("Confirm Payment"); pay_btn.setMinimumHeight(38)
+        pay_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        pay_btn.setStyleSheet(
+            "QPushButton { background-color: #388087; color: #FFF; border: none;"
+            " border-radius: 6px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
+            " QPushButton:hover { background-color: #2C6A70; }")
+        pay_btn.clicked.connect(self._on_confirm)
+        btn_row.addWidget(cancel_btn); btn_row.addWidget(pay_btn)
+        lay.addLayout(btn_row)
+
+        self._update_change()
+
+    def _update_change(self):
+        tendered = self.amount_spin.value()
+        change = max(0, tendered - self._balance)
+        applied = min(tendered, self._balance)
+        self._change_lbl.setText(f"Change: ₱{change:,.2f}")
+        self._applied_lbl.setText(f"Applied to invoice: ₱{applied:,.2f}")
+        if change > 0:
+            self._change_lbl.setStyleSheet(
+                "font-size: 15px; font-weight: bold; color: #388087;"
+                " padding: 8px; background: #E0F2F1; border-radius: 6px;")
+        else:
+            self._change_lbl.setStyleSheet(
+                "font-size: 15px; font-weight: bold; color: #5CB85C;"
+                " padding: 8px; background: #E8F5E9; border-radius: 6px;")
+
+    def _on_confirm(self):
+        if self.amount_spin.value() <= 0:
+            QMessageBox.warning(self, "Validation", "Enter an amount greater than zero.")
+            return
+        self.accept()
 
     def get_data(self):
-        return {"amount": self.amount_spin.value(), "method_id": self.method_combo.currentData()}
+        tendered = self.amount_spin.value()
+        applied = min(tendered, self._balance)
+        change = max(0, tendered - self._balance)
+        return {
+            "amount": applied,
+            "tendered": tendered,
+            "change": change,
+            "method_id": self.method_combo.currentData(),
+        }
 
 
 # ══════════════════════════════════════════════════════════════════════

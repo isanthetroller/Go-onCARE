@@ -7,12 +7,14 @@ class PatientMixin:
         return self.fetch("""
             SELECT p.patient_id, p.first_name, p.last_name, p.sex,
                    p.date_of_birth, p.phone, p.email, p.status, p.notes,
-                   p.emergency_contact, p.blood_type,
+                   p.emergency_contact, p.blood_type, p.discount_type_id,
+                   COALESCE(dt.type_name, '') AS discount_type,
                    GROUP_CONCAT(pc.condition_name SEPARATOR ', ') AS conditions,
                    (SELECT MAX(a.appointment_date) FROM appointments a
                     WHERE a.patient_id = p.patient_id) AS last_visit
             FROM patients p
             LEFT JOIN patient_conditions pc ON p.patient_id = pc.patient_id
+            LEFT JOIN discount_types dt ON p.discount_type_id = dt.discount_id
             GROUP BY p.patient_id ORDER BY p.patient_id
         """)
 
@@ -61,13 +63,15 @@ class PatientMixin:
         try:
             conn = self._get_connection()
             with conn.cursor() as cur:
+                discount_type_id = data.get("discount_type_id") or None
                 cur.execute("""
                     INSERT INTO patients (first_name, last_name, sex, date_of_birth,
-                        phone, email, emergency_contact, blood_type, status, notes)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        phone, email, emergency_contact, blood_type, discount_type_id, status, notes)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """, (data["first_name"], data["last_name"], data["sex"],
                       data.get("dob"), data.get("phone",""), data.get("email",""),
                       data.get("emergency_contact",""), data.get("blood_type","Unknown"),
+                      discount_type_id,
                       data.get("status","Active"), data.get("notes","")))
                 pid = cur.lastrowid
                 self._save_conditions(cur, pid, data.get("conditions",""))
@@ -85,13 +89,15 @@ class PatientMixin:
         try:
             conn = self._get_connection()
             with conn.cursor() as cur:
+                discount_type_id = data.get("discount_type_id") or None
                 cur.execute("""
                     UPDATE patients SET first_name=%s, last_name=%s, sex=%s, date_of_birth=%s,
-                        phone=%s, email=%s, emergency_contact=%s, blood_type=%s, status=%s, notes=%s
+                        phone=%s, email=%s, emergency_contact=%s, blood_type=%s, discount_type_id=%s, status=%s, notes=%s
                     WHERE patient_id=%s
                 """, (data["first_name"], data["last_name"], data["sex"],
                       data.get("dob"), data.get("phone",""), data.get("email",""),
                       data.get("emergency_contact",""), data.get("blood_type","Unknown"),
+                      discount_type_id,
                       data.get("status","Active"), data.get("notes",""), patient_id))
                 self._save_conditions(cur, patient_id, data.get("conditions",""))
                 conn.commit()
