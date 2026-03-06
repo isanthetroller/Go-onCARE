@@ -96,7 +96,7 @@ class AuthBackend:
         if not email:
             return False, "", "", "Please enter your email address."
         if not password:
-            return False, "", "", "Please enter your password."
+            return False, "", "", "Ploease enter your password."
         try:
             conn = self._get_connection()
             cursor = conn.cursor(dictionary=True)
