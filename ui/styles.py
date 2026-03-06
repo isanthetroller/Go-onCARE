@@ -65,50 +65,16 @@ def _load_qss(filename: str) -> str:
     """Read a .qss file from the ui/styles/ directory and return its contents."""
     path = _os.path.join(_STYLES_DIR, filename)
     with open(path, "r", encoding="utf-8") as f:
-        return f.read()
+        content = f.read()
+    # Resolve relative url(./) refs to absolute paths so images load correctly
+    abs_dir = _STYLES_DIR.replace("\\", "/")
+    content = content.replace("url(./", f"url({abs_dir}/")
+    return content
 
-
-# ── Dark colour constants ──────────────────────────────────────────────
-DARK_COLORS = {
-    "primary":    "#6FB3B8",
-    "primary_lt": "#3A4A5C",
-    "primary_dk": "#A0D7DB",
-    "accent":     "#388087",
-    "success":    "#5CB85C",
-    "warning":    "#E8B931",
-    "danger":     "#D9534F",
-    "bg":         "#1E1E2E",
-    "card":       "#2A2A3C",
-    "text":       "#E0E0E0",
-    "muted":      "#8899AA",
-    "border":     "#3A4A5C",
-    "sidebar_bg": "#252538",
-    "sidebar_hv": "#3A4A5C",
-    "sidebar_sel": "#6FB3B8",
-    "mint":       "#3A5A40",
-}
 
 # ── Public stylesheet strings (loaded once at import) ─────────────────
 AUTH_STYLE: str = _load_qss("auth.qss")
 MAIN_STYLE: str = _load_qss("main.qss")
-
-# Build dark variant by swapping colors in QSS
-def _build_dark_style() -> str:
-    """Generate dark QSS by replacing light colours in the main stylesheet."""
-    dark = MAIN_STYLE
-    _swaps = [
-        ("#F6F6F2", DARK_COLORS["bg"]),
-        ("#FFFFFF", DARK_COLORS["card"]),
-        ("#BADFE7", DARK_COLORS["border"]),
-        ("#2C3E50", DARK_COLORS["text"]),
-        ("#7F8C8D", DARK_COLORS["muted"]),
-    ]
-    for old, new in _swaps:
-        dark = dark.replace(old, new)
-    return dark
-
-
-DARK_MAIN_STYLE: str = _build_dark_style()
 
 
 # ── Table palette helper ──────────────────────────────────────────────
@@ -118,7 +84,7 @@ _active_colors = COLORS  # start with light
 
 def set_active_palette(dark: bool = False):
     global _active_colors
-    _active_colors = DARK_COLORS if dark else COLORS
+    _active_colors = COLORS
 
 
 def configure_table(table):
@@ -359,23 +325,6 @@ _TAB_STYLE = (
 )
 TAB_ACTIVE = _TAB_STYLE.format(bg="#388087", fg="#FFFFFF", hv="#2C6A70")
 TAB_INACTIVE = _TAB_STYLE.format(bg="#FFFFFF", fg="#2C3E50", hv="#BADFE7")
-
-# ── Dialog button CSS (reusable across all dialogs) ──────────────────
-DIALOG_PRIMARY_CSS = (
-    "QPushButton { background-color: #388087; color: #FFF; border: none;"
-    " border-radius: 4px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
-    " QPushButton:hover { background-color: #2C6A70; }"
-)
-DIALOG_CANCEL_CSS = (
-    "QPushButton { background-color: #6c757d; color: #FFF; border: none;"
-    " border-radius: 4px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
-    " QPushButton:hover { background-color: #5a6268; }"
-)
-DIALOG_DANGER_CSS = (
-    "QPushButton { background-color: #D9534F; color: #FFF; border: none;"
-    " border-radius: 4px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
-    " QPushButton:hover { background-color: #C9302C; }"
-)
 
 
 # ── Loading cursor context manager ────────────────────────────────────

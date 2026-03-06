@@ -93,16 +93,7 @@ class ActivityLogPage(QWidget):
         finish_page(self, scroll)
         self.refresh()
 
-    def _check_for_new_entries(self):
-        """Lightweight poll: only reload the table if new log entries exist."""
-        if not self._backend:
-            return
-        try:
-            latest = self._backend.get_latest_log_id()
-            if latest > self._last_log_id:
-                self.refresh()
-        except Exception:
-            pass
+
 
     def refresh(self):
         if not self._backend:

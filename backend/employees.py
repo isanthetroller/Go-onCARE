@@ -80,13 +80,6 @@ class EmployeeMixin:
             GROUP BY employment_type ORDER BY cnt DESC
         """)
 
-    def update_employee_salary(self, employee_id, salary):
-        """Update the salary of an employee."""
-        if self.exec("UPDATE employees SET salary=%s WHERE employee_id=%s", (salary, employee_id)):
-            self.log_activity("Edited", "Employee", f"Salary updated for employee ID {employee_id}")
-            return True
-        return False
-
     def check_duplicate_phone(self, phone):
         """Return dict with employee_id & full_name if phone is already used, else None."""
         return self.fetch(
@@ -265,31 +258,6 @@ class EmployeeMixin:
             WHERE a.doctor_id = %s
             ORDER BY a.appointment_date DESC, a.appointment_time DESC LIMIT 20
         """, (employee_id,))
-
-    def get_user_password(self, email):
-        row = self.fetch("SELECT password FROM users WHERE email=%s", (email,), one=True)
-        return row["password"] if row else ""
-
-    def update_user_password(self, email, new_password):
-        """Update the password for a user. Creates the user record if it doesn't exist."""
-        if not email:
-            return False
-        # Try updating existing user
-        result = self.exec("UPDATE users SET password=%s WHERE email=%s", (new_password, email))
-        if result:
-            self.log_activity("Edited", "User", f"Password updated for {email}")
-            return True
-        # No user record found — create one
-        row = self.fetch(
-            "SELECT CONCAT(e.first_name,' ',e.last_name) AS full_name, e.role_id "
-            "FROM employees e WHERE e.email=%s", (email,), one=True)
-        if row:
-            self.exec(
-                "INSERT INTO users (email, password, full_name, role_id) VALUES (%s,%s,%s,%s)",
-                (email, new_password, row["full_name"], row["role_id"]))
-            self.log_activity("Created", "User", f"User account created for {email}")
-            return True
-        return False
 
     # ── Leave Request System ──────────────────────────────────────
 

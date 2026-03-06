@@ -9,7 +9,6 @@ from PyQt6.QtWidgets import (
     QDateEdit, QListWidget, QListWidgetItem, QCheckBox, QMessageBox,
 )
 from PyQt6.QtCore import Qt, QDate
-from PyQt6.QtGui import QColor
 from ui.styles import configure_table, style_dialog_btns
 
 

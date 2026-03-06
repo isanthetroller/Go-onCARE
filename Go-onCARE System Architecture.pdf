@@ -8,14 +8,14 @@ Go-onCARE (CareCRUD V1) — Full System Architecture & Documentation
 Go-onCARE is a desktop clinic management system built with Python, PyQt6, and MySQL. It manages the full lifecycle of a healthcare clinic — from patient registration and appointment scheduling to clinical queues, billing/POS, HR management, and analytics — all within a single role-based desktop application.
 
 Technology Stack:
-  - Language:        Python 3.x
+  - Language:        Python 3.14
   - GUI Framework:   PyQt6 (Fusion style + QSS stylesheets)
   - Database:        MySQL via mysql-connector-python
   - Charts:          Custom QPainter-based widgets (no external chart libs)
   - Architecture:    Single-process desktop app, mixin-based backend
   - Connection:      localhost, database carecrud_db
 
-Scale: ~30 Python files, ~8,500+ lines of Python, ~1,250 lines of QSS, 17 database tables, 8 views, 5 user roles.
+Scale: ~25 Python files, ~8,000+ lines of Python, ~1,250 lines of QSS, 17 database tables, 8 views, 5 user roles.
 
 
 2. HIGH-LEVEL ARCHITECTURE
@@ -32,12 +32,11 @@ Scale: ~30 Python files, ~8,500+ lines of Python, ~1,250 lines of QSS, 17 databa
        │                   │                │                     │
        │  auth_window.py   │                │  ┌── DatabaseBase ──┐
        │  main_window.py   │                │  │  base.py         │
-       │  8 Page widgets   │                │  └──────────────────┘
-       │  6 Dialog classes  │                │  ↑ inherited by all │
+       │  9 Page widgets   │                │  └──────────────────┘
+       │  15 Dialog classes │                │  ↑ inherited by all │
        │  chart_widgets.py │                │  AuthMixin (auth)   │
        │  styles.py        │                │  PatientMixin       │
-       │  reports.py       │                │  EmployeeMixin      │
-       │  2 QSS themes     │                │  AppointmentMixin   │
+       │  2 QSS stylesheets│                │  EmployeeMixin      │
        └───────────────────┘                │  ClinicalMixin      │
                                             │  DashboardMixin     │
                                             │  AnalyticsMixin     │
@@ -75,7 +74,6 @@ The backend uses a mixin composition pattern — a single AuthBackend class inhe
        │          ├──── notifications
        │          │
        │          └──FK── appointments ──FK──> services
-       │                     │       └── self-FK (recurring_parent_id)
        │                     │
        │                     ├──FK── queue_entries
        │                     │
@@ -138,9 +136,7 @@ The backend uses a mixin composition pattern — a single AuthBackend class inhe
                      doctor_id (FK→employees), service_id                Confirmed/Cancelled/
                      (FK→services), appointment_date,                    Completed
                      appointment_time, status, notes,
-                     cancellation_reason, reschedule_reason,
-                     recurring_parent_id (self-FK),
-                     reminder_sent
+                     cancellation_reason, reschedule_reason
   queue_entries      queue_id, patient_id (FK), doctor_id                Status: Waiting/
                      (FK), appointment_id (FK), queue_time,              In Progress/Completed/
                      purpose, status, notes                              Cancelled
@@ -229,8 +225,8 @@ with cascade warning. Merge duplicate patients.
 
 APPOINTMENTS — Full CRUD. 5 date-based quick tabs (Today/Tomorrow/This Week/
 This Month/All). Filters by doctor, status, and search. Create appointments
-with conflict detection, date validation (today → end of next month), and
-recurring scheduling (Daily/Weekly/Monthly × N). Sees billing status column.
+with conflict detection and date validation (today → end of next month).
+Sees billing status column.
 
 CLINICAL & POS — All 3 tabs:
   - Patient Queue: Auto-syncs confirmed appointments into queue. Stat cards
@@ -331,8 +327,7 @@ Can submit leave requests.
 PATIENTS — Full CRUD including add, edit, delete, and merge duplicate patients.
 This is the primary patient-facing role.
 
-APPOINTMENTS — Full CRUD. Create, edit, cancel appointments. Recurring
-scheduling supported.
+APPOINTMENTS — Full CRUD. Create, edit, cancel appointments.
 
 CLINICAL & POS — Billing tab only. Same as Cashier but can also void invoices.
 
@@ -389,28 +384,28 @@ CLINICAL & POS — Billing tab only. Same as Cashier but can also void invoices.
     → First login → ForcePasswordChangeDialog
 
 
-7. BACKEND API SUMMARY (100+ Methods across 9 Mixins)
+7. BACKEND API SUMMARY (117 Methods across 9 Mixins)
 =======================================================
 
   Mixin              File                   Methods   Responsibility
   ─────              ────                   ───────   ──────────────
-  DatabaseBase       backend/base.py        10        DB connection, fetch(), exec(),
+  DatabaseBase       backend/base.py        13        DB connection, fetch(), exec(),
                                                       shared helpers, activity logging
   AuthMixin          backend/auth.py        10        Login, password management,
                                                       user account CRUD
-  PatientMixin       backend/patients.py    8         Patient CRUD, profiles, merge,
+  PatientMixin       backend/patients.py    9         Patient CRUD, profiles, merge,
                                                       doctor-filtered patients
-  EmployeeMixin      backend/employees.py   25+       Employee CRUD, HR stats, payroll,
+  EmployeeMixin      backend/employees.py   26        Employee CRUD, HR stats, payroll,
                                                       leave system, notifications
   AppointmentMixin   backend/appointments.py 9        Appointment CRUD, conflict
-                                                      detection, recurring scheduling
-  ClinicalMixin      backend/clinical.py    14        Queue management, invoices,
+                                                      detection, date validation
+  ClinicalMixin      backend/clinical.py    18        Queue management, invoices,
                                                       payments, services
   DashboardMixin     backend/dashboard.py   3         KPI aggregation, upcoming
                                                       appointments, monthly trends
-  AnalyticsMixin     backend/analytics.py   15        Revenue analytics, doctor
+  AnalyticsMixin     backend/analytics.py   14        Revenue analytics, doctor
                                                       performance, demographics, trends
-  SettingsMixin      backend/settings.py    11        DB cleanup, conditions/discounts
+  SettingsMixin      backend/settings.py    14        DB cleanup, conditions/discounts
                                                       management, table counts
   SearchMixin        backend/search.py      1         Global search across patients,
                                                       appointments, employees
@@ -422,6 +417,7 @@ CLINICAL & POS — Billing tab only. Same as Cashier but can also void invoices.
   ──────                        ───────────
   set_current_user(email, role) Sets session identity for logging
   _get_connection()             Returns (or creates) mysql.connector connection
+  _ensure_schema()              Verifies DB schema on first connection
   fetch(sql, params, one)       Executes SELECT → list[dict] or single dict
   exec(sql, params)             Executes INSERT/UPDATE/DELETE → lastrowid or rowcount
   exec_many(queries)            Runs multiple statements in single transaction
@@ -457,6 +453,7 @@ CLINICAL & POS — Billing tab only. Same as Cashier but can also void invoices.
   ──────                            ───────────
   get_patients()                    Full patient list with conditions, discount, last visit
   get_patient_full_profile(id)      Returns {info, appointments, invoices, queue}
+  _save_conditions(pid, conds)      Syncs patient_conditions junction table
   add_patient(data)                 Inserts patient + syncs patient_conditions
   update_patient(patient_id, data)  Updates patient + re-syncs conditions
   delete_patient(patient_id)        Cascading delete of all related records
@@ -469,6 +466,8 @@ CLINICAL & POS — Billing tab only. Same as Cashier but can also void invoices.
 
   Method                            Description
   ──────                            ───────────
+  _split_name(full_name)            Splits "first last" into (first, last)
+  _lookup_dept_id(dept_name)        Resolves department name → department_id
   get_employees(detailed)           Employee list; optional salary/emergency fields
   get_employees_detailed()          Shortcut for get_employees(detailed=True)
   get_leave_employees()             Currently on-leave employees
@@ -476,7 +475,6 @@ CLINICAL & POS — Billing tab only. Same as Cashier but can also void invoices.
                                     avg_salary, total_payroll}
   get_payroll_summary()             Department-level salary aggregation
   get_employment_type_counts()      Full-time / Part-time / Contract breakdown
-  update_employee_salary(id, sal)   Updates salary field
   check_duplicate_phone(phone, id)  Prevents duplicate phone numbers
   add_employee(data)                Inserts employee + auto-creates user account
   update_employee(id, data)         Updates employee + syncs users table
@@ -508,9 +506,7 @@ CLINICAL & POS — Billing tab only. Same as Cashier but can also void invoices.
   check_appointment_conflict(...)     Checks for double-booking
   _validate_appointment_date(date)    Enforces today → end of next month
   add_appointment(data)               Inserts appointment; logs activity
-  add_recurring_appointments(...)     Creates Daily/Weekly/Monthly series
   update_appointment(id, data)        Updates all fields; logs activity
-  update_reminder_sent(id)            Marks reminder as sent
 
 7.6 ClinicalMixin — backend/clinical.py
 -----------------------------------------
@@ -520,8 +516,7 @@ CLINICAL & POS — Billing tab only. Same as Cashier but can also void invoices.
   QUEUE:
   get_queue_entries()                 Today's queue from vw_queue
   get_queue_stats()                   {waiting, in_progress, completed, est_wait}
-  update_queue_status(id, status)     Change queue status; logs activity
-  update_queue_entry(id, data)        Edit purpose/notes/status
+  update_queue_entry(id, data)        Edit purpose/notes/status; logs activity
   sync_today_appointments_to_queue()  Confirmed → queue (Waiting)
   call_next_queue(doctor_id)          Oldest Waiting → In Progress
   get_avg_consultation_minutes()      Average consultation time
@@ -532,13 +527,12 @@ CLINICAL & POS — Billing tab only. Same as Cashier but can also void invoices.
   add_payment(id, amount, method)     Partial or full payment
   void_invoice(id)                    Sets status to Void
   get_invoice_detail(id)              Invoice header + line items
-  get_today_completed_for_patient()   Links invoice ↔ appointment
+  get_today_completed_appointments_for_patient()  Links invoice ↔ appointment
   get_payment_methods()               Payment method list
 
   SERVICES:
   add_service(data)                   Creates new service
   update_service_full(id, data)       Updates name, price, category, active
-  update_service(id, price)           Price-only update
   bulk_update_prices(updates)         Batch price changes
   get_service_usage_counts()          Usage count per service
   get_service_categories()            Distinct category list
@@ -573,7 +567,6 @@ CLINICAL & POS — Billing tab only. Same as Cashier but can also void invoices.
   get_monthly_appointment_stats()     Monthly totals/completed/cancelled
   get_patient_retention()             New vs returning patients by month
   get_cancellation_rate_trend()       6-month cancellation rate
-  get_revenue_detail(from, to)        Invoice line items with date range
   get_summary_stats(from, to)         {total_revenue, patients, appts, avg/day}
   get_period_comparison()             Month-over-month delta percentages
 
@@ -582,7 +575,8 @@ CLINICAL & POS — Billing tab only. Same as Cashier but can also void invoices.
 
   Method                              Description
   ──────                              ───────────
-  get_table_counts()                  Row counts for all 15 tables
+  get_table_counts()                  Row counts for all 17 tables
+  _cleanup_appointments(where, params) Shared helper for appointment cleanup
   cleanup_completed_appointments()    Deletes completed before date
   cleanup_cancelled_appointments()    Deletes all cancelled
   cleanup_inactive_patients()         Deletes inactive (cascading)
@@ -604,7 +598,7 @@ CLINICAL & POS — Billing tab only. Same as Cashier but can also void invoices.
   global_search(query, include_emp)   Returns {patients, appointments, employees}
 
 
-8. UI COMPONENTS (19 Widget Classes + 19 Style Helpers)
+8. UI COMPONENTS (27 Widget Classes + 16 Style Helpers)
 ========================================================
 
 8.1 Windows
@@ -615,32 +609,30 @@ CLINICAL & POS — Billing tab only. Same as Cashier but can also void invoices.
   MainWindow       Primary window with sidebar navigation + QStackedWidget
                    holding 8 pages
 
-8.2 Pages (10)
+8.2 Pages (9)
 ---------------
 
-  Page                 File                          Lines   Description
-  ────                 ────                          ─────   ───────────
-  DashboardPage        ui/shared/dashboard_page.py   ~530    KPI cards, schedule,
-                                                             charts, leave requests
-  PatientsPage         ui/shared/patients_page.py    ~250    Patient CRUD with
-                                                             filters
-  AppointmentsPage     ui/shared/appointments_page.py ~250   Date tabs, doctor/
-                                                             status filters
-  ClinicalPage         ui/shared/clinical_page.py    ~710    3 tabs: Queue,
-                                                             Billing, Services
-  AnalyticsPage        ui/shared/analytics_page.py   ~500    Charts, KPIs, trends
-  EmployeesPage        ui/shared/employees_page.py   ~280    Basic employee
-                                                             management
-  HREmployeesPage      ui/shared/hr_employees_page.py ~700   4 tabs: Employees,
-                                                             Leave, Payroll, Users
-  ActivityLogPage      ui/shared/activity_log_page.py ~170   Audit trail with
-                                                             filters
-  SettingsPage         ui/shared/settings_page.py    ~480    Password, discounts,
-                                                             DB tools
-  ReportsPage          ui/reports.py                 ~250    Revenue, patient
-                                                             stats, doctor perf
+  Page                 File                          Description
+  ────                 ────                          ───────────
+  DashboardPage        ui/shared/dashboard_page.py   KPI cards, schedule,
+                                                     charts, leave requests
+  PatientsPage         ui/shared/patients_page.py    Patient CRUD with
+                                                     filters
+  AppointmentsPage     ui/shared/appointments_page.py Date tabs, doctor/
+                                                     status filters
+  ClinicalPage         ui/shared/clinical_page.py    3 tabs: Queue,
+                                                     Billing, Services
+  AnalyticsPage        ui/shared/analytics_page.py   Charts, KPIs, trends
+  EmployeesPage        ui/shared/employees_page.py   Basic employee
+                                                     management
+  HREmployeesPage      ui/shared/hr_employees_page.py 4 tabs: Employees,
+                                                     Leave, Payroll, Users
+  ActivityLogPage      ui/shared/activity_log_page.py Audit trail with
+                                                     filters
+  SettingsPage         ui/shared/settings_page.py    Password, discounts,
+                                                     DB tools
 
-8.3 Dialogs (14)
+8.3 Dialogs (15)
 ------------------
 
   Dialog                  File                             Description
@@ -657,7 +649,7 @@ CLINICAL & POS — Billing tab only. Same as Cashier but can also void invoices.
                                                            with Salary & HR tab
   UserAccountDialog       ui/shared/hr_employee_dialogs.py Create user account
   AppointmentDialog       ui/shared/appointment_dialog.py  Full appointment form
-                                                           with recurring support
+                                                           with conflict detection
   QueueEditDialog         ui/shared/clinical_dialogs.py    Edit queue entry
   ServiceEditDialog       ui/shared/clinical_dialogs.py    Add/Edit service
   NewInvoiceDialog        ui/shared/clinical_dialogs.py    Multi-item invoice with
@@ -666,6 +658,7 @@ CLINICAL & POS — Billing tab only. Same as Cashier but can also void invoices.
                                                            calculation
   BulkPriceDialog         ui/shared/clinical_dialogs.py    Batch service price
                                                            update
+  _DiscountTypeDialog     ui/shared/settings_page.py       Add/Edit discount type
 
 8.4 Chart Widgets (3)
 ----------------------
@@ -676,14 +669,13 @@ CLINICAL & POS — Billing tab only. Same as Cashier but can also void invoices.
 
 All charts are custom-painted — no external charting library.
 
-8.5 Style Helpers (19 functions)
+8.5 Style Helpers (16 functions)
 ---------------------------------
 
   Function              Purpose
   ────────              ───────
-  _load_qss(filename)   Loads QSS stylesheet file
-  _build_dark_style()   Generates dark mode QSS
-  set_active_palette()  Applies light or dark palette
+  _load_qss(filename)   Loads QSS stylesheet file (resolves relative paths)
+  set_active_palette()  Applies colour palette to tables
   configure_table()     Standard table styling
   make_page_layout()    Scrollable page scaffold
   finish_page()         Wraps page in scroll area
@@ -766,12 +758,13 @@ All charts are custom-painted — no external charting library.
       ├── __init__.py
       ├── auth_window.py               Login window
       ├── main_window.py               Main window + sidebar
-      ├── reports.py                   Reports page
-      ├── styles.py                    19 UI helper functions
+      ├── styles.py                    16 UI helper functions
       │
       ├── styles/
       │   ├── auth.qss                 Login stylesheet
-      │   └── main.qss                 Main window stylesheet
+      │   ├── main.qss                 Main window stylesheet
+      │   ├── arrow-up.svg             Spinbox up arrow icon
+      │   └── arrow-down.svg           Spinbox down arrow icon
       │
       ├── admin/__init__.py            Admin role imports
       ├── doctor/__init__.py           Doctor role imports
@@ -805,15 +798,15 @@ Go-onCARE is a complete clinic management desktop application featuring:
 
   - 17 database tables with 8 pre-built views and 16 indexes
   - 5 distinct user roles with granular access control
-  - 100+ backend API methods across 9 specialized mixins
-  - 10 page-level widgets and 14 dialog classes
+  - 117 backend API methods across 9 specialized mixins
+  - 9 page-level widgets and 15 dialog classes
   - 3 custom-painted chart widgets (no external dependencies)
   - Full audit trail logging every system action
   - Real-time auto-refresh across all views (10-15 second intervals)
   - Automated leave management with expiry and notifications
   - Multi-item invoicing with auto-discount and partial payments
-  - Recurring appointment scheduling with conflict detection
+  - Appointment scheduling with conflict detection
   - Patient merge capability for deduplication
   - Cascading deletes that maintain referential integrity
 
-All built with Python 3, PyQt6, and MySQL — zero external UI/chart libraries.
+All built with Python 3.14, PyQt6, and MySQL — zero external UI/chart libraries.

@@ -222,16 +222,10 @@ class AppointmentsPage(QWidget):
             if not d["patient_name"].strip():
                 QMessageBox.warning(self, "Validation", "Patient name is required."); return
             if self._backend:
-                if d.get("recurring"):
-                    cnt = self._backend.add_recurring_appointments(d, d["recur_freq"], d["recur_count"])
-                    if cnt == 0:
-                        QMessageBox.warning(self, "Error", "Failed to create recurring appointments."); return
-                    QMessageBox.information(self, "Success", f"Created {cnt} recurring appointments.")
-                else:
-                    ok = self._backend.add_appointment(d)
-                    if not ok:
-                        QMessageBox.warning(self, "Error", "Failed to save appointment."); return
-                    QMessageBox.information(self, "Success", f"Appointment for '{d['patient_name']}' created.")
+                ok = self._backend.add_appointment(d)
+                if not ok:
+                    QMessageBox.warning(self, "Error", "Failed to save appointment."); return
+                QMessageBox.information(self, "Success", f"Appointment for '{d['patient_name']}' created.")
             self._load_from_db(); self._refresh_table()
 
     def _on_edit(self, appt: dict):
@@ -242,7 +236,6 @@ class AppointmentsPage(QWidget):
             "notes": appt.get("notes","") or "",
             "cancellation_reason": appt.get("cancellation_reason","") or "",
             "reschedule_reason": appt.get("reschedule_reason","") or "",
-            "reminder_sent": appt.get("reminder_sent", 0),
         }
         doctors = self._backend.get_doctors() if self._backend else []
         services = self._backend.get_services_list() if self._backend else []

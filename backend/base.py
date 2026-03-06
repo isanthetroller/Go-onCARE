@@ -18,6 +18,7 @@ class DatabaseBase:
         self._conn = None
         self._current_user_email = ""
         self._current_user_role = ""
+        self._ensure_schema()
 
     def set_current_user(self, email, role):
         self._current_user_email = email
@@ -33,6 +34,34 @@ class DatabaseBase:
         if self._conn and self._conn.is_connected():
             self._conn.close()
             self._conn = None
+
+    # ── Schema auto-migration ─────────────────────────────────────
+    def _ensure_schema(self):
+        """Create any missing tables or columns so the app works on older DBs."""
+        try:
+            conn = self._get_connection()
+            with conn.cursor() as cur:
+                # discount_types table
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS discount_types (
+                        discount_id      INT AUTO_INCREMENT PRIMARY KEY,
+                        type_name        VARCHAR(100) NOT NULL UNIQUE,
+                        discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+                        legal_basis      VARCHAR(255) DEFAULT '',
+                        is_active        TINYINT(1) NOT NULL DEFAULT 1
+                    )
+                """)
+                # discount_type_id column on patients
+                cur.execute("SHOW COLUMNS FROM patients LIKE 'discount_type_id'")
+                if not cur.fetchone():
+                    cur.execute("ALTER TABLE patients ADD COLUMN discount_type_id INT DEFAULT NULL")
+                    cur.execute(
+                        "ALTER TABLE patients ADD CONSTRAINT fk_patient_discount "
+                        "FOREIGN KEY (discount_type_id) REFERENCES discount_types(discount_id)"
+                    )
+                conn.commit()
+        except Exception:
+            pass
 
     # ── Query helpers ─────────────────────────────────────────────
     def fetch(self, sql, params=None, one=False):

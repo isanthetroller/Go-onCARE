@@ -4,8 +4,8 @@ from datetime import date, datetime, timedelta
 
 from PyQt6.QtWidgets import (
     QDialog, QFormLayout, QLineEdit, QTextEdit, QComboBox,
-    QDialogButtonBox, QHBoxLayout, QLabel, QTimeEdit, QDateEdit,
-    QSpinBox, QCheckBox, QMessageBox,
+    QDialogButtonBox, QLabel, QTimeEdit, QDateEdit,
+    QMessageBox,
 )
 from PyQt6.QtCore import Qt, QDate, QTime
 from ui.styles import style_dialog_btns
@@ -108,16 +108,6 @@ class AppointmentDialog(QDialog):
         self.resched_reason = QLineEdit(); self.resched_reason.setObjectName("formInput")
         self.resched_reason.setPlaceholderText("Reason (if rescheduling)"); self.resched_reason.setMinimumHeight(38)
 
-        self.reminder_check = QCheckBox("Reminder Sent")
-
-        self.recurring_check = QCheckBox("Make Recurring")
-        self.recur_freq = QComboBox(); self.recur_freq.addItems(["Weekly", "Daily", "Monthly"])
-        self.recur_freq.setObjectName("formCombo"); self.recur_freq.setMinimumHeight(38)
-        self.recur_count = QSpinBox(); self.recur_count.setMinimum(2); self.recur_count.setMaximum(52)
-        self.recur_count.setValue(4); self.recur_count.setMinimumHeight(38)
-        self.recur_freq.setEnabled(False); self.recur_count.setEnabled(False)
-        self.recurring_check.toggled.connect(lambda c: (self.recur_freq.setEnabled(c), self.recur_count.setEnabled(c)))
-
         form.addRow("Patient", self.patient_combo)
         form.addRow("Doctor", self.doctor_combo)
         form.addRow("Date", self.date_edit)
@@ -127,13 +117,6 @@ class AppointmentDialog(QDialog):
         form.addRow("Notes", self.notes_edit)
         form.addRow("Cancel Reason", self.cancel_reason)
         form.addRow("Reschedule Reason", self.resched_reason)
-        form.addRow("", self.reminder_check)
-        if title == "New Appointment":
-            form.addRow("", self.recurring_check)
-            recur_row = QHBoxLayout()
-            recur_row.addWidget(QLabel("Every")); recur_row.addWidget(self.recur_freq)
-            recur_row.addWidget(QLabel("×")); recur_row.addWidget(self.recur_count)
-            form.addRow("Recurrence", recur_row)
 
         btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
         style_dialog_btns(btns)
@@ -159,7 +142,6 @@ class AppointmentDialog(QDialog):
             if data.get("notes"): self.notes_edit.setPlainText(data["notes"])
             self.cancel_reason.setText(data.get("cancellation_reason","") or "")
             self.resched_reason.setText(data.get("reschedule_reason","") or "")
-            self.reminder_check.setChecked(bool(data.get("reminder_sent", 0)))
 
     def _validate_and_accept(self):
         selected_date = self.date_edit.date()
@@ -202,8 +184,4 @@ class AppointmentDialog(QDialog):
             "notes": self.notes_edit.toPlainText(),
             "cancellation_reason": self.cancel_reason.text(),
             "reschedule_reason": self.resched_reason.text(),
-            "reminder_sent": 1 if self.reminder_check.isChecked() else 0,
-            "recurring": self.recurring_check.isChecked() if hasattr(self, 'recurring_check') else False,
-            "recur_freq": self.recur_freq.currentText() if hasattr(self, 'recur_freq') else "Weekly",
-            "recur_count": self.recur_count.value() if hasattr(self, 'recur_count') else 4,
         }

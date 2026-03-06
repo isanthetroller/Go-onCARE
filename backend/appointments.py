@@ -13,7 +13,6 @@ class AppointmentMixin:
                    CONCAT(e.first_name,' ',e.last_name) AS doctor_name,
                    s.service_name, a.status, a.notes,
                    a.cancellation_reason, a.reschedule_reason,
-                   a.reminder_sent, a.recurring_parent_id,
                    CASE
                        WHEN i.invoice_id IS NULL THEN 'No Invoice'
                        ELSE i.status
@@ -94,13 +93,12 @@ class AppointmentMixin:
                 cur.execute("""
                     INSERT INTO appointments (patient_id, doctor_id, service_id,
                         appointment_date, appointment_time, status, notes,
-                        cancellation_reason, reschedule_reason, reminder_sent, recurring_parent_id)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        cancellation_reason, reschedule_reason)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """, (pid, data["doctor_id"], data["service_id"],
                       data["date"], data["time"], data.get("status", "Pending"),
                       data.get("notes", ""), data.get("cancellation_reason", ""),
-                      data.get("reschedule_reason", ""), data.get("reminder_sent", 0),
-                      data.get("recurring_parent_id")))
+                      data.get("reschedule_reason", "")))
                 appt_id = cur.lastrowid
                 conn.commit()
             doctor_name = data.get('doctor', '')
@@ -116,31 +114,6 @@ class AppointmentMixin:
                 pass
             return False
 
-    def add_recurring_appointments(self, data, frequency, count):
-        from datetime import datetime, timedelta, date as date_cls
-        import calendar
-        created, base = 0, datetime.strptime(data["date"], "%Y-%m-%d")
-        deltas = {"Daily": timedelta(days=1), "Weekly": timedelta(weeks=1), "Monthly": timedelta(days=30)}
-        delta = deltas.get(frequency, timedelta(weeks=1))
-        # Calculate max allowed date (end of next month)
-        today = date_cls.today()
-        if today.month == 12:
-            next_y, next_m = today.year + 1, 1
-        else:
-            next_y, next_m = today.year, today.month + 1
-        max_day = calendar.monthrange(next_y, next_m)[1]
-        max_date = date_cls(next_y, next_m, max_day)
-        for i in range(count):
-            appt_date = (base + delta * i).date()
-            if appt_date < today:
-                continue  # skip past dates
-            if appt_date > max_date:
-                break  # stop once we exceed the allowed range
-            appt = dict(data, date=appt_date.strftime("%Y-%m-%d"))
-            if self.add_appointment(appt):
-                created += 1
-        return created
-
     def update_appointment(self, appointment_id, data):
         # Validate date range
         ok, err = self._validate_appointment_date(data["date"])
@@ -153,12 +126,12 @@ class AppointmentMixin:
             UPDATE appointments
             SET patient_id=%s, doctor_id=%s, service_id=%s, appointment_date=%s,
                 appointment_time=%s, status=%s, notes=%s,
-                cancellation_reason=%s, reschedule_reason=%s, reminder_sent=%s
+                cancellation_reason=%s, reschedule_reason=%s
             WHERE appointment_id=%s
         """, (pid, data["doctor_id"], data["service_id"],
               data["date"], data["time"], data.get("status", "Pending"),
               data.get("notes", ""), data.get("cancellation_reason", ""),
-              data.get("reschedule_reason", ""), data.get("reminder_sent", 0),
+              data.get("reschedule_reason", ""),
               appointment_id))
         if ok:
             doctor_name = data.get('doctor', '')
@@ -168,10 +141,4 @@ class AppointmentMixin:
                               f"Appt #{appointment_id} for {data.get('patient_name','')} with Dr. {doctor_name}")
         return ok
 
-    def update_reminder_sent(self, appointment_id, sent):
-        ok = self.exec("UPDATE appointments SET reminder_sent=%s WHERE appointment_id=%s",
-                       (1 if sent else 0, appointment_id))
-        if ok:
-            state = "sent" if sent else "cleared"
-            self.log_activity("Edited", "Appointment", f"Reminder {state} for appt #{appointment_id}")
-        return ok
+

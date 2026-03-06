@@ -177,9 +177,6 @@ class SettingsPage(QWidget):
         btn.setObjectName("truncateBtn" if danger else "cleanupBtn"); return btn
 
     # ── Slots ──────────────────────────────────────────────────────────
-    def _on_dark_toggle(self, checked: bool):
-        pass  # Dark mode removed
-
     def _change_password(self):
         cur = self._cur_pw.text().strip()
         new = self._new_pw.text().strip()

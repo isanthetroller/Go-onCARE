@@ -483,12 +483,13 @@ QLabel#badgeActive {
 /* Line edits and text edits with the #formInput object name */
 QLineEdit#formInput,
 QTextEdit#formInput {
-    padding: 10px 14px;
+    padding: 10px 14px 12px 14px;
     border: 2px solid #BADFE7;
     border-radius: 10px;
     font-size: 13px;
     background-color: #F6F6F2;
     color: #2C3E50;
+    min-height: 18px;
 }
 
 QLineEdit#formInput:focus,
@@ -499,12 +500,13 @@ QTextEdit#formInput:focus {
 
 /* Combo boxes with the #formCombo object name */
 QComboBox#formCombo {
-    padding: 10px 14px;
+    padding: 10px 14px 12px 14px;
     border: 2px solid #BADFE7;
     border-radius: 10px;
     font-size: 13px;
     background-color: #F6F6F2;
     color: #2C3E50;
+    min-height: 18px;
 }
 
 QComboBox#formCombo:focus {
@@ -1087,4 +1089,64 @@ QLabel#mutedSummary {
     font-size: 13px;
     color: #7F8C8D;
     padding: 2px 0;
+}
+
+
+/* ================================================================
+   SPIN BOXES  (QSpinBox & QDoubleSpinBox)
+   ================================================================ */
+
+QSpinBox, QDoubleSpinBox, QTimeEdit {
+    padding: 8px 12px;
+    border: 2px solid #BADFE7;
+    border-radius: 10px;
+    font-size: 13px;
+    background-color: #F6F6F2;
+    color: #2C3E50;
+    min-height: 20px;
+}
+
+QSpinBox:focus, QDoubleSpinBox:focus, QTimeEdit:focus {
+    border: 2px solid #388087;
+    background-color: #FFFFFF;
+}
+
+QSpinBox::up-button, QDoubleSpinBox::up-button, QTimeEdit::up-button {
+    subcontrol-origin: border;
+    subcontrol-position: top right;
+    width: 28px;
+    border: none;
+    border-left: 2px solid #BADFE7;
+    border-top-right-radius: 10px;
+    background-color: #E8F4F6;
+}
+
+QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover, QTimeEdit::up-button:hover {
+    background-color: #BADFE7;
+}
+
+QSpinBox::up-arrow, QDoubleSpinBox::up-arrow, QTimeEdit::up-arrow {
+    image: url(./arrow-up.svg);
+    width: 10px;
+    height: 6px;
+}
+
+QSpinBox::down-button, QDoubleSpinBox::down-button, QTimeEdit::down-button {
+    subcontrol-origin: border;
+    subcontrol-position: bottom right;
+    width: 28px;
+    border: none;
+    border-left: 2px solid #BADFE7;
+    border-bottom-right-radius: 10px;
+    background-color: #E8F4F6;
+}
+
+QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover, QTimeEdit::down-button:hover {
+    background-color: #BADFE7;
+}
+
+QSpinBox::down-arrow, QDoubleSpinBox::down-arrow, QTimeEdit::down-arrow {
+    image: url(./arrow-down.svg);
+    width: 10px;
+    height: 6px;
 }

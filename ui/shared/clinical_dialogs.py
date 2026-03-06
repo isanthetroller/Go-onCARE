@@ -245,8 +245,7 @@ class NewInvoiceDialog(QDialog):
         if self._role != "Admin":
             self.disc_spin.setReadOnly(True)
             self.disc_spin.setButtonSymbols(QDoubleSpinBox.ButtonSymbols.NoButtons)
-            self.disc_spin.setStyleSheet(
-                "QDoubleSpinBox { background: #E8E8E8; color: #555; }")
+            self.disc_spin.setEnabled(False)
         disc_col.addWidget(self.disc_spin)
         add_row.addLayout(disc_col)
 

@@ -141,23 +141,6 @@ class AnalyticsMixin:
             GROUP BY sort_key, month_label ORDER BY sort_key
         """, (months,))
 
-    def get_revenue_detail(self, from_date, to_date):
-        return self.fetch("""
-            SELECT DATE_FORMAT(a.appointment_date, '%%Y-%%m-%%d') AS appt_date,
-                   s.service_name, CONCAT(p.first_name,' ',p.last_name) AS patient_name,
-                   CONCAT(e.first_name,' ',e.last_name) AS doctor_name,
-                   COALESCE(pm.method_name,'—') AS payment_method, i.amount_paid
-            FROM invoices i
-            INNER JOIN appointments a ON i.appointment_id=a.appointment_id
-            INNER JOIN patients p ON i.patient_id=p.patient_id
-            INNER JOIN employees e ON a.doctor_id=e.employee_id
-            INNER JOIN invoice_items ii ON i.invoice_id=ii.invoice_id
-            INNER JOIN services s ON ii.service_id=s.service_id
-            LEFT JOIN payment_methods pm ON i.method_id=pm.method_id
-            WHERE a.appointment_date BETWEEN %s AND %s AND i.status IN ('Paid','Partial')
-            ORDER BY a.appointment_date DESC, a.appointment_time DESC
-        """, (from_date, to_date))
-
     def get_summary_stats(self, from_date=None, to_date=None):
         defaults = {"period_revenue": 0, "total_appts": 0, "completed": 0,
                     "cancelled": 0, "total_patients": 0, "today_appts": 0, "avg_per_day": 0}

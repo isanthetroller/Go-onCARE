@@ -24,12 +24,6 @@ class ClinicalMixin:
         """, one=True)
         return row if row and row.get("waiting") is not None else {"waiting": 0, "in_progress": 0, "completed": 0}
 
-    def update_queue_status(self, queue_id, status):
-        ok = self.exec("UPDATE queue_entries SET status=%s WHERE queue_id=%s", (status, queue_id))
-        if ok:
-            self.log_activity("Edited", "Queue", f"Queue #{queue_id} status → {status}")
-        return ok
-
     def update_queue_entry(self, queue_id, data):
         ok = self.exec("UPDATE queue_entries SET status=%s, purpose=%s WHERE queue_id=%s",
                        (data.get("status", "Waiting"), data.get("purpose", ""), queue_id))
@@ -249,12 +243,6 @@ class ClinicalMixin:
                        (name, price, category, is_active, service_id))
         if ok:
             self.log_activity("Edited", "Service", name)
-        return ok
-
-    def update_service(self, service_id, price):
-        ok = self.exec("UPDATE services SET price=%s WHERE service_id=%s", (price, service_id))
-        if ok:
-            self.log_activity("Edited", "Service", f"Price updated for service #{service_id} → ₱{price}")
         return ok
 
     def bulk_update_prices(self, updates):
