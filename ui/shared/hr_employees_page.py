@@ -10,6 +10,7 @@ from PyQt6.QtGui import QColor
 from ui.styles import (
     make_table_btn, make_banner, make_card, make_stat_card,
     make_read_only_table, make_interactive_table, make_action_table,
+    status_color, make_action_cell,
 )
 from ui.shared.hr_employee_dialogs import HREmployeeDialog, HREmployeeProfileDialog, UserAccountDialog
 from backend import AuthBackend
@@ -57,21 +58,15 @@ class HREmployeesPage(QWidget):
             for c, val in enumerate(values):
                 item = QTableWidgetItem(val)
                 if c == 9:  # Status column
-                    clr = {"Active": "#5CB85C", "On Leave": "#E8B931"}.get(val, "#D9534F")
-                    item.setForeground(QColor(clr))
+                    item.setForeground(QColor(status_color(val)))
                 self.table.setItem(r, c, item)
 
             # Actions: View | Edit
-            act_w = QWidget()
-            act_lay = QHBoxLayout(act_w)
-            act_lay.setContentsMargins(0,0,0,0); act_lay.setSpacing(6)
             view_btn = make_table_btn("View"); view_btn.setFixedWidth(52)
             view_btn.clicked.connect(lambda checked, ri=r: self._on_view(ri))
-            act_lay.addWidget(view_btn)
             edit_btn = make_table_btn("Edit"); edit_btn.setFixedWidth(52)
             edit_btn.clicked.connect(lambda checked, ri=r: self._on_edit(ri))
-            act_lay.addWidget(edit_btn)
-            self.table.setCellWidget(r, 10, act_w)
+            self.table.setCellWidget(r, 10, make_action_cell(view_btn, edit_btn))
 
         # HR Stats
         stats = self._backend.get_hr_stats()
@@ -373,15 +368,11 @@ class HREmployeesPage(QWidget):
             self._lr_table.setItem(r, 4, QTableWidgetItem(str(req.get("leave_until", ""))))
             self._lr_table.setItem(r, 5, QTableWidgetItem(req.get("reason", "")))
             status_item = QTableWidgetItem(req.get("status", ""))
-            clr = {"Pending": "#E8B931", "Approved": "#5CB85C",
-                   "Declined": "#D9534F"}.get(req.get("status", ""), "#7F8C8D")
-            status_item.setForeground(QColor(clr))
+            status_item.setForeground(QColor(status_color(req.get("status", ""))))
             self._lr_table.setItem(r, 6, status_item)
 
             # Action buttons
-            act_w = QWidget()
-            act_lay = QHBoxLayout(act_w)
-            act_lay.setContentsMargins(0,0,0,0); act_lay.setSpacing(6)
+            parts = []
             if req.get("status") == "Pending":
                 approve_btn = make_table_btn("Approve")
                 approve_btn.setStyleSheet(
@@ -389,23 +380,22 @@ class HREmployeesPage(QWidget):
                     " border-radius: 4px; padding: 4px 10px; font-size: 11px; font-weight: bold; }"
                     " QPushButton:hover { background-color: #4cae4c; }")
                 approve_btn.clicked.connect(lambda checked, ri=r: self._on_approve_leave(ri))
-                act_lay.addWidget(approve_btn)
+                parts.append(approve_btn)
                 decline_btn = make_table_btn("Decline")
                 decline_btn.setStyleSheet(
                     "QPushButton { background-color: #D9534F; color: #FFF; border: none;"
                     " border-radius: 4px; padding: 4px 10px; font-size: 11px; font-weight: bold; }"
                     " QPushButton:hover { background-color: #c9302c; }")
                 decline_btn.clicked.connect(lambda checked, ri=r: self._on_decline_leave(ri))
-                act_lay.addWidget(decline_btn)
+                parts.append(decline_btn)
             else:
-                # Show note for declined or decided_at for approved
                 note = req.get("hr_note", "") or ""
                 decided = str(req.get("decided_at", "") or "")
                 lbl = QLabel(note if note else decided)
                 lbl.setStyleSheet("font-size: 11px; color: #7F8C8D;")
                 lbl.setWordWrap(True)
-                act_lay.addWidget(lbl)
-            self._lr_table.setCellWidget(r, 7, act_w)
+                parts.append(lbl)
+            self._lr_table.setCellWidget(r, 7, make_action_cell(*parts))
 
     def _on_approve_leave(self, row: int):
         if row >= len(self._leave_requests):

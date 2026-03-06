@@ -25,20 +25,27 @@ class SettingsMixin:
             pass
         return results
 
-    def cleanup_completed_appointments(self, before_date):
+    def _cleanup_appointments(self, status, before_date=None):
+        """Shared helper: delete appointments by status (+ their linked invoices/queue)."""
+        cond = f"a.status='{status}'"
+        params = ()
+        if before_date:
+            cond += " AND a.appointment_date<%s"
+            params = (before_date,)
         try:
             conn = self._get_connection()
             with conn.cursor() as cur:
                 for q in [
-                    "DELETE ii FROM invoice_items ii INNER JOIN invoices i ON ii.invoice_id=i.invoice_id INNER JOIN appointments a ON i.appointment_id=a.appointment_id WHERE a.status='Completed' AND a.appointment_date<%s",
-                    "DELETE i FROM invoices i INNER JOIN appointments a ON i.appointment_id=a.appointment_id WHERE a.status='Completed' AND a.appointment_date<%s",
-                    "DELETE q FROM queue_entries q INNER JOIN appointments a ON q.appointment_id=a.appointment_id WHERE a.status='Completed' AND a.appointment_date<%s",
+                    f"DELETE ii FROM invoice_items ii INNER JOIN invoices i ON ii.invoice_id=i.invoice_id INNER JOIN appointments a ON i.appointment_id=a.appointment_id WHERE {cond}",
+                    f"DELETE i FROM invoices i INNER JOIN appointments a ON i.appointment_id=a.appointment_id WHERE {cond}",
+                    f"DELETE q FROM queue_entries q INNER JOIN appointments a ON q.appointment_id=a.appointment_id WHERE {cond}",
                 ]:
-                    cur.execute(q, (before_date,))
-                cur.execute("DELETE FROM appointments WHERE status='Completed' AND appointment_date<%s", (before_date,))
+                    cur.execute(q, params)
+                cur.execute(f"DELETE FROM appointments WHERE status=%s" + (" AND appointment_date<%s" if before_date else ""),
+                            (status,) + params)
                 removed = cur.rowcount
                 conn.commit()
-            self.log_activity("Deleted", "Appointment", f"Cleaned {removed} completed appts before {before_date}")
+            self.log_activity("Deleted", "Appointment", f"Cleaned {removed} {status.lower()} appts")
             return removed
         except Exception:
             try:
@@ -47,27 +54,11 @@ class SettingsMixin:
                 pass
             return 0
 
+    def cleanup_completed_appointments(self, before_date):
+        return self._cleanup_appointments("Completed", before_date)
+
     def cleanup_cancelled_appointments(self):
-        try:
-            conn = self._get_connection()
-            with conn.cursor() as cur:
-                for q in [
-                    "DELETE ii FROM invoice_items ii INNER JOIN invoices i ON ii.invoice_id=i.invoice_id INNER JOIN appointments a ON i.appointment_id=a.appointment_id WHERE a.status='Cancelled'",
-                    "DELETE i FROM invoices i INNER JOIN appointments a ON i.appointment_id=a.appointment_id WHERE a.status='Cancelled'",
-                    "DELETE q FROM queue_entries q INNER JOIN appointments a ON q.appointment_id=a.appointment_id WHERE a.status='Cancelled'",
-                ]:
-                    cur.execute(q)
-                cur.execute("DELETE FROM appointments WHERE status='Cancelled'")
-                removed = cur.rowcount
-                conn.commit()
-            self.log_activity("Deleted", "Appointment", f"Cleaned {removed} cancelled appointments")
-            return removed
-        except Exception:
-            try:
-                conn.rollback()
-            except Exception:
-                pass
-            return 0
+        return self._cleanup_appointments("Cancelled")
 
     def cleanup_inactive_patients(self):
         try:
@@ -163,11 +154,14 @@ class SettingsMixin:
 
     def get_patient_discount_percent(self, patient_name):
         """Get the discount percentage for a patient based on their discount type."""
+        pid = self._lookup_patient_id(patient_name)
+        if not pid:
+            return {"discount_percent": 0, "discount_type": ""}
         row = self.fetch("""
             SELECT COALESCE(dt.discount_percent, 0) AS discount_percent,
                    COALESCE(dt.type_name, '') AS discount_type
             FROM patients p
             LEFT JOIN discount_types dt ON p.discount_type_id = dt.discount_id AND dt.is_active = 1
-            WHERE CONCAT(p.first_name,' ',p.last_name) = %s LIMIT 1
-        """, (patient_name,), one=True)
+            WHERE p.patient_id = %s
+        """, (pid,), one=True)
         return row if row else {"discount_percent": 0, "discount_type": ""}

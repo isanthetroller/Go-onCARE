@@ -12,6 +12,7 @@ from PyQt6.QtGui import QColor, QFont
 from ui.styles import (
     make_page_layout, finish_page, make_banner, make_read_only_table,
     make_action_table, make_table_btn, format_timedelta, status_color,
+    TAB_ACTIVE, TAB_INACTIVE, make_action_cell,
 )
 from ui.shared.appointment_dialog import (
     AppointmentDialog, _pretty_date, _relative_label,
@@ -22,14 +23,6 @@ from ui.shared.appointment_dialog import (
 #  Appointments Page
 # ══════════════════════════════════════════════════════════════════════
 class AppointmentsPage(QWidget):
-    _TAB_STYLE = (
-        "QPushButton {{ background: {bg}; color: {fg}; border: none;"
-        " border-radius: 8px; padding: 8px 20px;"
-        " font-size: 13px; font-weight: bold; }}"
-        " QPushButton:hover {{ background: {hv}; }}"
-    )
-    _TAB_ACTIVE   = _TAB_STYLE.format(bg="#388087", fg="#FFFFFF", hv="#2C6A70")
-    _TAB_INACTIVE = _TAB_STYLE.format(bg="#FFFFFF", fg="#2C3E50", hv="#BADFE7")
 
     def __init__(self, backend=None, role: str = "Admin", user_email: str = ""):
         super().__init__()
@@ -138,7 +131,7 @@ class AppointmentsPage(QWidget):
     def _switch_tab(self, label: str):
         self._active_tab = label
         for name, btn in self._tab_buttons.items():
-            btn.setStyleSheet(self._TAB_ACTIVE if name == label else self._TAB_INACTIVE)
+            btn.setStyleSheet(TAB_ACTIVE if name == label else TAB_INACTIVE)
         self._refresh_table()
 
     def _rows_for_tab(self) -> list[dict]:
@@ -185,22 +178,17 @@ class AppointmentsPage(QWidget):
                 item = QTableWidgetItem(str(val))
                 if c == 0: item.setFont(QFont("Segoe UI", 10))
                 if c == 6:
-                    color_map = {"Confirmed":"#5CB85C","Pending":"#E8B931","Cancelled":"#D9534F","Completed":"#388087"}
-                    item.setForeground(QColor(color_map.get(val,"#2C3E50")))
+                    item.setForeground(QColor(status_color(val)))
                     item.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
                 # Billing column color coding
                 if self._role != "Doctor" and c == 7:
-                    bill_colors = {"Paid":"#5CB85C","Partial":"#E8B931","Unpaid":"#D9534F","No Invoice":"#7F8C8D","Voided":"#7F8C8D"}
-                    item.setForeground(QColor(bill_colors.get(val,"#2C3E50")))
+                    item.setForeground(QColor(status_color(val)))
                     item.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
                 self.table.setItem(r, c, item)
             if self._role != "Cashier":
-                act_w = QWidget(); act_lay = QHBoxLayout(act_w)
-                act_lay.setContentsMargins(0,0,0,0); act_lay.setSpacing(6)
                 edit_btn = make_table_btn("Edit"); edit_btn.setFixedWidth(52)
                 edit_btn.clicked.connect(lambda checked, a=appt: self._on_edit(a))
-                act_lay.addWidget(edit_btn)
-                self.table.setCellWidget(r, col_count - 1, act_w)
+                self.table.setCellWidget(r, col_count - 1, make_action_cell(edit_btn))
         self._summary_label.setText(f"Showing {len(rows)} appointment{'s' if len(rows)!=1 else ''}")
         self._apply_filters()
 

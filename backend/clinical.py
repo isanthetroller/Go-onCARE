@@ -113,12 +113,12 @@ class ClinicalMixin:
         try:
             conn = self._get_connection()
             with conn.cursor() as cur:
-                cur.execute("SELECT patient_id, discount_type_id FROM patients WHERE CONCAT(first_name,' ',last_name)=%s LIMIT 1", (data["patient_name"],))
-                prow = cur.fetchone()
-                if not prow:
+                pid = self._lookup_patient_id(data["patient_name"])
+                if not pid:
                     return False
-                patient_id = prow[0]
-                discount_type_id = prow[1]
+                cur.execute("SELECT discount_type_id FROM patients WHERE patient_id=%s", (pid,))
+                dt_row = cur.fetchone()
+                discount_type_id = dt_row[0] if dt_row else None
 
                 # Always resolve the actual discount % from DB (admin-controlled)
                 enforced_discount = 0.0
@@ -151,7 +151,7 @@ class ClinicalMixin:
                     INSERT INTO invoices (patient_id, appointment_id, method_id,
                         discount_percent, total_amount, amount_paid, status, notes)
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-                """, (patient_id, data.get("appointment_id") or None, data.get("method_id"),
+                """, (pid, data.get("appointment_id") or None, data.get("method_id"),
                       effective_discount, grand_total, 0, "Unpaid", data.get("notes", "")))
                 inv_id = cur.lastrowid
                 for sid, qty, up, sub in line_items:

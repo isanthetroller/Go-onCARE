@@ -10,6 +10,7 @@ from PyQt6.QtGui import QColor
 from ui.styles import (
     make_page_layout, finish_page, make_banner, make_read_only_table,
     make_action_table, make_card, make_stat_card, make_table_btn, status_color,
+    make_action_cell,
 )
 from ui.shared.employee_dialogs import EmployeeDialog, EmployeeProfileDialog
 from backend import AuthBackend
@@ -53,20 +54,15 @@ class EmployeesPage(QWidget):
             for c, val in enumerate(values):
                 item = QTableWidgetItem(val)
                 if c == 7:
-                    clr = {"Active": "#5CB85C", "On Leave": "#E8B931"}.get(val, "#D9534F")
-                    item.setForeground(QColor(clr))
+                    item.setForeground(QColor(status_color(val)))
                 self.table.setItem(r, c, item)
 
             # Actions: View | Edit
-            act_w = QWidget()
-            act_lay = QHBoxLayout(act_w); act_lay.setContentsMargins(0,0,0,0); act_lay.setSpacing(6)
             view_btn = make_table_btn("View"); view_btn.setFixedWidth(52)
             view_btn.clicked.connect(lambda checked, ri=r: self._on_view(ri))
-            act_lay.addWidget(view_btn)
             edit_btn = make_table_btn("Edit"); edit_btn.setFixedWidth(52)
             edit_btn.clicked.connect(lambda checked, ri=r: self._on_edit(ri))
-            act_lay.addWidget(edit_btn)
-            self.table.setCellWidget(r, 8, act_w)
+            self.table.setCellWidget(r, 8, make_action_cell(view_btn, edit_btn))
 
         # Stat cards
         stats = self._backend.get_employee_stats()

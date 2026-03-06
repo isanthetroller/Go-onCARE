@@ -11,6 +11,7 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from ui.styles import (
     make_page_layout, finish_page, make_banner, make_read_only_table,
     make_action_table, make_table_btn, make_table_btn_danger, status_color,
+    make_action_cell,
 )
 from ui.shared.patient_dialogs import PatientDialog, PatientProfileDialog, MergeDialog
 
@@ -165,16 +166,13 @@ class PatientsPage(QWidget):
                 self.table.setItem(r, c, QTableWidgetItem(val))
 
             if self._role != "Cashier":
-                act_w = QWidget(); act_lay = QHBoxLayout(act_w)
-                act_lay.setContentsMargins(0,0,0,0); act_lay.setSpacing(6)
                 view_btn = make_table_btn("View"); view_btn.setFixedWidth(52)
                 view_btn.clicked.connect(lambda checked, ri=r: self._on_view(ri))
                 edit_btn = make_table_btn("Edit"); edit_btn.setFixedWidth(52)
                 edit_btn.clicked.connect(lambda checked, ri=r: self._on_edit(ri))
                 del_btn = make_table_btn_danger("Del"); del_btn.setFixedWidth(46)
                 del_btn.clicked.connect(lambda checked, ri=r: self._on_delete(ri))
-                act_lay.addWidget(view_btn); act_lay.addWidget(edit_btn); act_lay.addWidget(del_btn)
-                self.table.setCellWidget(r, len(values), act_w)
+                self.table.setCellWidget(r, len(values), make_action_cell(view_btn, edit_btn, del_btn))
         self.table.setSortingEnabled(True)
 
     # ── Filters ────────────────────────────────────────────────────

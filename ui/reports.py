@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QColor
-from ui.styles import configure_table
+from ui.styles import configure_table, fmt_peso
 
 
 class ReportsPage(QWidget):
@@ -21,9 +21,6 @@ class ReportsPage(QWidget):
         self._build()
 
     # ── helpers ─────────────────────────────────────────────────────
-    @staticmethod
-    def _fmt_peso(amount) -> str:
-        return f"\u20b1 {float(amount):,.0f}"
 
     def _load_data(self):
         if not self._backend:
@@ -77,7 +74,7 @@ class ReportsPage(QWidget):
         total_appts = stats.get("total_appts", 0)
         avg_per_day = stats.get("avg_per_day", 0)
         summaries = [
-            ("Total Revenue",    self._fmt_peso(total_rev),      "#388087"),
+            ("Total Revenue",    fmt_peso(total_rev),      "#388087"),
             ("Total Patients",   f"{total_patients:,}",          "#5CB85C"),
             ("Appointments",     f"{total_appts:,}",             "#6FB3B8"),
             ("Avg. Visit / Day", f"{avg_per_day}",               "#388087"),
@@ -176,7 +173,7 @@ class ReportsPage(QWidget):
                 r.get("patient_name", ""),
                 r.get("doctor_name", ""),
                 r.get("payment_method", ""),
-                self._fmt_peso(amt),
+                fmt_peso(amt),
             ))
 
         tbl = self._make_table(cols, rows)
@@ -184,7 +181,7 @@ class ReportsPage(QWidget):
 
         total_row = QHBoxLayout()
         total_row.addStretch()
-        tl = QLabel(f"Total Revenue:  {self._fmt_peso(grand)}")
+        tl = QLabel(f"Total Revenue:  {fmt_peso(grand)}")
         tl.setObjectName("totalLabel")
         total_row.addWidget(tl)
         lay.addLayout(total_row)
@@ -227,7 +224,7 @@ class ReportsPage(QWidget):
                 f"Dr. {name.split()[-1]}" if name else "",
                 str(d.get("total_appointments", 0)),
                 str(d.get("completed", 0)),
-                self._fmt_peso(float(d.get("revenue_generated", 0))),
+                fmt_peso(float(d.get("revenue_generated", 0))),
             ))
 
         tbl = self._make_table(cols, rows)

@@ -1,5 +1,7 @@
 # Employee CRUD + HR stuff (leave requests, salary, etc)
 
+import traceback
+
 
 class EmployeeMixin:
 
@@ -7,39 +9,27 @@ class EmployeeMixin:
         parts = full_name.split(None, 1)
         return parts[0], parts[1] if len(parts) > 1 else ""
 
-    def _lookup_role_id(self, role_name):
-        row = self.fetch("SELECT role_id FROM roles WHERE role_name = %s", (role_name,), one=True)
-        return row["role_id"] if row else None
-
     def _lookup_dept_id(self, dept_name):
         row = self.fetch("SELECT department_id FROM departments WHERE department_name = %s", (dept_name,), one=True)
         return row["department_id"] if row else None
 
-    def get_employees(self):
-        return self.fetch("""
+    def get_employees(self, detailed=False):
+        """Return employees. Set detailed=True to include salary & emergency_contact."""
+        hr_cols = ", e.salary, e.emergency_contact" if detailed else ""
+        return self.fetch(f"""
             SELECT e.employee_id, CONCAT(e.first_name,' ',e.last_name) AS full_name,
                    r.role_name, d.department_name, e.employment_type,
                    e.phone, e.email, e.hire_date, e.status, e.notes,
-                   e.leave_from, e.leave_until
+                   e.leave_from, e.leave_until{hr_cols}
             FROM employees e
             INNER JOIN roles r ON e.role_id = r.role_id
             INNER JOIN departments d ON e.department_id = d.department_id
             ORDER BY e.employee_id
         """)
 
-    # ── HR-specific queries ───────────────────────────────────────
     def get_employees_detailed(self):
-        """Return all employee data including HR-only fields (salary, emergency contact)."""
-        return self.fetch("""
-            SELECT e.employee_id, CONCAT(e.first_name,' ',e.last_name) AS full_name,
-                   r.role_name, d.department_name, e.employment_type,
-                   e.phone, e.email, e.hire_date, e.status, e.notes,
-                   e.leave_from, e.leave_until, e.salary, e.emergency_contact
-            FROM employees e
-            INNER JOIN roles r ON e.role_id = r.role_id
-            INNER JOIN departments d ON e.department_id = d.department_id
-            ORDER BY e.employee_id
-        """)
+        """Convenience alias — returns employees with HR fields."""
+        return self.get_employees(detailed=True)
 
     def get_leave_employees(self):
         """Return employees currently on leave with dates."""
@@ -54,18 +44,19 @@ class EmployeeMixin:
         """)
 
     def get_hr_stats(self):
-        """Enhanced stats for HR dashboard."""
+        """Unified employee stats (superset of basic + HR fields)."""
         row = self.fetch("""
             SELECT COUNT(*) AS total,
+                   SUM(CASE WHEN r.role_name='Doctor' THEN 1 ELSE 0 END) AS doctors,
                    SUM(CASE WHEN e.status='Active' THEN 1 ELSE 0 END) AS active,
                    SUM(CASE WHEN e.status='On Leave' THEN 1 ELSE 0 END) AS on_leave,
                    SUM(CASE WHEN e.status='Inactive' THEN 1 ELSE 0 END) AS inactive,
                    COALESCE(AVG(e.salary), 0) AS avg_salary,
                    COALESCE(SUM(CASE WHEN e.status='Active' THEN e.salary ELSE 0 END), 0) AS total_payroll
-            FROM employees e
+            FROM employees e INNER JOIN roles r ON e.role_id = r.role_id
         """, one=True)
-        return row or {"total": 0, "active": 0, "on_leave": 0, "inactive": 0,
-                       "avg_salary": 0, "total_payroll": 0}
+        return row or {"total": 0, "doctors": 0, "active": 0, "on_leave": 0,
+                       "inactive": 0, "avg_salary": 0, "total_payroll": 0}
 
     def get_payroll_summary(self):
         """Return payroll breakdown by department."""
@@ -153,7 +144,7 @@ class EmployeeMixin:
             self.log_activity("Created", "Employee", data["name"])
             return True
         except Exception as e:
-            import traceback; traceback.print_exc()
+            traceback.print_exc()
             try:
                 conn.rollback()
             except Exception:
@@ -213,7 +204,7 @@ class EmployeeMixin:
             self.log_activity("Edited", "Employee", data["name"])
             return True
         except Exception as e:
-            import traceback; traceback.print_exc()
+            traceback.print_exc()
             try:
                 conn.rollback()
             except Exception:
@@ -243,14 +234,8 @@ class EmployeeMixin:
         return False
 
     def get_employee_stats(self):
-        row = self.fetch("""
-            SELECT COUNT(*) AS total,
-                   SUM(CASE WHEN r.role_name='Doctor' THEN 1 ELSE 0 END) AS doctors,
-                   SUM(CASE WHEN e.status='Active' THEN 1 ELSE 0 END) AS active,
-                   SUM(CASE WHEN e.status='On Leave' THEN 1 ELSE 0 END) AS on_leave
-            FROM employees e INNER JOIN roles r ON e.role_id = r.role_id
-        """, one=True)
-        return row or {"total": 0, "doctors": 0, "active": 0, "on_leave": 0}
+        """Alias for get_hr_stats — returns the same superset."""
+        return self.get_hr_stats()
 
     def get_department_counts(self):
         return self.fetch("""
@@ -321,16 +306,12 @@ class EmployeeMixin:
                 "INSERT INTO leave_requests (employee_id, leave_from, leave_until, reason) "
                 "VALUES (%s, %s, %s, %s)",
                 (employee_id, leave_from, leave_until, reason))
-            # Get employee name for log
-            row = self.fetch(
-                "SELECT CONCAT(first_name,' ',last_name) AS n FROM employees WHERE employee_id=%s",
-                (employee_id,), one=True)
-            name = row["n"] if row else str(employee_id)
+            name = self._get_employee_name(employee_id) or str(employee_id)
             self.log_activity("Requested", "Leave",
                               f"{name} requested leave {leave_from} to {leave_until}")
             return True
         except Exception as e:
-            import traceback; traceback.print_exc()
+            traceback.print_exc()
             return str(e)
 
     def get_pending_leave_requests(self):
@@ -399,11 +380,7 @@ class EmployeeMixin:
                     "UPDATE employees SET status='On Leave', leave_from=%s, leave_until=%s "
                     "WHERE employee_id=%s",
                     (req["leave_from"], req["leave_until"], emp_id))
-                # Get names for notification and log
-                cur.execute("SELECT CONCAT(first_name,' ',last_name) AS n FROM employees WHERE employee_id=%s",
-                            (emp_id,))
-                emp_row = cur.fetchone()
-                emp_name = emp_row["n"] if emp_row else str(emp_id)
+                emp_name = self._get_employee_name(emp_id) or str(emp_id)
                 # Create notification for employee
                 msg = (f"Your leave request ({req['leave_from']} to {req['leave_until']}) "
                        f"has been approved.")
@@ -415,7 +392,7 @@ class EmployeeMixin:
                               f"Approved leave for {emp_name} ({req['leave_from']} to {req['leave_until']})")
             return True
         except Exception as e:
-            import traceback; traceback.print_exc()
+            traceback.print_exc()
             try:
                 conn.rollback()
             except Exception:
@@ -437,11 +414,7 @@ class EmployeeMixin:
                     "UPDATE leave_requests SET status='Declined', hr_decided_by=%s, "
                     "hr_note=%s, decided_at=NOW() WHERE request_id=%s",
                     (hr_employee_id, hr_note, request_id))
-                # Get employee name
-                cur.execute("SELECT CONCAT(first_name,' ',last_name) AS n FROM employees WHERE employee_id=%s",
-                            (emp_id,))
-                emp_row = cur.fetchone()
-                emp_name = emp_row["n"] if emp_row else str(emp_id)
+                emp_name = self._get_employee_name(emp_id) or str(emp_id)
                 # Notification
                 msg = (f"Your leave request ({req['leave_from']} to {req['leave_until']}) "
                        f"has been declined. Reason: {hr_note}")
@@ -453,7 +426,7 @@ class EmployeeMixin:
                               f"Declined leave for {emp_name}: {hr_note}")
             return True
         except Exception as e:
-            import traceback; traceback.print_exc()
+            traceback.print_exc()
             try:
                 conn.rollback()
             except Exception:

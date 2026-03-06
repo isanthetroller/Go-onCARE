@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QDate, QEvent
 from PyQt6.QtGui import QColor
-from ui.styles import configure_table, style_dialog_btns
+from ui.styles import configure_table, style_dialog_btns, status_color
 from ui.shared.employee_dialogs import EmployeeDialog
 
 
@@ -102,7 +102,7 @@ class HREmployeeProfileDialog(QDialog):
             v.setStyleSheet("color: #2C3E50; font-size: 13px;")
             lbl = QLabel(f"<b>{label}</b>")
             if label == "Status":
-                clr = {"Active": "#5CB85C", "On Leave": "#E8B931"}.get(str(value), "#D9534F")
+                clr = status_color(str(value))
                 v.setStyleSheet(f"color: {clr}; font-size: 13px; font-weight: bold;")
             info_lay.addRow(lbl, v)
         tabs.addTab(info_w, "Info")
@@ -174,9 +174,7 @@ class HREmployeeProfileDialog(QDialog):
             at.setItem(r, 2, QTableWidgetItem(a.get("patient_name", "")))
             at.setItem(r, 3, QTableWidgetItem(a.get("service_name", "")))
             si = QTableWidgetItem(a.get("status", ""))
-            clr = {"Completed": "#5CB85C", "Confirmed": "#388087",
-                   "Cancelled": "#D9534F"}.get(a.get("status", ""), "#E8B931")
-            si.setForeground(QColor(clr))
+            si.setForeground(QColor(status_color(a.get("status", ""))))
             at.setItem(r, 4, si)
         appt_lay.addWidget(at)
         tabs.addTab(appt_w, f"Appointments ({len(appts)})")

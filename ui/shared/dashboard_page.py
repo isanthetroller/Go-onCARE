@@ -12,7 +12,7 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QDate
 from PyQt6.QtGui import QColor
 from ui.styles import (
     configure_table, make_page_layout, finish_page, make_card,
-    make_read_only_table, ACTION_COLORS,
+    make_read_only_table, ACTION_COLORS, status_color,
 )
 from ui.shared.chart_widgets import BarChartWidget
 
@@ -334,9 +334,7 @@ class DashboardPage(QWidget):
             for c, cell in enumerate(cells):
                 item = QTableWidgetItem(cell)
                 if c == 3:
-                    clr = {"Confirmed": "#5CB85C", "Completed": "#388087",
-                           "Cancelled": "#D9534F"}.get(cell, "#E8B931")
-                    item.setForeground(QColor(clr))
+                    item.setForeground(QColor(status_color(cell)))
                 self._sched_table.setItem(r, c, item)
 
     def _refresh_chart(self):
@@ -406,9 +404,7 @@ class DashboardPage(QWidget):
             self._my_leave_table.setItem(r, 1, QTableWidgetItem(str(req.get("leave_until", ""))))
             self._my_leave_table.setItem(r, 2, QTableWidgetItem(req.get("reason", "")))
             status_item = QTableWidgetItem(req.get("status", ""))
-            clr = {"Pending": "#E8B931", "Approved": "#5CB85C",
-                   "Declined": "#D9534F"}.get(req.get("status", ""), "#7F8C8D")
-            status_item.setForeground(QColor(clr))
+            status_item.setForeground(QColor(status_color(req.get("status", ""))))
             self._my_leave_table.setItem(r, 3, status_item)
             self._my_leave_table.setItem(r, 4, QTableWidgetItem(req.get("hr_note", "") or ""))
             created = str(req.get("created_at", ""))

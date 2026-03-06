@@ -75,6 +75,25 @@ class DatabaseBase:
                 pass
             return False
 
+    # ── Common lookups (used by multiple mixins) ────────────────────
+    def _get_employee_name(self, employee_id):
+        """Return 'First Last' for an employee, or '' if not found."""
+        row = self.fetch(
+            "SELECT CONCAT(first_name,' ',last_name) AS n FROM employees WHERE employee_id=%s",
+            (employee_id,), one=True)
+        return row["n"] if row else ""
+
+    def _lookup_patient_id(self, name):
+        """Find patient_id by full name. Returns id or None."""
+        row = self.fetch(
+            "SELECT patient_id FROM patients WHERE CONCAT(first_name,' ',last_name)=%s LIMIT 1",
+            (name,), one=True)
+        return row["patient_id"] if row else None
+
+    def _lookup_role_id(self, role_name):
+        row = self.fetch("SELECT role_id FROM roles WHERE role_name = %s", (role_name,), one=True)
+        return row["role_id"] if row else None
+
     # ── Activity Log ──────────────────────────────────────────────
     def log_activity(self, action, record_type, detail=""):
         self.exec(

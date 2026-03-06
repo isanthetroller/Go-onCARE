@@ -38,9 +38,17 @@ COLORS = {
 
 # ── Centralised status → colour maps ──────────────────────────────────
 STATUS_COLORS = {
+    # Entity statuses
     "Active": "#5CB85C", "On Leave": "#E8B931", "Inactive": "#D9534F",
+    # Appointment / queue statuses
     "Completed": "#5CB85C", "Confirmed": "#388087", "Pending": "#E8B931",
-    "Cancelled": "#D9534F", "In Progress": "#6FB3B8",
+    "Cancelled": "#D9534F", "In Progress": "#6FB3B8", "Waiting": "#E8B931",
+    # Leave request statuses
+    "Approved": "#5CB85C", "Declined": "#D9534F",
+    # Invoice statuses
+    "Paid": "#5CB85C", "Unpaid": "#D9534F", "Partial": "#E8B931", "Voided": "#7F8C8D",
+    # Billing
+    "No Invoice": "#7F8C8D",
 }
 
 ACTION_COLORS = {
@@ -337,6 +345,39 @@ def status_color(status: str) -> str:
     return STATUS_COLORS.get(status, COLORS["text"])
 
 
+def fmt_peso(amount) -> str:
+    """Format a number as Philippine Peso string."""
+    return f"₱ {float(amount):,.0f}"
+
+
+# ── Tab button styling (used by appointments + clinical) ─────────────
+_TAB_STYLE = (
+    "QPushButton {{ background: {bg}; color: {fg}; border: none;"
+    " border-radius: 8px; padding: 8px 20px;"
+    " font-size: 13px; font-weight: bold; }}"
+    " QPushButton:hover {{ background: {hv}; }}"
+)
+TAB_ACTIVE = _TAB_STYLE.format(bg="#388087", fg="#FFFFFF", hv="#2C6A70")
+TAB_INACTIVE = _TAB_STYLE.format(bg="#FFFFFF", fg="#2C3E50", hv="#BADFE7")
+
+# ── Dialog button CSS (reusable across all dialogs) ──────────────────
+DIALOG_PRIMARY_CSS = (
+    "QPushButton { background-color: #388087; color: #FFF; border: none;"
+    " border-radius: 4px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
+    " QPushButton:hover { background-color: #2C6A70; }"
+)
+DIALOG_CANCEL_CSS = (
+    "QPushButton { background-color: #6c757d; color: #FFF; border: none;"
+    " border-radius: 4px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
+    " QPushButton:hover { background-color: #5a6268; }"
+)
+DIALOG_DANGER_CSS = (
+    "QPushButton { background-color: #D9534F; color: #FFF; border: none;"
+    " border-radius: 4px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
+    " QPushButton:hover { background-color: #C9302C; }"
+)
+
+
 # ── Loading cursor context manager ────────────────────────────────────
 from contextlib import contextmanager
 
@@ -405,3 +446,18 @@ def style_dialog_btns(btns) -> None:
     if cancel:
         cancel.setObjectName("dialogCancelBtn")
         cancel.setCursor(Qt.CursorShape.PointingHandCursor)
+
+
+def make_action_cell(*buttons) -> "QWidget":
+    """Return a QWidget containing horizontally-centred action buttons.
+
+    Usage: ``tbl.setCellWidget(r, col, make_action_cell(btn1, btn2))``
+    """
+    from PyQt6.QtWidgets import QWidget, QHBoxLayout
+    w = QWidget()
+    lay = QHBoxLayout(w)
+    lay.setContentsMargins(0, 0, 0, 0)
+    lay.setSpacing(6)
+    for b in buttons:
+        lay.addWidget(b)
+    return w

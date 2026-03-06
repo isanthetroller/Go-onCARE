@@ -13,7 +13,7 @@ from PyQt6.QtGui import QColor
 from ui.styles import (
     configure_table, make_page_layout, finish_page, make_banner, make_read_only_table,
     make_table_btn, make_table_btn_danger, make_action_table,
-    format_timedelta, status_color,
+    format_timedelta, status_color, TAB_ACTIVE, TAB_INACTIVE, make_action_cell,
 )
 from ui.shared.clinical_dialogs import (
     QueueEditDialog, ServiceEditDialog, NewInvoiceDialog,
@@ -25,14 +25,6 @@ from ui.shared.clinical_dialogs import (
 #  Clinical Page
 # ══════════════════════════════════════════════════════════════════════
 class ClinicalPage(QWidget):
-    _TAB_STYLE = (
-        "QPushButton {{ background: {bg}; color: {fg}; border: none;"
-        " border-radius: 8px; padding: 8px 20px;"
-        " font-size: 13px; font-weight: bold; }}"
-        " QPushButton:hover {{ background: {hv}; }}"
-    )
-    _TAB_ACTIVE   = _TAB_STYLE.format(bg="#388087", fg="#FFFFFF", hv="#2C6A70")
-    _TAB_INACTIVE = _TAB_STYLE.format(bg="#FFFFFF", fg="#2C3E50", hv="#BADFE7")
 
     def __init__(self, backend=None, role: str = "Admin"):
         super().__init__()
@@ -111,7 +103,7 @@ class ClinicalPage(QWidget):
     def _switch_tab(self, index: int, label: str):
         self._stack.setCurrentIndex(index)
         for name, btn in self._tab_buttons.items():
-            btn.setStyleSheet(self._TAB_ACTIVE if name == label else self._TAB_INACTIVE)
+            btn.setStyleSheet(TAB_ACTIVE if name == label else TAB_INACTIVE)
 
     # ══════════════════════════════════════════════════════════════
     #  QUEUE TAB
@@ -221,19 +213,13 @@ class ClinicalPage(QWidget):
             for c, val in enumerate(values):
                 item = QTableWidgetItem(val)
                 if c == 5:
-                    color_map = {"Waiting": "#E8B931", "In Progress": "#388087",
-                                 "Completed": "#5CB85C", "Cancelled": "#D9534F"}
-                    if val in color_map:
-                        item.setForeground(QColor(color_map[val]))
+                    item.setForeground(QColor(status_color(val)))
                 self._queue_table.setItem(r, c, item)
-            act_w = QWidget(); act_lay = QHBoxLayout(act_w)
-            act_lay.setContentsMargins(0,0,0,0); act_lay.setSpacing(6)
             edit_btn = make_table_btn("Edit"); edit_btn.setFixedWidth(52)
             edit_btn.clicked.connect(lambda checked, ri=r: self._on_edit_queue(ri))
             if self._role == "Admin":
                 edit_btn.setVisible(False)
-            act_lay.addWidget(edit_btn)
-            self._queue_table.setCellWidget(r, 6, act_w)
+            self._queue_table.setCellWidget(r, 6, make_action_cell(edit_btn))
 
         # Update stat cards
         stats = self._backend.get_queue_stats()
@@ -413,27 +399,24 @@ class ClinicalPage(QWidget):
             for c, val in enumerate(values):
                 item = QTableWidgetItem(val)
                 if c == 5:
-                    clr = {"Paid": "#5CB85C", "Unpaid": "#D9534F", "Partial": "#E8B931",
-                           "Voided": "#7F8C8D"}.get(val, "#7F8C8D")
-                    item.setForeground(QColor(clr))
+                    item.setForeground(QColor(status_color(val)))
                 self._billing_table.setItem(r, c, item)
 
             # Actions: Pay | Print | Void
-            act_w = QWidget()
-            act_lay = QHBoxLayout(act_w); act_lay.setContentsMargins(0,0,0,0); act_lay.setSpacing(6)
+            btns = []
             if status not in ("Paid", "Voided") and self._role != "Admin":
                 pay_btn = make_table_btn("Pay"); pay_btn.setFixedWidth(46)
                 pay_btn.clicked.connect(lambda checked, iid=inv_id: self._on_add_payment(iid))
-                act_lay.addWidget(pay_btn)
+                btns.append(pay_btn)
             if status == "Paid":
                 prt_btn = make_table_btn("Print"); prt_btn.setFixedWidth(52)
                 prt_btn.clicked.connect(lambda checked, iid=inv_id: self._on_print_receipt(iid))
-                act_lay.addWidget(prt_btn)
+                btns.append(prt_btn)
             if status != "Voided" and self._role in ("Admin", "Cashier", "Receptionist"):
                 void_btn = make_table_btn_danger("Void"); void_btn.setFixedWidth(46)
                 void_btn.clicked.connect(lambda checked, iid=inv_id: self._on_void_invoice(iid))
-                act_lay.addWidget(void_btn)
-            self._billing_table.setCellWidget(r, 6, act_w)
+                btns.append(void_btn)
+            self._billing_table.setCellWidget(r, 6, make_action_cell(*btns))
 
     def _on_new_invoice(self):
         services = self._backend.get_services_list() if self._backend else []
@@ -631,15 +614,12 @@ class ClinicalPage(QWidget):
             self._svc_table.setItem(r, 2, QTableWidgetItem(f"₱{float(price):,.2f}"))
             self._svc_table.setItem(r, 3, QTableWidgetItem(str(use_cnt)))
             active_item = QTableWidgetItem("Yes" if is_active else "No")
-            active_item.setForeground(QColor("#5CB85C" if is_active else "#D9534F"))
+            active_item.setForeground(QColor(status_color("Active" if is_active else "Inactive")))
             self._svc_table.setItem(r, 4, active_item)
 
-            act_w = QWidget(); act_lay = QHBoxLayout(act_w)
-            act_lay.setContentsMargins(0,0,0,0); act_lay.setSpacing(6)
             edit_btn = make_table_btn("Edit"); edit_btn.setFixedWidth(52)
             edit_btn.clicked.connect(lambda checked, ri=r: self._on_edit_service(ri))
-            act_lay.addWidget(edit_btn)
-            self._svc_table.setCellWidget(r, 5, act_w)
+            self._svc_table.setCellWidget(r, 5, make_action_cell(edit_btn))
 
     def _on_svc_search(self, _text: str = ""):
         self._apply_svc_filters()

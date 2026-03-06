@@ -6,8 +6,8 @@ from PyQt6.QtGui import QColor, QPainter, QPen, QBrush, QFont, QPainterPath
 
 
 # ── Colour palettes ───────────────────────────────────────────────────
+from ui.styles import STATUS_COLORS  # single source of truth
 CONDITION_COLORS = ["#388087", "#6FB3B8", "#BADFE7", "#C2EDCE", "#E8B931", "#D9534F", "#7F8C8D"]
-STATUS_COLORS    = {"Completed": "#5CB85C", "Confirmed": "#388087", "Pending": "#E8B931", "Cancelled": "#D9534F"}
 DEPT_COLORS      = ["#388087", "#6FB3B8", "#BADFE7", "#C2EDCE", "#E8B931", "#7F8C8D", "#D9534F", "#5CB85C"]
 DEMO_COLORS      = {"0–17": "#6FB3B8", "18–35": "#388087", "36–50": "#BADFE7", "51–65": "#C2EDCE", "65+": "#E8B931"}
 RETENTION_COLORS = {"new_patients": "#6FB3B8", "returning_patients": "#388087"}

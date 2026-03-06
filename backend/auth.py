@@ -56,15 +56,15 @@ class AuthMixin:
 
     def admin_create_user_account(self, full_name, email, password, role_name):
         try:
-            role = self.fetch("SELECT role_id FROM roles WHERE role_name=%s", (role_name,), one=True)
-            if not role:
+            role_id = self._lookup_role_id(role_name)
+            if not role_id:
                 return False, f"Role '{role_name}' not found."
             existing = self.fetch("SELECT user_id FROM users WHERE email=%s", (email,), one=True)
             if existing:
                 return False, f"A user with email '{email}' already exists."
             ok = self.exec(
                 "INSERT INTO users (full_name, email, password, role_id, must_change_password) VALUES (%s,%s,%s,%s,1)",
-                (full_name, email, password, role["role_id"]))
+                (full_name, email, password, role_id))
             if ok:
                 self.log_activity("Created", "User", f"Account created for {full_name} ({role_name})")
                 return True, f"Account for '{full_name}' created.\nThey must change their password on first login."

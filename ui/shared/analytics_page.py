@@ -11,7 +11,7 @@ from PyQt6.QtCore import Qt, QDate, QTimer
 from PyQt6.QtGui import QColor
 from ui.styles import (
     configure_table, make_page_layout, finish_page, make_banner,
-    make_card, make_read_only_table, busy_cursor,
+    make_card, make_read_only_table, busy_cursor, fmt_peso,
 )
 from ui.shared.chart_widgets import (
     PieChartWidget, HBarChartWidget,
@@ -33,10 +33,6 @@ class AnalyticsPage(QWidget):
         self._refresh_timer = QTimer(self)
         self._refresh_timer.timeout.connect(self._on_refresh)
         self._refresh_timer.start(15_000)
-
-    @staticmethod
-    def _fmt_peso(amount: float) -> str:
-        return f"\u20b1 {amount:,.0f}"
 
     def _load_data(self):
         if not self._backend:
@@ -151,7 +147,7 @@ class AnalyticsPage(QWidget):
         total_patients = stats.get("total_patients", 0)
 
         kpis = [
-            ("Monthly Revenue", self._fmt_peso(current_month_rev), "#388087",
+            ("Monthly Revenue", fmt_peso(current_month_rev), "#388087",
              cmp.get("revenue_delta", 0)),
             ("Total Patients", f"{total_patients:,}", "#5CB85C",
              cmp.get("patients_delta", 0)),
@@ -184,7 +180,7 @@ class AnalyticsPage(QWidget):
             ("Total Appointments", str(total_appts), "#388087"),
             ("Completed", str(completed), "#5CB85C"),
             ("Cancelled", str(cancelled), "#D9534F"),
-            ("Revenue Generated", self._fmt_peso(revenue), "#6FB3B8"),
+            ("Revenue Generated", fmt_peso(revenue), "#6FB3B8"),
             ("Completion Rate", f"{comp_rate:.1f}%", "#C2EDCE"),
         ]
         for label, value, color in kpis:
@@ -203,7 +199,7 @@ class AnalyticsPage(QWidget):
         emp_type = perf.get("employment_type", "—")
         for col, (lbl, val) in enumerate([
             ("Department", dept), ("Employment Type", emp_type),
-            ("Total Revenue", self._fmt_peso(revenue)),
+            ("Total Revenue", fmt_peso(revenue)),
         ]):
             v = QLabel(val); v.setStyleSheet("font-size:16px; font-weight:bold; color:#388087;")
             l = QLabel(lbl); l.setStyleSheet("font-size:11px; color:#7F8C8D;")
@@ -226,7 +222,7 @@ class AnalyticsPage(QWidget):
             vbox.addWidget(chart)
             grand = sum(float(m.get("revenue", 0)) for m in monthly)
             total_row = QHBoxLayout(); total_row.addStretch()
-            tl = QLabel(f"Total ({len(monthly)} months):  {self._fmt_peso(grand)}")
+            tl = QLabel(f"Total ({len(monthly)} months):  {fmt_peso(grand)}")
             tl.setObjectName("totalLabelSm")
             total_row.addWidget(tl); vbox.addLayout(total_row)
             lay.addWidget(rev_card)
@@ -253,7 +249,7 @@ class AnalyticsPage(QWidget):
                 tbl.setItem(r, 0, QTableWidgetItem(m.get("month_label", "")))
                 tbl.setItem(r, 1, QTableWidgetItem(str(m.get("total_appointments", 0))))
                 tbl.setItem(r, 2, QTableWidgetItem(str(m.get("completed", 0))))
-                tbl.setItem(r, 3, QTableWidgetItem(self._fmt_peso(float(m.get("revenue", 0)))))
+                tbl.setItem(r, 3, QTableWidgetItem(fmt_peso(float(m.get("revenue", 0)))))
             vbox2.addWidget(tbl)
             lay.addWidget(tbl_card)
 
@@ -407,7 +403,7 @@ class AnalyticsPage(QWidget):
             tbl.setItem(r, 0, QTableWidgetItem(f"Dr. {name.split()[-1]}" if name else ""))
             tbl.setItem(r, 1, QTableWidgetItem(str(doc.get("total_appointments", 0))))
             tbl.setItem(r, 2, QTableWidgetItem(str(doc.get("completed", 0))))
-            tbl.setItem(r, 3, QTableWidgetItem(self._fmt_peso(float(doc.get("revenue_generated", 0)))))
+            tbl.setItem(r, 3, QTableWidgetItem(fmt_peso(float(doc.get("revenue_generated", 0)))))
         vbox.addWidget(tbl)
         return card
 
@@ -433,7 +429,7 @@ class AnalyticsPage(QWidget):
         for r, svc in enumerate(services):
             tbl.setItem(r, 0, QTableWidgetItem(svc.get("service_name", "")))
             tbl.setItem(r, 1, QTableWidgetItem(str(svc.get("usage_count", 0))))
-            tbl.setItem(r, 2, QTableWidgetItem(self._fmt_peso(float(svc.get("total_revenue", 0)))))
+            tbl.setItem(r, 2, QTableWidgetItem(fmt_peso(float(svc.get("total_revenue", 0)))))
         vbox.addWidget(tbl)
         return card
 
@@ -460,10 +456,10 @@ class AnalyticsPage(QWidget):
         for r, row in enumerate(monthly):
             tbl.setItem(r, 0, QTableWidgetItem(row.get("month_label", "")))
             rev = float(row.get("total_revenue", 0)); grand += rev
-            tbl.setItem(r, 1, QTableWidgetItem(self._fmt_peso(rev)))
+            tbl.setItem(r, 1, QTableWidgetItem(fmt_peso(rev)))
         vbox.addWidget(tbl)
         total_row = QHBoxLayout(); total_row.addStretch()
-        tl = QLabel(f"Total ({len(monthly)} months):  {self._fmt_peso(grand)}")
+        tl = QLabel(f"Total ({len(monthly)} months):  {fmt_peso(grand)}")
         tl.setObjectName("totalLabelSm")
         total_row.addWidget(tl); vbox.addLayout(total_row)
         return card
@@ -505,10 +501,10 @@ class AnalyticsPage(QWidget):
         services = data.get("services", [])
         top_svc = services[0] if services else {}
         top_svc_text = (f"{top_svc.get('service_name','N/A')} "
-                        f"({self._fmt_peso(float(top_svc.get('total_revenue',0)))})") if top_svc else "N/A"
+                        f"({fmt_peso(float(top_svc.get('total_revenue',0)))})") if top_svc else "N/A"
 
         summary = [
-            ("Total Revenue (period)", self._fmt_peso(grand_rev)),
+            ("Total Revenue (period)", fmt_peso(grand_rev)),
             ("Appointments Completed", str(completed)),
             ("Appointments Cancelled", str(cancelled)),
             ("Completion Rate", f"{completion_rate:.1f}%"),

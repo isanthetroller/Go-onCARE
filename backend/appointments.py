@@ -3,8 +3,11 @@
 
 class AppointmentMixin:
 
-    def get_appointments(self):
-        return self.fetch("""
+    def get_appointments(self, doctor_email=None):
+        """Return appointments. Optionally filter by doctor_email."""
+        where = "WHERE e.email = %s" if doctor_email else ""
+        params = (doctor_email,) if doctor_email else ()
+        return self.fetch(f"""
             SELECT a.appointment_id, a.appointment_date, a.appointment_time,
                    CONCAT(p.first_name,' ',p.last_name) AS patient_name,
                    CONCAT(e.first_name,' ',e.last_name) AS doctor_name,
@@ -20,25 +23,13 @@ class AppointmentMixin:
             INNER JOIN employees e ON a.doctor_id = e.employee_id
             INNER JOIN services s ON a.service_id = s.service_id
             LEFT JOIN invoices i ON a.appointment_id = i.appointment_id
+            {where}
             ORDER BY a.appointment_date DESC, a.appointment_time DESC
-        """)
+        """, params)
 
     def get_appointments_for_doctor(self, doctor_email):
-        """Return appointments assigned to the logged-in doctor."""
-        return self.fetch("""
-            SELECT a.appointment_id, a.appointment_date, a.appointment_time,
-                   CONCAT(p.first_name,' ',p.last_name) AS patient_name,
-                   CONCAT(e.first_name,' ',e.last_name) AS doctor_name,
-                   s.service_name, a.status, a.notes,
-                   a.cancellation_reason, a.reschedule_reason,
-                   a.reminder_sent, a.recurring_parent_id
-            FROM appointments a
-            INNER JOIN patients p ON a.patient_id = p.patient_id
-            INNER JOIN employees e ON a.doctor_id = e.employee_id
-            INNER JOIN services s ON a.service_id = s.service_id
-            WHERE e.email = %s
-            ORDER BY a.appointment_date DESC, a.appointment_time DESC
-        """, (doctor_email,))
+        """Convenience alias."""
+        return self.get_appointments(doctor_email=doctor_email)
 
     def get_doctors(self):
         return self.fetch("""
@@ -66,12 +57,6 @@ class AppointmentMixin:
             params.append(exclude_id)
         row = self.fetch(q, params, one=True)
         return row["cnt"] > 0 if row else False
-
-    def _lookup_patient_id(self, name):
-        row = self.fetch(
-            "SELECT patient_id FROM patients WHERE CONCAT(first_name,' ',last_name)=%s LIMIT 1",
-            (name,), one=True)
-        return row["patient_id"] if row else None
 
     def _validate_appointment_date(self, date_str):
         """Return (ok, error_msg). Date must be today or later, within current or next month."""
@@ -120,10 +105,7 @@ class AppointmentMixin:
                 conn.commit()
             doctor_name = data.get('doctor', '')
             if not doctor_name and data.get('doctor_id'):
-                doc_row = self.fetch(
-                    "SELECT CONCAT(first_name,' ',last_name) AS n FROM employees WHERE employee_id=%s",
-                    (data['doctor_id'],), one=True)
-                doctor_name = doc_row['n'] if doc_row else ''
+                doctor_name = self._get_employee_name(data['doctor_id'])
             self.log_activity("Created", "Appointment",
                               f"Appt #{appt_id} for {data['patient_name']} with Dr. {doctor_name}")
             return True
@@ -181,10 +163,7 @@ class AppointmentMixin:
         if ok:
             doctor_name = data.get('doctor', '')
             if not doctor_name and data.get('doctor_id'):
-                doc_row = self.fetch(
-                    "SELECT CONCAT(first_name,' ',last_name) AS n FROM employees WHERE employee_id=%s",
-                    (data['doctor_id'],), one=True)
-                doctor_name = doc_row['n'] if doc_row else ''
+                doctor_name = self._get_employee_name(data['doctor_id'])
             self.log_activity("Edited", "Appointment",
                               f"Appt #{appointment_id} for {data.get('patient_name','')} with Dr. {doctor_name}")
         return ok
