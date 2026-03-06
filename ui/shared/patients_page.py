@@ -102,7 +102,7 @@ class PatientsPage(QWidget):
             cols = cols[:-1]  # no actions
             self.table = make_read_only_table(cols)
         else:
-            self.table = make_action_table(cols, action_col_width=185)
+            self.table = make_action_table(cols, action_col_width=210)
         self.table.setSortingEnabled(True)
         self._load_from_db()
         lay.addWidget(self.table)
@@ -166,11 +166,11 @@ class PatientsPage(QWidget):
                 self.table.setItem(r, c, QTableWidgetItem(val))
 
             if self._role != "Cashier":
-                view_btn = make_table_btn("View"); view_btn.setFixedWidth(52)
+                view_btn = make_table_btn("View")
                 view_btn.clicked.connect(lambda checked, ri=r: self._on_view(ri))
-                edit_btn = make_table_btn("Edit"); edit_btn.setFixedWidth(52)
+                edit_btn = make_table_btn("Edit")
                 edit_btn.clicked.connect(lambda checked, ri=r: self._on_edit(ri))
-                del_btn = make_table_btn_danger("Del"); del_btn.setFixedWidth(46)
+                del_btn = make_table_btn_danger("Del")
                 del_btn.clicked.connect(lambda checked, ri=r: self._on_delete(ri))
                 self.table.setCellWidget(r, len(values), make_action_cell(view_btn, edit_btn, del_btn))
         self.table.setSortingEnabled(True)

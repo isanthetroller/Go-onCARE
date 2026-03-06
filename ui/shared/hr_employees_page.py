@@ -8,8 +8,9 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor
 from ui.styles import (
-    make_table_btn, make_banner, make_card, make_stat_card,
-    make_read_only_table, make_interactive_table, make_action_table,
+    make_table_btn, make_banner,
+    make_card, make_stat_card, make_read_only_table,
+    make_interactive_table, make_action_table,
     status_color, make_action_cell,
 )
 from ui.shared.hr_employee_dialogs import HREmployeeDialog, HREmployeeProfileDialog, UserAccountDialog
@@ -62,9 +63,9 @@ class HREmployeesPage(QWidget):
                 self.table.setItem(r, c, item)
 
             # Actions: View | Edit
-            view_btn = make_table_btn("View"); view_btn.setFixedWidth(52)
+            view_btn = make_table_btn("View")
             view_btn.clicked.connect(lambda checked, ri=r: self._on_view(ri))
-            edit_btn = make_table_btn("Edit"); edit_btn.setFixedWidth(52)
+            edit_btn = make_table_btn("Edit")
             edit_btn.clicked.connect(lambda checked, ri=r: self._on_edit(ri))
             self.table.setCellWidget(r, 10, make_action_cell(view_btn, edit_btn))
 
@@ -113,24 +114,30 @@ class HREmployeesPage(QWidget):
 
     def _build(self):
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(24, 16, 24, 16)
-        outer.setSpacing(12)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        container = QWidget()
+        container.setObjectName("pageInner")
+        lay = QVBoxLayout(container)
+        lay.setContentsMargins(28, 24, 28, 28)
+        lay.setSpacing(16)
 
         # ── Banner (always visible above tabs) ────────────────────
-        outer.addWidget(make_banner(
+        lay.addWidget(make_banner(
             "HR Employee Management",
             "Comprehensive staff management \u2013 salary, leave, performance"))
 
-        # ── Tab widget ────────────────────────────────────────────
+        # ── Tab widget (fills remaining space) ────────────────────
         self._tabs = QTabWidget()
-        self._tabs.setStyleSheet(
-            "QTabWidget::pane { background-color: #F6F6F2; }")
         self._tabs.addTab(self._build_employees_tab(), "\U0001F465  Employees")
         self._tabs.addTab(self._build_leave_tab(), "\U0001F4CB  Leave Management")
-        self._tabs.addTab(self._build_payroll_tab(), "\U0001F4B0  Payroll & Staffing")
+        self._tabs.addTab(self._build_payroll_tab(), "\U0001F4B0  Payroll \u0026 Staffing")
         if self._role == "Admin":
             self._tabs.addTab(self._build_accounts_tab(), "\U0001F510  User Accounts")
-        outer.addWidget(self._tabs)
+        lay.addWidget(self._tabs, 1)
+
+        outer.addWidget(container)
 
     # ── Tab helpers ───────────────────────────────────────────────
 
@@ -140,12 +147,11 @@ class HREmployeesPage(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setStyleSheet("QScrollArea { background: transparent; }")
         inner = QWidget()
-        inner.setStyleSheet("background: transparent;")
+        inner.setObjectName("pageInner")
         lay = QVBoxLayout(inner)
-        lay.setSpacing(14)
-        lay.setContentsMargins(20, 16, 20, 20)
+        lay.setSpacing(16)
+        lay.setContentsMargins(20, 20, 20, 20)
         scroll.setWidget(inner)
         return scroll, lay
 
@@ -174,11 +180,7 @@ class HREmployeesPage(QWidget):
         row2.addStretch(2)          # keep payroll cards from stretching too wide
         lay.addLayout(row2)
 
-        # ── Filter bar (inside a card) ───────────────────────────
-        filter_card = make_card()
-        fc_lay = QVBoxLayout(filter_card)
-        fc_lay.setContentsMargins(16, 12, 16, 12); fc_lay.setSpacing(0)
-
+        # ── Filter bar ────────────────────────────────────────────
         bar = QHBoxLayout(); bar.setSpacing(10)
         self.search = QLineEdit()
         self.search.setObjectName("searchBar")
@@ -205,14 +207,13 @@ class HREmployeesPage(QWidget):
             setattr(self, attr, combo)
             bar.addWidget(combo)
 
-        fc_lay.addLayout(bar)
-        lay.addWidget(filter_card)
+        lay.addLayout(bar)
 
         # ── Main employee table ──────────────────────────────────
         cols = ["ID", "Name", "Role", "Department", "Type", "Phone", "Email",
                 "Hire Date", "Salary", "Status", "Actions"]
-        self.table = make_action_table(cols, min_h=420, row_h=44,
-                                       action_col_width=130)
+        self.table = make_action_table(cols, min_h=420, row_h=48,
+                                       action_col_width=160)
         lay.addWidget(self.table)
 
         lay.addStretch()
@@ -260,7 +261,7 @@ class HREmployeesPage(QWidget):
             min_h=200, row_h=44)
         self._lr_table.horizontalHeader().setSectionResizeMode(
             7, QHeaderView.ResizeMode.Fixed)
-        self._lr_table.setColumnWidth(7, 180)
+        self._lr_table.setColumnWidth(7, 200)
         self._lr_table.horizontalHeader().setStretchLastSection(False)
         lr_lay.addWidget(self._lr_table)
         lay.addWidget(lr_card)
@@ -375,17 +376,11 @@ class HREmployeesPage(QWidget):
             parts = []
             if req.get("status") == "Pending":
                 approve_btn = make_table_btn("Approve")
-                approve_btn.setStyleSheet(
-                    "QPushButton { background-color: #5CB85C; color: #FFF; border: none;"
-                    " border-radius: 4px; padding: 4px 10px; font-size: 11px; font-weight: bold; }"
-                    " QPushButton:hover { background-color: #4cae4c; }")
+                approve_btn.setObjectName("tblSuccessBtn")
                 approve_btn.clicked.connect(lambda checked, ri=r: self._on_approve_leave(ri))
                 parts.append(approve_btn)
                 decline_btn = make_table_btn("Decline")
-                decline_btn.setStyleSheet(
-                    "QPushButton { background-color: #D9534F; color: #FFF; border: none;"
-                    " border-radius: 4px; padding: 4px 10px; font-size: 11px; font-weight: bold; }"
-                    " QPushButton:hover { background-color: #c9302c; }")
+                decline_btn.setObjectName("tblDangerBtn")
                 decline_btn.clicked.connect(lambda checked, ri=r: self._on_decline_leave(ri))
                 parts.append(decline_btn)
             else:

@@ -173,7 +173,7 @@ class ClinicalPage(QWidget):
 
         # Queue table
         cols = ["Queue #", "Patient", "Time", "Doctor", "Purpose", "Status", "Actions"]
-        self._queue_table = make_action_table(cols, min_h=420, row_h=48, action_col_width=80)
+        self._queue_table = make_action_table(cols, min_h=420, row_h=48, action_col_width=100)
         # Auto-sync appointments into queue on first load
         if self._backend:
             try:
@@ -215,7 +215,7 @@ class ClinicalPage(QWidget):
                 if c == 5:
                     item.setForeground(QColor(status_color(val)))
                 self._queue_table.setItem(r, c, item)
-            edit_btn = make_table_btn("Edit"); edit_btn.setFixedWidth(52)
+            edit_btn = make_table_btn("Edit")
             edit_btn.clicked.connect(lambda checked, ri=r: self._on_edit_queue(ri))
             if self._role == "Admin":
                 edit_btn.setVisible(False)
@@ -324,7 +324,7 @@ class ClinicalPage(QWidget):
         lay.addLayout(sort_bar)
 
         cols = ["Inv #", "Patient", "Services", "Total", "Paid", "Status", "Actions"]
-        self._billing_table = make_action_table(cols, min_h=420, row_h=48, action_col_width=160)
+        self._billing_table = make_action_table(cols, min_h=420, row_h=48, action_col_width=200)
         self._all_invoices: list[dict] = []
         self._load_billing()
         lay.addWidget(self._billing_table)
@@ -405,15 +405,15 @@ class ClinicalPage(QWidget):
             # Actions: Pay | Print | Void
             btns = []
             if status not in ("Paid", "Voided") and self._role != "Admin":
-                pay_btn = make_table_btn("Pay"); pay_btn.setFixedWidth(46)
+                pay_btn = make_table_btn("Pay")
                 pay_btn.clicked.connect(lambda checked, iid=inv_id: self._on_add_payment(iid))
                 btns.append(pay_btn)
             if status == "Paid":
-                prt_btn = make_table_btn("Print"); prt_btn.setFixedWidth(52)
+                prt_btn = make_table_btn("Print")
                 prt_btn.clicked.connect(lambda checked, iid=inv_id: self._on_print_receipt(iid))
                 btns.append(prt_btn)
             if status != "Voided" and self._role in ("Admin", "Cashier", "Receptionist"):
-                void_btn = make_table_btn_danger("Void"); void_btn.setFixedWidth(46)
+                void_btn = make_table_btn_danger("Void")
                 void_btn.clicked.connect(lambda checked, iid=inv_id: self._on_void_invoice(iid))
                 btns.append(void_btn)
             self._billing_table.setCellWidget(r, 6, make_action_cell(*btns))
@@ -587,7 +587,7 @@ class ClinicalPage(QWidget):
         lay.addLayout(bar)
 
         cols = ["Service Name", "Category", "Price", "Usage", "Active", "Actions"]
-        self._svc_table = make_action_table(cols, min_h=420, row_h=48, action_col_width=80)
+        self._svc_table = make_action_table(cols, min_h=420, row_h=48, action_col_width=100)
         self._load_services()
         lay.addWidget(self._svc_table)
         return page
@@ -617,7 +617,7 @@ class ClinicalPage(QWidget):
             active_item.setForeground(QColor(status_color("Active" if is_active else "Inactive")))
             self._svc_table.setItem(r, 4, active_item)
 
-            edit_btn = make_table_btn("Edit"); edit_btn.setFixedWidth(52)
+            edit_btn = make_table_btn("Edit")
             edit_btn.clicked.connect(lambda checked, ri=r: self._on_edit_service(ri))
             self._svc_table.setCellWidget(r, 5, make_action_cell(edit_btn))
 

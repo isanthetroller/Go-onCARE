@@ -1,0 +1,819 @@
+Go-onCARE (CareCRUD V1) — Full System Architecture & Documentation
+====================================================================
+
+
+1. SYSTEM OVERVIEW
+==================
+
+Go-onCARE is a desktop clinic management system built with Python, PyQt6, and MySQL. It manages the full lifecycle of a healthcare clinic — from patient registration and appointment scheduling to clinical queues, billing/POS, HR management, and analytics — all within a single role-based desktop application.
+
+Technology Stack:
+  - Language:        Python 3.x
+  - GUI Framework:   PyQt6 (Fusion style + QSS stylesheets)
+  - Database:        MySQL via mysql-connector-python
+  - Charts:          Custom QPainter-based widgets (no external chart libs)
+  - Architecture:    Single-process desktop app, mixin-based backend
+  - Connection:      localhost, database carecrud_db
+
+Scale: ~30 Python files, ~8,500+ lines of Python, ~1,250 lines of QSS, 17 database tables, 8 views, 5 user roles.
+
+
+2. HIGH-LEVEL ARCHITECTURE
+===========================
+
+    ┌──────────────────────────────────────────────────────────────┐
+    │                        main.py (Entry Point)                 │
+    │         App → AuthWindow → login → MainWindow(role)          │
+    └──────────┬──────────────────────────────────────┬────────────┘
+               │                                      │
+       ┌───────▼──────────┐                 ┌─────────▼──────────┐
+       │   UI Layer        │                │   Backend Layer     │
+       │  (PyQt6 Widgets)  │───calls───────>│  (AuthBackend)      │
+       │                   │                │                     │
+       │  auth_window.py   │                │  ┌── DatabaseBase ──┐
+       │  main_window.py   │                │  │  base.py         │
+       │  8 Page widgets   │                │  └──────────────────┘
+       │  6 Dialog classes  │                │  ↑ inherited by all │
+       │  chart_widgets.py │                │  AuthMixin (auth)   │
+       │  styles.py        │                │  PatientMixin       │
+       │  reports.py       │                │  EmployeeMixin      │
+       │  2 QSS themes     │                │  AppointmentMixin   │
+       └───────────────────┘                │  ClinicalMixin      │
+                                            │  DashboardMixin     │
+                                            │  AnalyticsMixin     │
+                                            │  SettingsMixin      │
+                                            │  SearchMixin        │
+                                            └─────────┬──────────┘
+                                                      │
+                                            ┌─────────▼──────────┐
+                                            │   MySQL Database    │
+                                            │   carecrud_db       │
+                                            │   17 tables         │
+                                            │   8 views           │
+                                            │   16 indexes        │
+                                            └─────────────────────┘
+
+The backend uses a mixin composition pattern — a single AuthBackend class inherits from 9 mixins + DatabaseBase, giving every page access to the entire API through one shared instance:
+
+    class AuthBackend(DatabaseBase, AuthMixin, EmployeeMixin, PatientMixin,
+                      AppointmentMixin, ClinicalMixin, DashboardMixin,
+                      AnalyticsMixin, SettingsMixin, SearchMixin):
+        pass
+
+
+3. DATABASE SCHEMA (17 Tables)
+===============================
+
+3.1 Entity-Relationship Diagram
+--------------------------------
+
+     roles <──FK── users ──FK──> user_preferences
+       │
+       ├──FK── employees ──FK──> departments
+       │          │
+       │          ├──── leave_requests
+       │          ├──── notifications
+       │          │
+       │          └──FK── appointments ──FK──> services
+       │                     │       └── self-FK (recurring_parent_id)
+       │                     │
+       │                     ├──FK── queue_entries
+       │                     │
+       │                     └──FK── invoices ──FK──> payment_methods
+       │                                │                discount_types
+       │                                └──── invoice_items ──FK──> services
+       │
+       └──FK── patients ──FK──> discount_types
+                  │
+                  └──── patient_conditions ──FK──> standard_conditions
+
+3.2 Lookup Tables (6)
+----------------------
+
+  Table                  Purpose                                           Seed Data
+  ─────                  ───────                                           ─────────
+  departments            9 departments (General Medicine, Cardiology,      9 rows
+                         Dentistry, Pediatrics, Laboratory, Front Desk,
+                         Management, Pharmacy, Human Resources)
+  roles                  5 system roles                                    5 rows
+  services               Medical services with price, category, active     13 rows
+  payment_methods        Cash, GCash, Credit Card, Debit Card, Insurance   5 rows
+  standard_conditions    21 common medical conditions for checklist         21 rows
+  discount_types         Senior Citizen 20%, PWD 20%, Employee 10%         3 rows
+
+3.3 Core Entity Tables (4)
+---------------------------
+
+  Table              Key Columns                                         Notes
+  ─────              ───────────                                         ─────
+  users              user_id, full_name, email (UNIQUE),                 Authentication & RBAC
+                     password_hash, role_id (FK→roles),
+                     must_change_password
+  user_preferences   pref_id, user_id (FK→users),                       Per-user settings
+                     pref_key, pref_value
+  employees          employee_id, first_name, last_name,                 HR data; status =
+                     role_id (FK→roles), department_id                   Active/On Leave/Inactive
+                     (FK→departments), phone, email,
+                     hire_date, status, employment_type,
+                     salary, emergency_contact, notes
+  patients           patient_id, first_name, last_name,                  Clinical data;
+                     sex, date_of_birth, phone, email,                   auto-discount via FK
+                     blood_type, emergency_contact,
+                     discount_type_id (FK→discount_types),
+                     status, notes
+
+3.4 Junction Table
+-------------------
+
+  Table                Purpose
+  ─────                ───────
+  patient_conditions   Many-to-many between patients <-> standard_conditions
+
+3.5 Transaction Tables (6)
+---------------------------
+
+  Table              Key Columns                                         Notes
+  ─────              ───────────                                         ─────
+  appointments       appointment_id, patient_id (FK),                    Status: Pending/
+                     doctor_id (FK→employees), service_id                Confirmed/Cancelled/
+                     (FK→services), appointment_date,                    Completed
+                     appointment_time, status, notes,
+                     cancellation_reason, reschedule_reason,
+                     recurring_parent_id (self-FK),
+                     reminder_sent
+  queue_entries      queue_id, patient_id (FK), doctor_id                Status: Waiting/
+                     (FK), appointment_id (FK), queue_time,              In Progress/Completed/
+                     purpose, status, notes                              Cancelled
+  invoices           invoice_id, patient_id (FK),                        Status: Unpaid/Partial/
+                     appointment_id (FK), total_amount,                  Paid/Void
+                     amount_paid, status, payment_method_id
+                     (FK), notes, discount_type_id (FK)
+  invoice_items      item_id, invoice_id (FK), service_id                Line-item detail
+                     (FK), quantity, unit_price,
+                     discount_percent, subtotal
+  leave_requests     request_id, employee_id (FK),                       Status: Pending/
+                     leave_type, start_date, end_date,                   Approved/Declined/
+                     reason, status, hr_note                             Expired
+  notifications      notification_id, employee_id (FK),                  Employee notification
+                     title, message, is_read                             queue
+
+3.6 Audit Table
+----------------
+
+  Table              Purpose
+  ─────              ───────
+  activity_log       log_id, user_email, action, record_type, detail, timestamp
+                     — full audit trail of all system actions
+
+3.7 Views (8)
+--------------
+
+  vw_employees, vw_patients, vw_appointments, vw_queue, vw_invoices,
+  vw_doctor_performance, vw_monthly_revenue, vw_today_appointments,
+  vw_top_services
+
+3.8 Indexes (16)
+-----------------
+
+  On: users(email), employees(role_id, department_id, status),
+  patients(status, discount_type_id), appointments(patient_id, doctor_id,
+  date, status), queue_entries(patient_id, doctor_id, status),
+  invoices(patient_id, appointment_id, status),
+  activity_log(user_email, action, record_type, timestamp)
+
+
+4. THE FIVE USER ROLES & THEIR ACCESS
+=======================================
+
+  Page               Admin    HR       Doctor   Cashier  Receptionist
+  ────               ─────    ──       ──────   ───────  ────────────
+  Dashboard          Full     Limited  Full     Full     Full
+  Patients           CRUD     --       Own only View     CRUD + Merge
+  Appointments       CRUD     --       Own only View     CRUD
+  Clinical & POS     3 tabs   --       Queue    Billing  Billing
+  Data Analytics     Full     --       Personal --       --
+  Employees          HR view  HR view  --       --       --
+  Activity Log       Full     Limited  --       --       --
+  Settings           Full     --       --       --       --
+
+
+5. COMPLETE USER FLOW — ROLE BY ROLE
+======================================
+
+5.1 Login Flow (All Users)
+---------------------------
+
+  App starts → AuthWindow (email + password)
+    → backend.login(email, password)
+    → If must_change_password=1 → ForcePasswordChangeDialog
+    → Emit login_success(email, role, full_name)
+    → MainWindow created with sidebar filtered by role
+    → backend.set_current_user(email, role)
+
+Every user sees a sidebar with only their permitted pages. A notification bell
+appears for Doctor/Cashier/Receptionist (polls every 15 seconds). Leave
+auto-expiry runs every 5 minutes.
+
+5.2 Admin — Full System Control
+---------------------------------
+
+The Admin has unrestricted access to all 8 pages:
+
+DASHBOARD — KPI cards (Today's Appointments, Active Patients, Revenue, Active
+Staff), Today's Schedule table, Monthly Visits chart, Recent Activity feed.
+
+PATIENTS — Full CRUD. Add/Edit via PatientDialog (name, sex, DOB, phone with
++63 prefix, email, blood type, conditions checklist, discount category, notes).
+View profile with 4 tabs (Info, Appointments, Invoices, Queue History). Delete
+with cascade warning. Merge duplicate patients.
+
+APPOINTMENTS — Full CRUD. 5 date-based quick tabs (Today/Tomorrow/This Week/
+This Month/All). Filters by doctor, status, and search. Create appointments
+with conflict detection, date validation (today → end of next month), and
+recurring scheduling (Daily/Weekly/Monthly × N). Sees billing status column.
+
+CLINICAL & POS — All 3 tabs:
+  - Patient Queue: Auto-syncs confirmed appointments into queue. Stat cards
+    (Waiting/In Progress/Completed/Est. Wait). Doctor filter.
+    Note: Admin cannot click "Call Next" — that's doctor-only.
+  - Billing / POS: Create invoices with multi-line items, auto-loaded patient
+    discounts (Senior 20%, PWD 20%, Employee 10%), payment methods, partial
+    payments, print receipts, void invoices. Admin can override discount
+    percentage on invoices.
+  - Services & Pricing: Add/Edit services (name, price, category, active
+    toggle). Bulk price update across all services.
+
+DATA ANALYTICS — Full clinic analytics: KPI cards with month-over-month deltas
+(Δ Revenue, Δ Patients, Δ Appointments), 4 pie charts (Patient Conditions,
+Appointment Status, Revenue by Department, Demographics), Patient Retention
+trend, Cancellation Rate trend, Doctor Performance ranking, Top Services
+ranking, Monthly Revenue chart, Summary table with date range filter.
+
+EMPLOYEES — The HREmployeesPage with 4 tabs:
+  - Employees Tab: Stat cards (Total/Active/On Leave/Inactive/Avg Salary/
+    Payroll), full CRUD with salary and emergency contact fields. Adding an
+    employee auto-creates a user account (password = {role}123, forced change
+    on first login).
+  - Leave Management: View/Approve/Decline leave requests with HR notes.
+    Approval automatically sets employee status to "On Leave" and sends a
+    notification.
+  - Payroll & Staffing: Department payroll summary, employment type breakdown.
+  - User Accounts: Create/Delete user accounts, reset passwords.
+
+ACTIVITY LOG — Full audit trail with filters: user email, action type, record
+type, date range. Smart-refresh only reloads when new entries exist.
+
+SETTINGS — Change own password. Manage discount types (add/edit/delete).
+Database overview (row counts for all 17 tables). Cleanup tools: remove
+completed appointments by date, remove cancelled appointments, remove inactive
+patients, truncate individual tables.
+
+5.3 HR — Employee & Leave Management
+--------------------------------------
+
+HR sees 3 pages: Dashboard, Employees, Activity Log.
+
+DASHBOARD — Simplified: skips appointment/patient KPIs. Shows employee stats
+and quick action "Manage Employees". Non-HR/Admin employees can submit leave
+requests from their dashboard.
+
+EMPLOYEES — Same HREmployeesPage as Admin with 4 tabs (Employees, Leave
+Management, Payroll & Staffing). No User Accounts tab — that's Admin-only.
+
+ACTIVITY LOG — Restricted to Login activity from Doctor & Receptionist roles
+only.
+
+5.4 Doctor — Clinical Workflow
+-------------------------------
+
+Doctor sees 5 pages: Dashboard, Patients, Appointments, Clinical & POS, Data
+Analytics.
+
+DASHBOARD — Full KPIs + "My Schedule" quick action. Can submit leave requests.
+
+PATIENTS — Filtered to only their own patients (those with appointments under
+this doctor). View profiles. No add/edit/delete.
+
+APPOINTMENTS — Filtered to own appointments only. Doctor is auto-selected when
+creating new appointments. Full edit capability on own appointments.
+
+CLINICAL & POS — Queue tab only. Sees the "Call Next" button to call the next
+waiting patient. Can edit queue entries (update status to In Progress/Completed,
+add notes).
+
+DATA ANALYTICS — Personal KPIs only: Total Appointments, Completed, Cancelled,
+Personal Revenue, Completion Rate, own monthly revenue chart and breakdown table.
+
+5.5 Cashier — Billing & Patient View
+--------------------------------------
+
+Cashier sees 4 pages: Dashboard, Patients, Appointments, Clinical & POS.
+
+DASHBOARD — Full KPIs. Can submit leave requests.
+
+PATIENTS — Can view patient list but no action buttons (no add/edit/delete).
+
+APPOINTMENTS — Can view all appointments and filter them, but no edit actions
+and no billing column.
+
+CLINICAL & POS — Billing tab only. Create invoices, process payments, print
+receipts, void invoices. Discount percentage is locked to the patient's
+registered discount type.
+
+5.6 Receptionist — Front Desk Operations
+------------------------------------------
+
+Receptionist sees 4 pages: Dashboard, Patients, Appointments, Clinical & POS.
+
+DASHBOARD — Full KPIs + quick actions "+ New Appointment" and "+ New Patient".
+Can submit leave requests.
+
+PATIENTS — Full CRUD including add, edit, delete, and merge duplicate patients.
+This is the primary patient-facing role.
+
+APPOINTMENTS — Full CRUD. Create, edit, cancel appointments. Recurring
+scheduling supported.
+
+CLINICAL & POS — Billing tab only. Same as Cashier but can also void invoices.
+
+
+6. KEY DATA FLOWS
+===================
+
+6.1 Patient Registration → Appointment → Queue → Invoice
+-----------------------------------------------------------
+
+  Receptionist adds patient (PatientDialog)
+    → INSERT patients + patient_conditions
+    → log_activity("Create", "Patient")
+
+  Receptionist creates appointment (AppointmentDialog)
+    → Conflict check → INSERT appointments
+    → log_activity("Create", "Appointment")
+
+  Auto-sync (every 10s) or manual
+    → sync_today_appointments_to_queue()
+    → Confirmed appointments → INSERT queue_entries (Waiting)
+
+  Doctor clicks "Call Next"
+    → Oldest Waiting → status = "In Progress"
+    → Doctor completes → status = "Completed"
+
+  Cashier creates invoice (NewInvoiceDialog)
+    → Patient discount auto-loaded
+    → Line items (service × qty × discount)
+    → INSERT invoices + invoice_items
+    → Payment → UPDATE amount_paid → status Partial/Paid
+
+6.2 Leave Request Flow
+------------------------
+
+  Employee → Dashboard → "Request Leave"
+    → INSERT leave_requests (Pending)
+
+  HR → Leave Management → Approve
+    → leave_requests status = "Approved"
+    → employees status = "On Leave"
+    → INSERT notifications (to employee)
+
+  Timer (every 5 min) → auto_expire_leaves()
+    → Past end_date + Approved → "Expired"
+    → Employee status → "Active"
+
+6.3 Employee → Auto User Account
+----------------------------------
+
+  Admin/HR adds employee
+    → INSERT employees
+    → AUTO: INSERT users (password = "{role}123", must_change_password=1)
+    → First login → ForcePasswordChangeDialog
+
+
+7. BACKEND API SUMMARY (100+ Methods across 9 Mixins)
+=======================================================
+
+  Mixin              File                   Methods   Responsibility
+  ─────              ────                   ───────   ──────────────
+  DatabaseBase       backend/base.py        10        DB connection, fetch(), exec(),
+                                                      shared helpers, activity logging
+  AuthMixin          backend/auth.py        10        Login, password management,
+                                                      user account CRUD
+  PatientMixin       backend/patients.py    8         Patient CRUD, profiles, merge,
+                                                      doctor-filtered patients
+  EmployeeMixin      backend/employees.py   25+       Employee CRUD, HR stats, payroll,
+                                                      leave system, notifications
+  AppointmentMixin   backend/appointments.py 9        Appointment CRUD, conflict
+                                                      detection, recurring scheduling
+  ClinicalMixin      backend/clinical.py    14        Queue management, invoices,
+                                                      payments, services
+  DashboardMixin     backend/dashboard.py   3         KPI aggregation, upcoming
+                                                      appointments, monthly trends
+  AnalyticsMixin     backend/analytics.py   15        Revenue analytics, doctor
+                                                      performance, demographics, trends
+  SettingsMixin      backend/settings.py    11        DB cleanup, conditions/discounts
+                                                      management, table counts
+  SearchMixin        backend/search.py      1         Global search across patients,
+                                                      appointments, employees
+
+7.1 DatabaseBase — backend/base.py
+-----------------------------------
+
+  Method                        Description
+  ──────                        ───────────
+  set_current_user(email, role) Sets session identity for logging
+  _get_connection()             Returns (or creates) mysql.connector connection
+  fetch(sql, params, one)       Executes SELECT → list[dict] or single dict
+  exec(sql, params)             Executes INSERT/UPDATE/DELETE → lastrowid or rowcount
+  exec_many(queries)            Runs multiple statements in single transaction
+  _get_employee_name()          Looks up current user's employee full name
+  _lookup_patient_id(name)      Resolves "first last" → patient_id
+  _lookup_role_id(role_name)    Resolves role name → role_id
+  log_activity(action, ...)     Inserts into activity_log
+  get_latest_log_id()           Returns max log_id for smart refresh
+  get_activity_log(limit, ...)  Filtered activity log retrieval
+  close()                       Closes the MySQL connection
+
+7.2 AuthMixin — backend/auth.py
+---------------------------------
+
+  Method                            Description
+  ──────                            ───────────
+  login(email, password)            Returns (success, role, full_name, message,
+                                    must_change_password)
+  clear_must_change_password(email) Clears the forced-change flag
+  update_own_password(email, old, new) Changes password with verification
+  force_change_password(email, new) Sets new password + clears flag
+  get_all_user_accounts()           Admin: lists all user accounts
+  admin_create_user_account(data)   Admin: creates user (must_change=1)
+  admin_reset_password(user_id, new) Admin: resets any password
+  admin_delete_user_account(user_id) Admin: deletes user account
+  get_user_full_name(email)         Returns display name
+  get_all_roles()                   Returns list of role names
+
+7.3 PatientMixin — backend/patients.py
+----------------------------------------
+
+  Method                            Description
+  ──────                            ───────────
+  get_patients()                    Full patient list with conditions, discount, last visit
+  get_patient_full_profile(id)      Returns {info, appointments, invoices, queue}
+  add_patient(data)                 Inserts patient + syncs patient_conditions
+  update_patient(patient_id, data)  Updates patient + re-syncs conditions
+  delete_patient(patient_id)        Cascading delete of all related records
+  merge_patients(keep_id, remove_id) Transfers all FK references then deletes
+  get_patients_for_doctor(email)    Distinct patients with appointments under doctor
+  get_active_patients()             Simple [{patient_id, name}] for dropdowns
+
+7.4 EmployeeMixin — backend/employees.py
+------------------------------------------
+
+  Method                            Description
+  ──────                            ───────────
+  get_employees(detailed)           Employee list; optional salary/emergency fields
+  get_employees_detailed()          Shortcut for get_employees(detailed=True)
+  get_leave_employees()             Currently on-leave employees
+  get_hr_stats()                    {total, doctors, active, on_leave, inactive,
+                                    avg_salary, total_payroll}
+  get_payroll_summary()             Department-level salary aggregation
+  get_employment_type_counts()      Full-time / Part-time / Contract breakdown
+  update_employee_salary(id, sal)   Updates salary field
+  check_duplicate_phone(phone, id)  Prevents duplicate phone numbers
+  add_employee(data)                Inserts employee + auto-creates user account
+  update_employee(id, data)         Updates employee + syncs users table
+  delete_employee(id)               Cascading delete of all related records
+  get_employee_stats()              Active/On Leave/Inactive counts
+  get_department_counts()           Per-department employee counts
+  get_employee_performance(id)      {total_appts, completed, revenue}
+  get_employee_appointments(id)     All appointments for an employee
+  get_employee_id_by_email(email)   Resolves email → employee_id
+  submit_leave_request(data)        Creates leave request
+  get_pending_leave_requests()      HR view of pending requests
+  get_all_leave_requests()          All leave requests
+  get_my_leave_requests(id)         Employee's own leave history
+  approve_leave_request(id, note)   Approves + sets On Leave + notification
+  decline_leave_request(id, note)   Declines + notification
+  get_unread_notifications(id)      Notification system
+  mark_notifications_read(id)       Marks all as read
+  auto_expire_leaves()              Bulk-expires past-date approved leaves
+
+7.5 AppointmentMixin — backend/appointments.py
+------------------------------------------------
+
+  Method                              Description
+  ──────                              ───────────
+  get_appointments(doctor_email)      All appointments (or filtered by doctor)
+  get_appointments_for_doctor(email)  Convenience wrapper
+  get_doctors()                       [{employee_id, doctor_name}]
+  get_services_list() / get_all_services() Active services / all services
+  check_appointment_conflict(...)     Checks for double-booking
+  _validate_appointment_date(date)    Enforces today → end of next month
+  add_appointment(data)               Inserts appointment; logs activity
+  add_recurring_appointments(...)     Creates Daily/Weekly/Monthly series
+  update_appointment(id, data)        Updates all fields; logs activity
+  update_reminder_sent(id)            Marks reminder as sent
+
+7.6 ClinicalMixin — backend/clinical.py
+-----------------------------------------
+
+  Method                              Description
+  ──────                              ───────────
+  QUEUE:
+  get_queue_entries()                 Today's queue from vw_queue
+  get_queue_stats()                   {waiting, in_progress, completed, est_wait}
+  update_queue_status(id, status)     Change queue status; logs activity
+  update_queue_entry(id, data)        Edit purpose/notes/status
+  sync_today_appointments_to_queue()  Confirmed → queue (Waiting)
+  call_next_queue(doctor_id)          Oldest Waiting → In Progress
+  get_avg_consultation_minutes()      Average consultation time
+
+  INVOICES:
+  get_invoices()                      All invoices from vw_invoices
+  add_invoice(data)                   Creates invoice + invoice_items
+  add_payment(id, amount, method)     Partial or full payment
+  void_invoice(id)                    Sets status to Void
+  get_invoice_detail(id)              Invoice header + line items
+  get_today_completed_for_patient()   Links invoice ↔ appointment
+  get_payment_methods()               Payment method list
+
+  SERVICES:
+  add_service(data)                   Creates new service
+  update_service_full(id, data)       Updates name, price, category, active
+  update_service(id, price)           Price-only update
+  bulk_update_prices(updates)         Batch price changes
+  get_service_usage_counts()          Usage count per service
+  get_service_categories()            Distinct category list
+
+7.7 DashboardMixin — backend/dashboard.py
+-------------------------------------------
+
+  Method                              Description
+  ──────                              ───────────
+  get_dashboard_summary()             {active_patients, new_patients_week,
+                                      today_appts, today_confirmed,
+                                      today_pending, today_completed,
+                                      today_revenue, total_revenue,
+                                      active_staff}
+  get_upcoming_appointments(limit)    Next N upcoming appointments
+  get_patient_stats_monthly(months)   Monthly new-patient counts
+
+7.8 AnalyticsMixin — backend/analytics.py
+------------------------------------------
+
+  Method                              Description
+  ──────                              ───────────
+  get_monthly_revenue(months)         Revenue by month
+  get_doctor_performance()            Per-doctor: total, completed, revenue
+  get_doctor_own_stats(email)         Doctor's personal stats
+  get_top_services()                  Most-used services
+  get_appointment_status_counts()     Pending/Confirmed/Cancelled/Completed
+  get_patient_condition_counts()      Condition frequency distribution
+  get_patient_demographics()          Age group distribution
+  get_revenue_by_department()         Revenue by doctor's department
+  get_active_doctor_count()           Count of active doctors
+  get_monthly_appointment_stats()     Monthly totals/completed/cancelled
+  get_patient_retention()             New vs returning patients by month
+  get_cancellation_rate_trend()       6-month cancellation rate
+  get_revenue_detail(from, to)        Invoice line items with date range
+  get_summary_stats(from, to)         {total_revenue, patients, appts, avg/day}
+  get_period_comparison()             Month-over-month delta percentages
+
+7.9 SettingsMixin — backend/settings.py
+----------------------------------------
+
+  Method                              Description
+  ──────                              ───────────
+  get_table_counts()                  Row counts for all 15 tables
+  cleanup_completed_appointments()    Deletes completed before date
+  cleanup_cancelled_appointments()    Deletes all cancelled
+  cleanup_inactive_patients()         Deletes inactive (cascading)
+  truncate_table(table_name)          Truncates whitelisted tables only
+  get_standard_conditions()           Condition checklist management
+  add_standard_condition()
+  delete_standard_condition()
+  get_discount_types(active_only)     Discount type management
+  add_discount_type()
+  update_discount_type()
+  delete_discount_type()
+  get_patient_discount_percent(name)  Returns patient's discount % and type
+
+7.10 SearchMixin — backend/search.py
+--------------------------------------
+
+  Method                              Description
+  ──────                              ───────────
+  global_search(query, include_emp)   Returns {patients, appointments, employees}
+
+
+8. UI COMPONENTS (19 Widget Classes + 19 Style Helpers)
+========================================================
+
+8.1 Windows
+-------------
+
+  AuthWindow       Login screen with email/password; dev quick-login buttons;
+                   emits login_success signal
+  MainWindow       Primary window with sidebar navigation + QStackedWidget
+                   holding 8 pages
+
+8.2 Pages (10)
+---------------
+
+  Page                 File                          Lines   Description
+  ────                 ────                          ─────   ───────────
+  DashboardPage        ui/shared/dashboard_page.py   ~530    KPI cards, schedule,
+                                                             charts, leave requests
+  PatientsPage         ui/shared/patients_page.py    ~250    Patient CRUD with
+                                                             filters
+  AppointmentsPage     ui/shared/appointments_page.py ~250   Date tabs, doctor/
+                                                             status filters
+  ClinicalPage         ui/shared/clinical_page.py    ~710    3 tabs: Queue,
+                                                             Billing, Services
+  AnalyticsPage        ui/shared/analytics_page.py   ~500    Charts, KPIs, trends
+  EmployeesPage        ui/shared/employees_page.py   ~280    Basic employee
+                                                             management
+  HREmployeesPage      ui/shared/hr_employees_page.py ~700   4 tabs: Employees,
+                                                             Leave, Payroll, Users
+  ActivityLogPage      ui/shared/activity_log_page.py ~170   Audit trail with
+                                                             filters
+  SettingsPage         ui/shared/settings_page.py    ~480    Password, discounts,
+                                                             DB tools
+  ReportsPage          ui/reports.py                 ~250    Revenue, patient
+                                                             stats, doctor perf
+
+8.3 Dialogs (14)
+------------------
+
+  Dialog                  File                             Description
+  ──────                  ────                             ───────────
+  PatientDialog           ui/shared/patient_dialogs.py     Add/Edit patient with
+                                                           conditions checklist
+  PatientProfileDialog    ui/shared/patient_dialogs.py     Read-only 4-tab profile
+  MergeDialog             ui/shared/patient_dialogs.py     Merge duplicate patients
+  EmployeeDialog          ui/shared/employee_dialogs.py    Add/Edit employee
+  EmployeeProfileDialog   ui/shared/employee_dialogs.py    Read-only 3-tab profile
+  HREmployeeDialog        ui/shared/hr_employee_dialogs.py Extends EmployeeDialog
+                                                           with salary + emergency
+  HREmployeeProfileDialog ui/shared/hr_employee_dialogs.py Enhanced 4-tab profile
+                                                           with Salary & HR tab
+  UserAccountDialog       ui/shared/hr_employee_dialogs.py Create user account
+  AppointmentDialog       ui/shared/appointment_dialog.py  Full appointment form
+                                                           with recurring support
+  QueueEditDialog         ui/shared/clinical_dialogs.py    Edit queue entry
+  ServiceEditDialog       ui/shared/clinical_dialogs.py    Add/Edit service
+  NewInvoiceDialog        ui/shared/clinical_dialogs.py    Multi-item invoice with
+                                                           auto-discount
+  PaymentDialog           ui/shared/clinical_dialogs.py    Payment with change
+                                                           calculation
+  BulkPriceDialog         ui/shared/clinical_dialogs.py    Batch service price
+                                                           update
+
+8.4 Chart Widgets (3)
+----------------------
+
+  BarChartWidget    Horizontal bar chart via QPainter
+  PieChartWidget    Pie/donut chart via QPainter.drawPie()
+  HBarChartWidget   Horizontal bar with per-bar color support
+
+All charts are custom-painted — no external charting library.
+
+8.5 Style Helpers (19 functions)
+---------------------------------
+
+  Function              Purpose
+  ────────              ───────
+  _load_qss(filename)   Loads QSS stylesheet file
+  _build_dark_style()   Generates dark mode QSS
+  set_active_palette()  Applies light or dark palette
+  configure_table()     Standard table styling
+  make_page_layout()    Scrollable page scaffold
+  finish_page()         Wraps page in scroll area
+  make_card()           Styled QFrame card with shadow
+  make_banner()         Page header with title/buttons
+  make_read_only_table() Non-editable display table
+  make_interactive_table() Editable data table
+  make_action_table()   Table with action column
+  make_stat_card()      Stat card with value + label
+  format_timedelta()    Formats timedelta → "HH:MM"
+  status_color()        Returns hex color for status
+  fmt_peso()            Formats ₱X,XXX
+  busy_cursor()         Wait cursor context manager
+  make_table_btn()      Teal action button for tables
+  make_table_btn_danger() Red danger button for tables
+  style_dialog_btns()   Styles Save/Cancel buttons
+  make_action_cell()    Centered button cell widget
+
+
+9. SECURITY & AUDIT FEATURES
+==============================
+
+  - Password hashing on user creation
+  - Forced password change on first login (must_change_password flag)
+  - Role-based access control — sidebar pages, button visibility, data
+    filtering all enforced per role
+  - Full activity log — every Create, Update, Delete, Login, and Leave
+    action is recorded with timestamp, user email, and detail
+  - Cascading deletes — deleting a patient or employee safely removes all
+    related records (conditions, appointments, queue entries, invoices,
+    invoice items)
+  - Conflict detection — appointment scheduling checks for double-booked
+    doctors
+  - Input validation — phone numbers (+63 prefix, 10 digits), email regex,
+    date range enforcement, duplicate phone checks
+
+
+10. AUTO-REFRESH & REAL-TIME FEATURES
+=======================================
+
+  Feature                   Interval     Location
+  ───────                   ────────     ────────
+  Dashboard data refresh    10 seconds   DashboardPage
+  Appointment list refresh  10 seconds   AppointmentsPage
+  Clinical/Queue refresh    10 seconds   ClinicalPage
+  Analytics refresh         15 seconds   AnalyticsPage
+  Notification polling      15 seconds   MainWindow (non-Admin/HR)
+  Leave auto-expiry         5 minutes    MainWindow
+  Activity log smart-refresh On switch   ActivityLogPage (only if new entries)
+  Clock display             1 second     DashboardPage
+
+
+11. FILE STRUCTURE
+===================
+
+  CareCRUDV1/
+  ├── main.py                          Entry point
+  ├── requirements.txt                 PyQt6, mysql-connector-python
+  ├── analytics.csv                    Export file
+  │
+  ├── backend/
+  │   ├── __init__.py                  AuthBackend (mixin composition)
+  │   ├── base.py                      DatabaseBase + shared helpers
+  │   ├── auth.py                      AuthMixin
+  │   ├── patients.py                  PatientMixin
+  │   ├── employees.py                 EmployeeMixin
+  │   ├── appointments.py              AppointmentMixin
+  │   ├── clinical.py                  ClinicalMixin
+  │   ├── dashboard.py                 DashboardMixin
+  │   ├── analytics.py                 AnalyticsMixin
+  │   ├── search.py                    SearchMixin
+  │   └── settings.py                  SettingsMixin
+  │
+  ├── database/
+  │   ├── carecrud.sql                 Full schema + seed data
+  │   ├── sample_data.sql              Additional test data
+  │   └── drop_all_data.sql            Reset script
+  │
+  └── ui/
+      ├── __init__.py
+      ├── auth_window.py               Login window
+      ├── main_window.py               Main window + sidebar
+      ├── reports.py                   Reports page
+      ├── styles.py                    19 UI helper functions
+      │
+      ├── styles/
+      │   ├── auth.qss                 Login stylesheet
+      │   └── main.qss                 Main window stylesheet
+      │
+      ├── admin/__init__.py            Admin role imports
+      ├── doctor/__init__.py           Doctor role imports
+      ├── cashier/__init__.py          Cashier role imports
+      ├── receptionist/__init__.py     Receptionist role imports
+      ├── hr/__init__.py               HR role imports
+      │
+      └── shared/
+          ├── __init__.py
+          ├── dashboard_page.py        Dashboard
+          ├── patients_page.py         Patients
+          ├── appointments_page.py     Appointments
+          ├── clinical_page.py         Clinical & POS
+          ├── analytics_page.py        Analytics
+          ├── employees_page.py        Employees (basic)
+          ├── hr_employees_page.py     Employees (HR view)
+          ├── activity_log_page.py     Activity Log
+          ├── settings_page.py         Settings
+          ├── chart_widgets.py         3 custom chart widgets
+          ├── patient_dialogs.py       Patient dialogs
+          ├── employee_dialogs.py      Employee dialogs
+          ├── hr_employee_dialogs.py   HR employee dialogs
+          ├── appointment_dialog.py    Appointment dialog
+          └── clinical_dialogs.py      Clinical dialogs
+
+
+12. SUMMARY
+=============
+
+Go-onCARE is a complete clinic management desktop application featuring:
+
+  - 17 database tables with 8 pre-built views and 16 indexes
+  - 5 distinct user roles with granular access control
+  - 100+ backend API methods across 9 specialized mixins
+  - 10 page-level widgets and 14 dialog classes
+  - 3 custom-painted chart widgets (no external dependencies)
+  - Full audit trail logging every system action
+  - Real-time auto-refresh across all views (10-15 second intervals)
+  - Automated leave management with expiry and notifications
+  - Multi-item invoicing with auto-discount and partial payments
+  - Recurring appointment scheduling with conflict detection
+  - Patient merge capability for deduplication
+  - Cascading deletes that maintain referential integrity
+
+All built with Python 3, PyQt6, and MySQL — zero external UI/chart libraries.

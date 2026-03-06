@@ -117,7 +117,7 @@ class AppointmentsPage(QWidget):
         if self._role != "Doctor": cols.append("Billing")
         if self._role != "Cashier": cols.append("Actions")
         if self._role != "Cashier":
-            self.table = make_action_table(cols, action_col_width=80)
+            self.table = make_action_table(cols, action_col_width=100)
         else:
             self.table = make_read_only_table(cols)
         hdr = self.table.horizontalHeader()
@@ -186,7 +186,7 @@ class AppointmentsPage(QWidget):
                     item.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
                 self.table.setItem(r, c, item)
             if self._role != "Cashier":
-                edit_btn = make_table_btn("Edit"); edit_btn.setFixedWidth(52)
+                edit_btn = make_table_btn("Edit")
                 edit_btn.clicked.connect(lambda checked, a=appt: self._on_edit(a))
                 self.table.setCellWidget(r, col_count - 1, make_action_cell(edit_btn))
         self._summary_label.setText(f"Showing {len(rows)} appointment{'s' if len(rows)!=1 else ''}")

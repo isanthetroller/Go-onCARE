@@ -58,9 +58,9 @@ class EmployeesPage(QWidget):
                 self.table.setItem(r, c, item)
 
             # Actions: View | Edit
-            view_btn = make_table_btn("View"); view_btn.setFixedWidth(52)
+            view_btn = make_table_btn("View")
             view_btn.clicked.connect(lambda checked, ri=r: self._on_view(ri))
-            edit_btn = make_table_btn("Edit"); edit_btn.setFixedWidth(52)
+            edit_btn = make_table_btn("Edit")
             edit_btn.clicked.connect(lambda checked, ri=r: self._on_edit(ri))
             self.table.setCellWidget(r, 8, make_action_cell(view_btn, edit_btn))
 

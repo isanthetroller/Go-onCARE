@@ -281,7 +281,7 @@ def make_interactive_table(headers: list[str], *, min_h: int = 160,
 
 
 def make_action_table(headers: list[str], *, min_h: int = 420,
-                     row_h: int = 48, action_col_width: int = 130):
+                     row_h: int = 48, action_col_width: int = 160):
     """Create a display table whose last column holds action-button widgets.
 
     NoSelection + NoFocus like read-only tables, but the last column is
@@ -396,41 +396,27 @@ def busy_cursor():
 
 # ── Table button helper ───────────────────────────────────────────────
 
-_TBL_BTN_STYLE = (
-    "QPushButton { background-color: #388087; color: #FFFFFF; border: none;"
-    " border-radius: 5px; padding: 3px 10px; font-size: 11px; font-weight: bold; }"
-    " QPushButton:hover { background-color: #2C6A70; }"
-)
-
-
 def make_table_btn(text: str) -> "QPushButton":
     """Create a compact QPushButton for use inside table cells."""
-    from PyQt6.QtWidgets import QPushButton
+    from PyQt6.QtWidgets import QPushButton, QSizePolicy
     from PyQt6.QtCore import Qt
     btn = QPushButton(text)
-    btn.setStyleSheet(_TBL_BTN_STYLE)
+    btn.setObjectName("tblActionBtn")
     btn.setCursor(Qt.CursorShape.PointingHandCursor)
-    btn.setFixedHeight(24)
-    btn.setMinimumWidth(40)
+    btn.setFixedHeight(26)
+    btn.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
     return btn
-
-
-_TBL_BTN_DANGER_STYLE = (
-    "QPushButton { background-color: #D9534F; color: #FFFFFF; border: none;"
-    " border-radius: 5px; padding: 3px 10px; font-size: 11px; font-weight: bold; }"
-    " QPushButton:hover { background-color: #C9302C; }"
-)
 
 
 def make_table_btn_danger(text: str) -> "QPushButton":
     """Create a compact danger QPushButton for use inside table cells."""
-    from PyQt6.QtWidgets import QPushButton
+    from PyQt6.QtWidgets import QPushButton, QSizePolicy
     from PyQt6.QtCore import Qt
     btn = QPushButton(text)
-    btn.setStyleSheet(_TBL_BTN_DANGER_STYLE)
+    btn.setObjectName("tblDangerBtn")
     btn.setCursor(Qt.CursorShape.PointingHandCursor)
-    btn.setFixedHeight(24)
-    btn.setMinimumWidth(40)
+    btn.setFixedHeight(26)
+    btn.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
     return btn
 
 
@@ -454,10 +440,12 @@ def make_action_cell(*buttons) -> "QWidget":
     Usage: ``tbl.setCellWidget(r, col, make_action_cell(btn1, btn2))``
     """
     from PyQt6.QtWidgets import QWidget, QHBoxLayout
+    from PyQt6.QtCore import Qt
     w = QWidget()
     lay = QHBoxLayout(w)
-    lay.setContentsMargins(0, 0, 0, 0)
-    lay.setSpacing(6)
+    lay.setContentsMargins(8, 0, 8, 0)
+    lay.setSpacing(8)
+    lay.setAlignment(Qt.AlignmentFlag.AlignVCenter)
     for b in buttons:
         lay.addWidget(b)
     return w
