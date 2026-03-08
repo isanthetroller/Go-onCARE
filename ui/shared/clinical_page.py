@@ -484,7 +484,7 @@ class ClinicalPage(QWidget):
 
             # Actions: Pay | Print | Void
             btns = []
-            if status not in ("Paid", "Voided") and self._role != "Admin":
+            if status not in ("Paid", "Voided") and self._role in ("Cashier",):
                 pay_btn = make_table_btn("Pay")
                 pay_btn.clicked.connect(lambda checked, iid=inv_id: self._on_add_payment(iid))
                 btns.append(pay_btn)
@@ -492,7 +492,7 @@ class ClinicalPage(QWidget):
                 prt_btn = make_table_btn("Print")
                 prt_btn.clicked.connect(lambda checked, iid=inv_id: self._on_print_receipt(iid))
                 btns.append(prt_btn)
-            if status != "Voided" and self._role in ("Admin", "Cashier", "Receptionist"):
+            if status != "Voided" and self._role in ("Admin", "Cashier"):
                 void_btn = make_table_btn_danger("Void")
                 void_btn.clicked.connect(lambda checked, iid=inv_id: self._on_void_invoice(iid))
                 btns.append(void_btn)

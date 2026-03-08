@@ -70,7 +70,10 @@ class AppointmentDialog(QDialog):
         completer = QCompleter([p["name"] for p in self._patients], self)
         completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        completer.activated.connect(self._on_patient_selected)
         self.patient_combo.setCompleter(completer)
+        self._selected_patient_text = ""
+        self._selected_patient_id = None
         if not data:
             self.patient_combo.setCurrentIndex(-1)
 
@@ -132,8 +135,12 @@ class AppointmentDialog(QDialog):
 
         if data:
             p_idx = self.patient_combo.findText(data.get("patient",""))
-            if p_idx >= 0: self.patient_combo.setCurrentIndex(p_idx)
-            else: self.patient_combo.setEditText(data.get("patient",""))
+            if p_idx >= 0:
+                self.patient_combo.setCurrentIndex(p_idx)
+                self._selected_patient_text = data.get("patient", "")
+                self._selected_patient_id = self.patient_combo.itemData(p_idx)
+            else:
+                self.patient_combo.setEditText(data.get("patient",""))
             idx = self.doctor_combo.findText(data.get("doctor",""))
             if idx >= 0: self.doctor_combo.setCurrentIndex(idx)
             if data.get("date"):
@@ -150,10 +157,36 @@ class AppointmentDialog(QDialog):
             self.cancel_reason.setText(data.get("cancellation_reason","") or "")
             self.resched_reason.setText(data.get("reschedule_reason","") or "")
 
+    def _on_patient_selected(self, text):
+        """When user picks from the completer popup, lock in the selection."""
+        idx = self.patient_combo.findText(text, Qt.MatchFlag.MatchExactly)
+        if idx >= 0:
+            self.patient_combo.blockSignals(True)
+            self.patient_combo.setCurrentIndex(idx)
+            self.patient_combo.blockSignals(False)
+            self._selected_patient_text = text
+            self._selected_patient_id = self.patient_combo.itemData(idx)
+
+    def _get_patient_id(self):
+        """Return the patient_id for the current selection, resolving typed text."""
+        # If combo index is valid, use it directly
+        pid = self.patient_combo.currentData()
+        if pid is not None:
+            return pid
+        # Try to match typed text to a patient
+        text = self.patient_combo.currentText().strip()
+        idx = self.patient_combo.findText(text, Qt.MatchFlag.MatchExactly)
+        if idx >= 0:
+            return self.patient_combo.itemData(idx)
+        # Fall back to last confirmed selection if text still matches
+        if text and text == self._selected_patient_text:
+            return self._selected_patient_id
+        return None
+
     def _validate_and_accept(self):
         # Ensure patient exists in the system
-        patient_id = self.patient_combo.currentData()
         patient_text = self.patient_combo.currentText().strip()
+        patient_id = self._get_patient_id()
         if not patient_text:
             QMessageBox.warning(self, "Missing Patient",
                 "Please select a patient.")
@@ -194,7 +227,7 @@ class AppointmentDialog(QDialog):
     def get_data(self) -> dict:
         return {
             "patient_name": self.patient_combo.currentText(),
-            "patient_id": self.patient_combo.currentData(),
+            "patient_id": self._get_patient_id(),
             "doctor": self.doctor_combo.currentText(),
             "doctor_id": self.doctor_combo.currentData(),
             "date": self.date_edit.date().toString("yyyy-MM-dd"),

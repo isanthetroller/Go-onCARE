@@ -6,15 +6,23 @@ from PyQt6.QtWidgets import (
     QDialog, QFormLayout, QLineEdit, QTextEdit, QComboBox,
     QDialogButtonBox, QTableWidget, QTableWidgetItem, QHeaderView,
     QVBoxLayout, QHBoxLayout, QLabel, QWidget, QTabWidget,
-    QDateEdit, QListWidget, QListWidgetItem, QCheckBox, QMessageBox,
+    QDateEdit, QCheckBox, QMessageBox, QFrame, QScrollArea,
+    QGridLayout,
 )
-from PyQt6.QtCore import Qt, QDate
+from PyQt6.QtCore import Qt, QDate, QEvent
 from ui.styles import configure_table, style_dialog_btns
 
 
 # ── Patient Add/Edit Dialog ───────────────────────────────────────────
 class PatientDialog(QDialog):
     """Add / Edit patient dialog with emergency contact, blood type, condition picker."""
+
+    _INPUT_STYLE = (
+        "QLineEdit, QTextEdit { padding: 10px 14px; border: 2px solid #BADFE7;"
+        " border-radius: 10px; font-size: 13px; background-color: #FFFFFF;"
+        " color: #2C3E50; }"
+        "QLineEdit:focus, QTextEdit:focus { border: 2px solid #388087; }"
+    )
 
     def __init__(self, parent=None, *, title="Add New Patient", data=None, backend=None):
         super().__init__(parent)
@@ -33,8 +41,41 @@ class PatientDialog(QDialog):
         self.dob_edit.setDate(QDate.currentDate()); self.dob_edit.setObjectName("formCombo")
         self.dob_edit.setMaximumDate(QDate.currentDate())
         self.dob_edit.setDisplayFormat("MMMM d, yyyy")
-        self.phone_edit = self._input("+639XXXXXXXXX")
-        self.phone_edit.setMaxLength(13)
+
+        # Phone: container frame with +63 prefix (matches employee dialog)
+        self._phone_frame = QFrame()
+        self._phone_frame.setObjectName("phoneFrame")
+        self._phone_normal_ss = (
+            "QFrame#phoneFrame { border: 2px solid #BADFE7; border-radius: 10px;"
+            " background: #FFFFFF; }"
+        )
+        self._phone_focus_ss = (
+            "QFrame#phoneFrame { border: 2px solid #388087; border-radius: 10px;"
+            " background: #FFFFFF; }"
+        )
+        self._phone_frame.setStyleSheet(self._phone_normal_ss)
+        self._phone_frame.setFixedHeight(42)
+        phone_lay = QHBoxLayout(self._phone_frame)
+        phone_lay.setContentsMargins(0, 0, 0, 0)
+        phone_lay.setSpacing(0)
+        self._phone_prefix = QLabel("+63")
+        self._phone_prefix.setStyleSheet(
+            "QLabel { padding: 0px 10px; border: none;"
+            " font-size: 13px; font-weight: bold; background: #F0F7F8;"
+            " border-top-left-radius: 8px; border-bottom-left-radius: 8px;"
+            " color: #2C3E50; }"
+        )
+        self.phone_edit = QLineEdit()
+        self.phone_edit.setStyleSheet(
+            "QLineEdit { padding: 0px 14px; border: none;"
+            " font-size: 13px; background-color: transparent; color: #2C3E50; }"
+        )
+        self.phone_edit.setPlaceholderText("9XXXXXXXXX")
+        self.phone_edit.setMaxLength(10)
+        self.phone_edit.installEventFilter(self)
+        phone_lay.addWidget(self._phone_prefix)
+        phone_lay.addWidget(self.phone_edit, 1)
+
         self.email_edit = self._input("Email")
         self.emergency_edit = self._input("Emergency contact (name / phone)")
         self.blood_combo = QComboBox(); self.blood_combo.setObjectName("formCombo")
@@ -50,10 +91,24 @@ class PatientDialog(QDialog):
                 f"{dt['type_name']} ({float(dt['discount_percent']):.0f}%)",
                 dt['discount_id'])
 
-        # Condition picker
-        self.cond_list = QListWidget()
-        self.cond_list.setMaximumHeight(120)
-        self._load_standard_conditions(data)
+        # Condition picker – styled checkboxes in a scrollable frame
+        self._cond_checkboxes = []
+        self._cond_frame = QFrame()
+        self._cond_frame.setStyleSheet(
+            "QFrame { border: 2px solid #BADFE7; border-radius: 10px;"
+            " background: #F6F6F2; }"
+        )
+        cond_grid = QGridLayout(self._cond_frame)
+        cond_grid.setContentsMargins(12, 10, 12, 10)
+        cond_grid.setSpacing(6)
+        self._load_standard_conditions(data, cond_grid)
+        cond_scroll = QScrollArea()
+        cond_scroll.setWidget(self._cond_frame)
+        cond_scroll.setWidgetResizable(True)
+        cond_scroll.setMaximumHeight(130)
+        cond_scroll.setStyleSheet(
+            "QScrollArea { border: none; background: transparent; }"
+        )
         self.cond_custom = self._input("Other conditions (comma-separated)")
 
         self.status_combo = QComboBox(); self.status_combo.setObjectName("formCombo")
@@ -64,12 +119,12 @@ class PatientDialog(QDialog):
         form.addRow("Full Name", self.name_edit)
         form.addRow("Sex", self.sex_combo)
         form.addRow("Date of Birth", self.dob_edit)
-        form.addRow("Phone", self.phone_edit)
+        form.addRow("Phone", self._phone_frame)
         form.addRow("Email", self.email_edit)
         form.addRow("Emergency Contact", self.emergency_edit)
         form.addRow("Blood Type", self.blood_combo)
         form.addRow("Discount Category", self.discount_combo)
-        form.addRow("Conditions", self.cond_list)
+        form.addRow("Conditions", cond_scroll)
         form.addRow("Other Conditions", self.cond_custom)
         form.addRow("Status", self.status_combo)
         form.addRow("Notes", self.notes_edit)
@@ -84,7 +139,10 @@ class PatientDialog(QDialog):
             self.name_edit.setText(data.get("name", ""))
             idx = self.sex_combo.findText(data.get("sex", "Male"))
             if idx >= 0: self.sex_combo.setCurrentIndex(idx)
-            self.phone_edit.setText(data.get("phone", ""))
+            raw_phone = data.get("phone", "")
+            if raw_phone.startswith("+63"):
+                raw_phone = raw_phone[3:]
+            self.phone_edit.setText(raw_phone)
             self.email_edit.setText(data.get("email", ""))
             self.emergency_edit.setText(data.get("emergency_contact", ""))
             bidx = self.blood_combo.findText(data.get("blood_type", "Unknown"))
@@ -100,33 +158,43 @@ class PatientDialog(QDialog):
             if sidx >= 0: self.status_combo.setCurrentIndex(sidx)
             self.notes_edit.setPlainText(data.get("notes", ""))
 
-    def _load_standard_conditions(self, data):
+    _CB_STYLE = (
+        "QCheckBox { font-size: 13px; color: #2C3E50; spacing: 8px;"
+        " padding: 4px 6px; border: none; background: transparent; }"
+        "QCheckBox::indicator { width: 18px; height: 18px;"
+        " border: 2px solid #BADFE7; border-radius: 4px; background: #FFFFFF; }"
+        "QCheckBox::indicator:checked { background: #388087;"
+        " border-color: #388087;"
+        " image: none; }"
+        "QCheckBox::indicator:hover { border-color: #388087; }"
+    )
+
+    def _load_standard_conditions(self, data, grid):
         existing = set()
         if data and data.get("conditions"):
             existing = {c.strip() for c in data["conditions"].split(",") if c.strip()}
         std = self._backend.get_standard_conditions() if self._backend else []
         std_names = {c["condition_name"] for c in std}
-        for c in std:
-            item = QListWidgetItem(c["condition_name"])
-            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            item.setCheckState(Qt.CheckState.Checked if c["condition_name"] in existing else Qt.CheckState.Unchecked)
-            self.cond_list.addItem(item)
+        cols = 2
+        for i, c in enumerate(std):
+            cb = QCheckBox(c["condition_name"])
+            cb.setStyleSheet(self._CB_STYLE)
+            cb.setCursor(Qt.CursorShape.PointingHandCursor)
+            cb.setChecked(c["condition_name"] in existing)
+            grid.addWidget(cb, i // cols, i % cols)
+            self._cond_checkboxes.append(cb)
         leftover = existing - std_names
         if leftover and hasattr(self, 'cond_custom'):
             self.cond_custom.setText(", ".join(sorted(leftover)))
 
     def get_data(self) -> dict:
-        checked = []
-        for i in range(self.cond_list.count()):
-            item = self.cond_list.item(i)
-            if item.checkState() == Qt.CheckState.Checked:
-                checked.append(item.text())
+        checked = [cb.text() for cb in self._cond_checkboxes if cb.isChecked()]
         custom = [c.strip() for c in self.cond_custom.text().split(",") if c.strip()]
         all_conds = ", ".join(checked + custom)
         return {
             "name": self.name_edit.text(),
             "sex": self.sex_combo.currentText(),
-            "phone": self.phone_edit.text(),
+            "phone": "+63" + self.phone_edit.text().strip(),
             "email": self.email_edit.text(),
             "emergency_contact": self.emergency_edit.text(),
             "blood_type": self.blood_combo.currentText(),
@@ -142,13 +210,21 @@ class PatientDialog(QDialog):
         le.setObjectName("formInput"); le.setMinimumHeight(38); le.setMinimumWidth(320)
         return le
 
+    def eventFilter(self, obj, event):
+        if obj is self.phone_edit:
+            if event.type() == QEvent.Type.FocusIn:
+                self._phone_frame.setStyleSheet(self._phone_focus_ss)
+            elif event.type() == QEvent.Type.FocusOut:
+                self._phone_frame.setStyleSheet(self._phone_normal_ss)
+        return super().eventFilter(obj, event)
+
     def accept(self):
         import re
-        phone = self.phone_edit.text().strip()
-        if phone and not re.match(r'^\+63\d{10}$', phone):
+        digits = self.phone_edit.text().strip()
+        if digits and not re.match(r'^\d{10}$', digits):
             QMessageBox.warning(self, "Validation",
-                                "Phone must be in Philippine format: +63 followed by 10 digits\n"
-                                "Example: +639171234567")
+                                "Enter exactly 10 digits after +63\n"
+                                "Example: 9171234567")
             return
         super().accept()
 
