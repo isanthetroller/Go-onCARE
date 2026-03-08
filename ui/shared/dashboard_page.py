@@ -64,7 +64,11 @@ class DashboardPage(QWidget):
         for text, pi in quick_actions:
             if self._role == "Doctor" and pi in (1, 2):
                 continue
-            if self._role in ("HR", "Cashier") and pi in (1, 2, 3, 4):
+            if self._role == "HR" and pi in (1, 2, 3, 4):
+                continue
+            if self._role == "Cashier" and pi in (1, 4):
+                continue
+            if self._role == "Receptionist" and pi == 4:
                 continue
             btn = QPushButton(text)
             btn.setObjectName("actionBtn")
@@ -277,31 +281,33 @@ class DashboardPage(QWidget):
         s = self._backend.get_dashboard_summary() if self._backend else {}
         cmp = self._backend.get_period_comparison() if self._backend else {}
 
-        today_appts = s.get("today_appts", 0)
-        self._kpi_labels["today_appts"].setText(str(today_appts))
-        appts_delta = cmp.get("appts_delta", 0)
-        if appts_delta is not None and appts_delta != 0:
-            arrow = "▲" if appts_delta >= 0 else "▼"
-            clr = "#5CB85C" if appts_delta >= 0 else "#D9534F"
-            self._kpi_labels["today_appts_sub"].setText(
-                f"{arrow} {abs(appts_delta):.1f}% vs last month")
-            self._kpi_labels["today_appts_sub"].setStyleSheet(
-                f"color: {clr}; font-size: 11px; font-weight: bold;")
-        else:
-            self._kpi_labels["today_appts_sub"].setText("")
+        if "today_appts" in self._kpi_labels:
+            today_appts = s.get("today_appts", 0)
+            self._kpi_labels["today_appts"].setText(str(today_appts))
+            appts_delta = cmp.get("appts_delta", 0)
+            if appts_delta is not None and appts_delta != 0:
+                arrow = "▲" if appts_delta >= 0 else "▼"
+                clr = "#5CB85C" if appts_delta >= 0 else "#D9534F"
+                self._kpi_labels["today_appts_sub"].setText(
+                    f"{arrow} {abs(appts_delta):.1f}% vs last month")
+                self._kpi_labels["today_appts_sub"].setStyleSheet(
+                    f"color: {clr}; font-size: 11px; font-weight: bold;")
+            else:
+                self._kpi_labels["today_appts_sub"].setText("")
 
-        pts = s.get("active_patients", 0)
-        self._kpi_labels["active_patients"].setText(f"{pts:,}")
-        pts_delta = cmp.get("patients_delta", 0)
-        if pts_delta is not None and pts_delta != 0:
-            arrow = "▲" if pts_delta >= 0 else "▼"
-            clr = "#5CB85C" if pts_delta >= 0 else "#D9534F"
-            self._kpi_labels["active_patients_sub"].setText(
-                f"{arrow} {abs(pts_delta):.1f}% vs last month")
-            self._kpi_labels["active_patients_sub"].setStyleSheet(
-                f"color: {clr}; font-size: 11px; font-weight: bold;")
-        else:
-            self._kpi_labels["active_patients_sub"].setText("")
+        if "active_patients" in self._kpi_labels:
+            pts = s.get("active_patients", 0)
+            self._kpi_labels["active_patients"].setText(f"{pts:,}")
+            pts_delta = cmp.get("patients_delta", 0)
+            if pts_delta is not None and pts_delta != 0:
+                arrow = "▲" if pts_delta >= 0 else "▼"
+                clr = "#5CB85C" if pts_delta >= 0 else "#D9534F"
+                self._kpi_labels["active_patients_sub"].setText(
+                    f"{arrow} {abs(pts_delta):.1f}% vs last month")
+                self._kpi_labels["active_patients_sub"].setStyleSheet(
+                    f"color: {clr}; font-size: 11px; font-weight: bold;")
+            else:
+                self._kpi_labels["active_patients_sub"].setText("")
 
         rev = s.get("today_revenue", 0)
         self._kpi_labels["today_revenue"].setText(f"\u20B1 {rev:,.0f}")

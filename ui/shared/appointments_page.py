@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView,
-    QComboBox, QDialog, QMessageBox,
+    QComboBox, QDialog, QMessageBox, QInputDialog,
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor, QFont
@@ -324,17 +324,16 @@ class AppointmentsPage(QWidget):
         patient = appt.get("patient_name", "")
         if not self._backend or not appt_id:
             return
-        reply = QMessageBox.question(
+        reason, ok = QInputDialog.getMultiLineText(
             self, "Cancel Appointment",
-            f"Cancel appointment for {patient}?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-        if reply == QMessageBox.StandardButton.Yes:
-            ok = self._backend.exec(
-                "UPDATE appointments SET status='Cancelled' WHERE appointment_id=%s",
-                (appt_id,))
-            if ok:
-                self._backend.log_activity("Edited", "Appointment",
-                    f"Cancelled appt #{appt_id} for {patient}")
-                self._load_from_db(); self._refresh_table()
-                QMessageBox.information(self, "Cancelled",
-                    f"Appointment for {patient} has been cancelled.")
+            f"Reason for cancelling {patient}'s appointment:", "")
+        if not ok:
+            return
+        self._backend.exec(
+            "UPDATE appointments SET status='Cancelled', cancellation_reason=%s WHERE appointment_id=%s",
+            (reason.strip(), appt_id))
+        self._backend.log_activity("Edited", "Appointment",
+            f"Cancelled appt #{appt_id} for {patient}")
+        self._load_from_db(); self._refresh_table()
+        QMessageBox.information(self, "Cancelled",
+            f"Appointment for {patient} has been cancelled.")

@@ -101,6 +101,22 @@ class ClinicalMixin:
                 pass
             return False
 
+    def complete_appointment_from_queue(self, queue_id):
+        """Mark the appointment linked to a queue entry as Completed."""
+        row = self.fetch("SELECT appointment_id FROM queue_entries WHERE queue_id=%s", (queue_id,), one=True)
+        if row and row.get("appointment_id"):
+            return self.exec("UPDATE appointments SET status='Completed' WHERE appointment_id=%s",
+                             (row["appointment_id"],))
+        return False
+
+    def cancel_appointment_from_queue(self, queue_id):
+        """Mark the appointment linked to a queue entry as Cancelled."""
+        row = self.fetch("SELECT appointment_id FROM queue_entries WHERE queue_id=%s", (queue_id,), one=True)
+        if row and row.get("appointment_id"):
+            return self.exec("UPDATE appointments SET status='Cancelled' WHERE appointment_id=%s",
+                             (row["appointment_id"],))
+        return False
+
     def sync_today_appointments_to_queue(self):
         try:
             conn = self._get_connection()
@@ -155,6 +171,14 @@ class ClinicalMixin:
             return {}
 
     def get_avg_consultation_minutes(self):
+        row = self.fetch("""
+            SELECT AVG(TIMESTAMPDIFF(MINUTE, q.queue_time, q.updated_at)) AS avg_min
+            FROM queue_entries q
+            WHERE q.status = 'Completed' AND q.created_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+              AND q.updated_at IS NOT NULL
+        """, one=True)
+        if row and row.get("avg_min"):
+            return max(5, int(row["avg_min"]))
         return 15
 
     # ── Invoices ───────────────────────────────────────────────────────

@@ -3,7 +3,8 @@
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QStackedWidget, QFrame, QSpacerItem, QSizePolicy,
-    QGraphicsDropShadowEffect, QMessageBox,
+    QGraphicsDropShadowEffect, QMessageBox, QLineEdit, QDialog,
+    QTableWidget, QTableWidgetItem, QHeaderView,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QTimer
 from PyQt6.QtGui import QFont, QColor, QAction
@@ -35,10 +36,10 @@ _ALL_NAV = [
 _ROLE_ACCESS = {
     "Admin":        {"Dashboard", "Patients", "Appointments", "Clinical & POS",
                      "Data Analytics", "Employees", "Activity Log", "Settings"},
-    "HR":           {"Dashboard", "Employees", "Activity Log"},
-    "Doctor":       {"Dashboard", "Patients", "Appointments", "Clinical & POS", "Data Analytics"},
-    "Cashier":      {"Dashboard", "Patients", "Appointments", "Clinical & POS"},
-    "Receptionist": {"Dashboard", "Patients", "Appointments", "Clinical & POS"},
+    "HR":           {"Dashboard", "Employees", "Activity Log", "Settings"},
+    "Doctor":       {"Dashboard", "Patients", "Appointments", "Clinical & POS", "Data Analytics", "Settings"},
+    "Cashier":      {"Dashboard", "Patients", "Appointments", "Clinical & POS", "Settings"},
+    "Receptionist": {"Dashboard", "Patients", "Appointments", "Clinical & POS", "Settings"},
 }
 
 
@@ -241,6 +242,14 @@ class MainWindow(QMainWindow):
         lay.addWidget(self._top_title)
         lay.addStretch()
 
+        self._search_bar = QLineEdit()
+        self._search_bar.setObjectName("searchBar")
+        self._search_bar.setPlaceholderText("🔍  Search patients, appointments, staff…")
+        self._search_bar.setFixedWidth(320)
+        self._search_bar.setMinimumHeight(36)
+        self._search_bar.returnPressed.connect(self._on_global_search)
+        lay.addWidget(self._search_bar)
+
         return bar
 
     def _nav_to_page(self, stack_idx: int):
@@ -390,3 +399,65 @@ class MainWindow(QMainWindow):
                     getattr(page, method)()
                 except Exception:
                     pass
+
+    def _on_global_search(self):
+        query = self._search_bar.text().strip()
+        if len(query) < 2:
+            return
+        include_emp = self._role in ("Admin", "HR")
+        results = self._backend.global_search(query, include_employees=include_emp)
+        patients = results.get("patients", [])
+        appts = results.get("appointments", [])
+        employees = results.get("employees", [])
+        total = len(patients) + len(appts) + len(employees)
+        if total == 0:
+            QMessageBox.information(self, "Search", f"No results for \"{query}\".")
+            return
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Search Results — \"{query}\"")
+        dlg.setMinimumSize(640, 420)
+        lay = QVBoxLayout(dlg); lay.setSpacing(12); lay.setContentsMargins(16, 16, 16, 16)
+        if patients:
+            lay.addWidget(QLabel(f"Patients ({len(patients)})"))
+            tbl = QTableWidget(len(patients), 4)
+            tbl.setHorizontalHeaderLabels(["ID", "Name", "Phone", "Status"])
+            tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+            tbl.verticalHeader().setVisible(False)
+            tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+            for r, p in enumerate(patients):
+                tbl.setItem(r, 0, QTableWidgetItem(f"PT-{p['patient_id']:04d}"))
+                tbl.setItem(r, 1, QTableWidgetItem(p.get("name", "")))
+                tbl.setItem(r, 2, QTableWidgetItem(p.get("phone", "") or ""))
+                tbl.setItem(r, 3, QTableWidgetItem(p.get("status", "")))
+            tbl.setMaximumHeight(min(len(patients) * 36 + 36, 200))
+            lay.addWidget(tbl)
+        if appts:
+            lay.addWidget(QLabel(f"Appointments ({len(appts)})"))
+            tbl = QTableWidget(len(appts), 4)
+            tbl.setHorizontalHeaderLabels(["ID", "Patient", "Date", "Status"])
+            tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+            tbl.verticalHeader().setVisible(False)
+            tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+            for r, a in enumerate(appts):
+                tbl.setItem(r, 0, QTableWidgetItem(str(a.get("appointment_id", ""))))
+                tbl.setItem(r, 1, QTableWidgetItem(a.get("patient_name", "")))
+                d = a.get("appointment_date", "")
+                tbl.setItem(r, 2, QTableWidgetItem(str(d)))
+                tbl.setItem(r, 3, QTableWidgetItem(a.get("status", "")))
+            tbl.setMaximumHeight(min(len(appts) * 36 + 36, 200))
+            lay.addWidget(tbl)
+        if employees:
+            lay.addWidget(QLabel(f"Employees ({len(employees)})"))
+            tbl = QTableWidget(len(employees), 3)
+            tbl.setHorizontalHeaderLabels(["ID", "Name", "Email"])
+            tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+            tbl.verticalHeader().setVisible(False)
+            tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+            for r, e in enumerate(employees):
+                tbl.setItem(r, 0, QTableWidgetItem(str(e.get("employee_id", ""))))
+                tbl.setItem(r, 1, QTableWidgetItem(e.get("name", "")))
+                tbl.setItem(r, 2, QTableWidgetItem(e.get("email", "")))
+            tbl.setMaximumHeight(min(len(employees) * 36 + 36, 200))
+            lay.addWidget(tbl)
+        lay.addStretch()
+        dlg.exec()

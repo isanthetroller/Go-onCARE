@@ -327,8 +327,12 @@ class ClinicalPage(QWidget):
             return
         qid = self._queue_ids[row]
         patient = self._queue_table.item(row, 1).text() if self._queue_table.item(row, 1) else ""
-        self._backend.update_queue_entry(qid, {"status": "Completed", "purpose": self._queue_table.item(row, 4).text() if self._queue_table.item(row, 4) else ""})
+        purpose = self._queue_table.item(row, 4).text() if self._queue_table.item(row, 4) else ""
+        self._backend.update_queue_entry(qid, {"status": "Completed", "purpose": purpose})
         invoiced = self._backend.create_invoice_from_queue(qid)
+        # If invoice creation failed (no appointment linked), still mark appointment completed
+        if not invoiced:
+            self._backend.complete_appointment_from_queue(qid)
         self._load_queue()
         msg = f"{patient}'s consultation marked as completed."
         if invoiced:
@@ -345,6 +349,7 @@ class ClinicalPage(QWidget):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
             self._backend.update_queue_entry(qid, {"status": "Cancelled", "purpose": self._queue_table.item(row, 4).text() if self._queue_table.item(row, 4) else ""})
+            self._backend.cancel_appointment_from_queue(qid)
             self._load_queue()
 
     # ══════════════════════════════════════════════════════════════
@@ -567,8 +572,6 @@ class ClinicalPage(QWidget):
         discount_amount = raw_subtotal - total_amount
 
         balance = total_amount - amount_paid
-        # If fully paid, the change is whatever was overpaid (stored as amount_paid == total)
-        change = max(0, amount_paid - total_amount) if info.get("status") == "Paid" else 0
 
         w = 48  # receipt width
         lines = [
@@ -610,9 +613,6 @@ class ClinicalPage(QWidget):
 
         if balance > 0:
             lines.append(f"  {'BALANCE DUE':<28} ₱{balance:>12,.2f}")
-
-        if change > 0:
-            lines.append(f"  {'CHANGE':<28} ₱{change:>12,.2f}")
 
         lines += [
             f"  Status: {info.get('status', '')}",

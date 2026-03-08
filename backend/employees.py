@@ -348,6 +348,13 @@ class EmployeeMixin:
                     "UPDATE employees SET status='On Leave', leave_from=%s, leave_until=%s "
                     "WHERE employee_id=%s",
                     (req["leave_from"], req["leave_until"], emp_id))
+                # Cancel confirmed appointments during leave period
+                cur.execute(
+                    "UPDATE appointments SET status='Cancelled', "
+                    "cancellation_reason='Doctor on approved leave' "
+                    "WHERE doctor_id=%s AND appointment_date BETWEEN %s AND %s "
+                    "AND status IN ('Pending','Confirmed')",
+                    (emp_id, req["leave_from"], req["leave_until"]))
                 emp_name = self._get_employee_name(emp_id) or str(emp_id)
                 # Create notification for employee
                 msg = (f"Your leave request ({req['leave_from']} to {req['leave_until']}) "
@@ -421,7 +428,7 @@ class EmployeeMixin:
         """Restore employees to Active whose leave_until date has passed."""
         ok = self.exec(
             "UPDATE employees SET status='Active', leave_from=NULL, leave_until=NULL "
-            "WHERE status='On Leave' AND leave_until IS NOT NULL AND leave_until < CURDATE()")
+            "WHERE status='On Leave' AND leave_until IS NOT NULL AND leave_until <= CURDATE()")
         if ok:
             self.log_activity("Edited", "Employee", "Auto-expired past-due leave(s), restored to Active")
         return ok

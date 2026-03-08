@@ -67,6 +67,13 @@ class SettingsPage(QWidget):
         pl.addLayout(pw_row)
         lay.addWidget(prof_card)
 
+        # ── Admin-only sections below ─────────────────────────────
+        if self._role != "Admin":
+            lay.addStretch()
+            finish_page(self, scroll)
+            self.counts_table = None
+            return
+
         # ── Discount Management ────────────────────────────────────
         lay.addWidget(self._section("Discount Management"))
         disc_card = self._card()
@@ -199,7 +206,7 @@ class SettingsPage(QWidget):
             QMessageBox.warning(self, "Error", msg)
 
     def _refresh_counts(self):
-        if not self.isVisible() or not self._backend:
+        if not self.isVisible() or not self._backend or not self.counts_table:
             return
         counts = self._backend.get_table_counts()
         self.counts_table.setRowCount(len(counts))

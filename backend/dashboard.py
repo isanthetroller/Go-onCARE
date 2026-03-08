@@ -65,11 +65,14 @@ class DashboardMixin:
         """, (limit,))
 
     def get_patient_stats_monthly(self, months=6):
-        return self.fetch("""
+        rows = self.fetch("""
             SELECT MONTHNAME(appointment_date) AS month_label,
-                   DATE_FORMAT(appointment_date, '%%Y-%%m') AS sort_key,
+                   DATE_FORMAT(appointment_date, '%Y-%m') AS sort_key,
                    COUNT(*) AS visit_count
             FROM appointments
-            WHERE appointment_date >= DATE_SUB(CURDATE(), INTERVAL %s MONTH)
+            WHERE appointment_date >= DATE_FORMAT(CURDATE() - INTERVAL %s MONTH, '%Y-%m-01')
             GROUP BY sort_key, month_label ORDER BY sort_key
-        """, (months,))
+        """, (months - 1,))
+        from backend.analytics import AnalyticsMixin
+        return AnalyticsMixin._fill_months(rows or [], months,
+            {"visit_count": 0})

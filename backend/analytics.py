@@ -1,18 +1,50 @@
 # Analytics - revenue, performance, charts data
 
+from datetime import date, timedelta
+import calendar
+
 
 class AnalyticsMixin:
 
+    @staticmethod
+    def _fill_months(rows, months, defaults, label_key="month_label", sort_key="sort_key"):
+        """Ensure the result list has one entry per month for the last *months* months,
+        filling missing months with *defaults* dict values."""
+        today = date.today()
+        slots = []
+        for i in range(months - 1, -1, -1):
+            # go back i months from today
+            y = today.year
+            m = today.month - i
+            while m <= 0:
+                m += 12; y -= 1
+            sk = f"{y:04d}-{m:02d}"
+            ml = f"{calendar.month_name[m]} {y}"
+            slots.append((sk, ml))
+        lookup = {r[sort_key]: r for r in rows}
+        result = []
+        for sk, ml in slots:
+            if sk in lookup:
+                result.append(lookup[sk])
+            else:
+                entry = dict(defaults)
+                entry[sort_key] = sk
+                entry[label_key] = ml
+                result.append(entry)
+        return result
+
     def get_monthly_revenue(self, months=6):
-        return self.fetch("""
+        rows = self.fetch("""
             SELECT DATE_FORMAT(i.created_at, '%M %Y') AS month_label,
                    DATE_FORMAT(i.created_at, '%Y-%m') AS sort_key,
                    COUNT(DISTINCT i.invoice_id) AS appointment_count,
                    COALESCE(SUM(i.amount_paid),0) AS total_revenue
             FROM invoices i WHERE i.status IN ('Paid','Partial')
-              AND i.created_at >= DATE_SUB(CURDATE(), INTERVAL %s MONTH)
+              AND i.created_at >= DATE_FORMAT(CURDATE() - INTERVAL %s MONTH, '%Y-%m-01')
             GROUP BY sort_key, month_label ORDER BY sort_key
-        """, (months,))
+        """, (months - 1,))
+        return self._fill_months(rows or [], months,
+            {"appointment_count": 0, "total_revenue": 0})
 
     def get_doctor_performance(self):
         return self.fetch("""
@@ -55,10 +87,12 @@ class AnalyticsMixin:
             INNER JOIN employees e ON a.doctor_id = e.employee_id
             LEFT JOIN services s ON a.service_id = s.service_id
             WHERE e.email = %s
-              AND a.appointment_date >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+              AND a.appointment_date >= DATE_FORMAT(CURDATE() - INTERVAL 5 MONTH, '%Y-%m-01')
             GROUP BY sort_key, month_label ORDER BY sort_key
         """, (email,))
-        return {"performance": perf or {}, "monthly": monthly or []}
+        filled = self._fill_months(monthly or [], 6,
+            {"total_appointments": 0, "completed": 0, "revenue": 0})
+        return {"performance": perf or {}, "monthly": filled}
 
     def get_top_services(self):
         return self.fetch("""
@@ -105,18 +139,20 @@ class AnalyticsMixin:
         return row["c"] if row else 0
 
     def get_monthly_appointment_stats(self, months=6):
-        return self.fetch("""
+        rows = self.fetch("""
             SELECT DATE_FORMAT(appointment_date, '%M %Y') AS month_label,
                    DATE_FORMAT(appointment_date, '%Y-%m') AS sort_key,
                    COUNT(*) AS total_visits,
                    SUM(CASE WHEN status='Completed' THEN 1 ELSE 0 END) AS completed,
                    SUM(CASE WHEN status='Cancelled' THEN 1 ELSE 0 END) AS cancelled
-            FROM appointments WHERE appointment_date >= DATE_SUB(CURDATE(), INTERVAL %s MONTH)
+            FROM appointments WHERE appointment_date >= DATE_FORMAT(CURDATE() - INTERVAL %s MONTH, '%Y-%m-01')
             GROUP BY sort_key, month_label ORDER BY sort_key
-        """, (months,))
+        """, (months - 1,))
+        return self._fill_months(rows or [], months,
+            {"total_visits": 0, "completed": 0, "cancelled": 0})
 
     def get_patient_retention(self, months=6):
-        return self.fetch("""
+        rows = self.fetch("""
             SELECT DATE_FORMAT(a.appointment_date, '%M %Y') AS month_label,
                    DATE_FORMAT(a.appointment_date, '%Y-%m') AS sort_key,
                    COUNT(DISTINCT CASE WHEN a.appointment_date = (
@@ -126,20 +162,24 @@ class AnalyticsMixin:
                        SELECT MIN(a2.appointment_date) FROM appointments a2 WHERE a2.patient_id = a.patient_id
                    ) THEN a.patient_id END) AS returning_patients
             FROM appointments a
-            WHERE a.appointment_date >= DATE_SUB(CURDATE(), INTERVAL %s MONTH)
+            WHERE a.appointment_date >= DATE_FORMAT(CURDATE() - INTERVAL %s MONTH, '%Y-%m-01')
             GROUP BY sort_key, month_label ORDER BY sort_key
-        """, (months,))
+        """, (months - 1,))
+        return self._fill_months(rows or [], months,
+            {"new_patients": 0, "returning_patients": 0})
 
     def get_cancellation_rate_trend(self, months=6):
-        return self.fetch("""
+        rows = self.fetch("""
             SELECT DATE_FORMAT(appointment_date, '%M %Y') AS month_label,
                    DATE_FORMAT(appointment_date, '%Y-%m') AS sort_key,
                    COUNT(*) AS total,
                    SUM(CASE WHEN status='Cancelled' THEN 1 ELSE 0 END) AS cancelled,
                    ROUND(SUM(CASE WHEN status='Cancelled' THEN 1 ELSE 0 END)/COUNT(*)*100, 1) AS rate
-            FROM appointments WHERE appointment_date >= DATE_SUB(CURDATE(), INTERVAL %s MONTH)
+            FROM appointments WHERE appointment_date >= DATE_FORMAT(CURDATE() - INTERVAL %s MONTH, '%Y-%m-01')
             GROUP BY sort_key, month_label ORDER BY sort_key
-        """, (months,))
+        """, (months - 1,))
+        return self._fill_months(rows or [], months,
+            {"total": 0, "cancelled": 0, "rate": 0})
 
     def get_summary_stats(self, from_date=None, to_date=None):
         defaults = {"period_revenue": 0, "total_appts": 0, "completed": 0,

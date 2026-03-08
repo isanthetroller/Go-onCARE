@@ -168,13 +168,13 @@ class PatientsPage(QWidget):
             if self._role != "Cashier":
                 view_btn = make_table_btn("View")
                 view_btn.clicked.connect(lambda checked, ri=r: self._on_view(ri))
-                del_btn = make_table_btn_danger("Del")
-                del_btn.clicked.connect(lambda checked, ri=r: self._on_delete(ri))
                 if self._role == "Doctor":
-                    self.table.setCellWidget(r, len(values), make_action_cell(view_btn, del_btn))
+                    self.table.setCellWidget(r, len(values), make_action_cell(view_btn))
                 else:
                     edit_btn = make_table_btn("Edit")
                     edit_btn.clicked.connect(lambda checked, ri=r: self._on_edit(ri))
+                    del_btn = make_table_btn_danger("Del")
+                    del_btn.clicked.connect(lambda checked, ri=r: self._on_delete(ri))
                     self.table.setCellWidget(r, len(values), make_action_cell(view_btn, edit_btn, del_btn))
         self.table.setSortingEnabled(True)
 
