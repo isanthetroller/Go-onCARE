@@ -11,7 +11,8 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor, QFont
 from ui.styles import (
     make_page_layout, finish_page, make_banner, make_read_only_table,
-    make_action_table, make_table_btn, format_timedelta, status_color,
+    make_action_table, make_table_btn, make_table_btn_danger,
+    format_timedelta, status_color,
     TAB_ACTIVE, TAB_INACTIVE, make_action_cell,
 )
 from ui.shared.appointment_dialog import (
@@ -30,6 +31,7 @@ class AppointmentsPage(QWidget):
         self._role = role
         self._user_email = user_email
         self._patient_names: list[str] = []
+        self._patients: list[dict] = []
         self._active_tab = "Today"
         self._tab_buttons: dict[str, QPushButton] = {}
         self._all_appointments: list[dict] = []
@@ -42,6 +44,9 @@ class AppointmentsPage(QWidget):
 
     def set_patient_names(self, names: list[str]):
         self._patient_names = names
+
+    def set_patients(self, patients: list[dict]):
+        self._patients = patients
 
     def _load_from_db(self):
         if not self.isVisible():
@@ -61,6 +66,7 @@ class AppointmentsPage(QWidget):
             appt["appointment_time"] = format_timedelta(t) + ":00" if hasattr(t, "total_seconds") else (
                 t.strftime("%H:%M:%S") if hasattr(t, "strftime") else str(t) if t else "")
         self._update_doctor_filter()
+        self._refresh_table()
 
     def _update_doctor_filter(self):
         current = self.doc_filter.currentText()
@@ -117,7 +123,8 @@ class AppointmentsPage(QWidget):
         if self._role != "Doctor": cols.append("Billing")
         if self._role != "Cashier": cols.append("Actions")
         if self._role != "Cashier":
-            self.table = make_action_table(cols, action_col_width=100)
+            action_w = 210 if self._role == "Doctor" else 100
+            self.table = make_action_table(cols, action_col_width=action_w)
         else:
             self.table = make_read_only_table(cols)
         hdr = self.table.horizontalHeader()
@@ -186,9 +193,25 @@ class AppointmentsPage(QWidget):
                     item.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
                 self.table.setItem(r, c, item)
             if self._role != "Cashier":
-                edit_btn = make_table_btn("Edit")
-                edit_btn.clicked.connect(lambda checked, a=appt: self._on_edit(a))
-                self.table.setCellWidget(r, col_count - 1, make_action_cell(edit_btn))
+                if self._role == "Doctor":
+                    status = appt.get("status", "")
+                    btns = []
+                    view_btn = make_table_btn("View")
+                    view_btn.clicked.connect(lambda checked, a=appt: self._on_view(a))
+                    btns.append(view_btn)
+                    if status == "Pending":
+                        confirm_btn = make_table_btn("Confirm")
+                        confirm_btn.clicked.connect(lambda checked, a=appt: self._on_confirm(a))
+                        btns.append(confirm_btn)
+                    if status in ("Pending", "Confirmed"):
+                        cancel_btn = make_table_btn_danger("Cancel")
+                        cancel_btn.clicked.connect(lambda checked, a=appt: self._on_cancel(a))
+                        btns.append(cancel_btn)
+                    self.table.setCellWidget(r, col_count - 1, make_action_cell(*btns))
+                else:
+                    edit_btn = make_table_btn("Edit")
+                    edit_btn.clicked.connect(lambda checked, a=appt: self._on_edit(a))
+                    self.table.setCellWidget(r, col_count - 1, make_action_cell(edit_btn))
         self._summary_label.setText(f"Showing {len(rows)} appointment{'s' if len(rows)!=1 else ''}")
         self._apply_filters()
 
@@ -214,13 +237,13 @@ class AppointmentsPage(QWidget):
         doctors = self._backend.get_doctors() if self._backend else []
         services = self._backend.get_services_list() if self._backend else []
         dlg = AppointmentDialog(self, title="New Appointment",
-                                patient_names=self._patient_names,
+                                patients=self._patients,
                                 doctors=doctors, services=services, backend=self._backend,
                                 user_email=self._user_email, user_role=self._role)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             d = dlg.get_data()
-            if not d["patient_name"].strip():
-                QMessageBox.warning(self, "Validation", "Patient name is required."); return
+            if not d["patient_name"].strip() or d["patient_id"] is None:
+                QMessageBox.warning(self, "Validation", "Please select a patient from the list."); return
             if self._backend:
                 ok = self._backend.add_appointment(d)
                 if not ok:
@@ -240,12 +263,12 @@ class AppointmentsPage(QWidget):
         doctors = self._backend.get_doctors() if self._backend else []
         services = self._backend.get_services_list() if self._backend else []
         dlg = AppointmentDialog(self, title="Edit Appointment", data=data,
-                                patient_names=self._patient_names,
+                                patients=self._patients,
                                 doctors=doctors, services=services, backend=self._backend)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             d = dlg.get_data()
-            if not d["patient_name"].strip():
-                QMessageBox.warning(self, "Validation", "Patient name is required."); return
+            if not d["patient_name"].strip() or d["patient_id"] is None:
+                QMessageBox.warning(self, "Validation", "Please select a patient from the list."); return
             appt_id = appt.get("appointment_id")
             if self._backend and appt_id:
                 ok = self._backend.update_appointment(appt_id, d)
@@ -253,3 +276,65 @@ class AppointmentsPage(QWidget):
                     QMessageBox.warning(self, "Error", "Failed to update appointment."); return
             self._load_from_db(); self._refresh_table()
             QMessageBox.information(self, "Success", f"Appointment for '{d['patient_name']}' updated.")
+
+    def _on_view(self, appt: dict):
+        time_str = str(appt.get("appointment_time", ""))
+        try:
+            t = datetime.strptime(time_str, "%H:%M:%S"); time_display = t.strftime("%I:%M %p")
+        except Exception: time_display = time_str
+        info = (
+            f"Patient:  {appt.get('patient_name', '')}"
+            f"\nDoctor:   {appt.get('doctor_name', '')}"
+            f"\nDate:     {_pretty_date(str(appt.get('appointment_date', '')))}"
+            f"\nTime:     {time_display}"
+            f"\nService:  {appt.get('service_name', '')}"
+            f"\nStatus:   {appt.get('status', '')}"
+        )
+        notes = appt.get("notes", "") or ""
+        if notes:
+            info += f"\n\nNotes:\n{notes}"
+        cancel_reason = appt.get("cancellation_reason", "") or ""
+        if cancel_reason:
+            info += f"\n\nCancellation Reason:\n{cancel_reason}"
+        QMessageBox.information(self, "Appointment Details", info)
+
+    def _on_confirm(self, appt: dict):
+        appt_id = appt.get("appointment_id")
+        patient = appt.get("patient_name", "")
+        if not self._backend or not appt_id:
+            return
+        reply = QMessageBox.question(
+            self, "Confirm Appointment",
+            f"Confirm appointment for {patient}?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            ok = self._backend.exec(
+                "UPDATE appointments SET status='Confirmed' WHERE appointment_id=%s",
+                (appt_id,))
+            if ok:
+                self._backend.log_activity("Edited", "Appointment",
+                    f"Confirmed appt #{appt_id} for {patient}")
+                self._load_from_db(); self._refresh_table()
+                QMessageBox.information(self, "Confirmed",
+                    f"Appointment for {patient} confirmed.\n"
+                    "It will appear in the Clinical Queue on the appointment date.")
+
+    def _on_cancel(self, appt: dict):
+        appt_id = appt.get("appointment_id")
+        patient = appt.get("patient_name", "")
+        if not self._backend or not appt_id:
+            return
+        reply = QMessageBox.question(
+            self, "Cancel Appointment",
+            f"Cancel appointment for {patient}?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            ok = self._backend.exec(
+                "UPDATE appointments SET status='Cancelled' WHERE appointment_id=%s",
+                (appt_id,))
+            if ok:
+                self._backend.log_activity("Edited", "Appointment",
+                    f"Cancelled appt #{appt_id} for {patient}")
+                self._load_from_db(); self._refresh_table()
+                QMessageBox.information(self, "Cancelled",
+                    f"Appointment for {patient} has been cancelled.")

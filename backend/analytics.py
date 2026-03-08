@@ -5,8 +5,8 @@ class AnalyticsMixin:
 
     def get_monthly_revenue(self, months=6):
         return self.fetch("""
-            SELECT DATE_FORMAT(i.created_at, '%%M %%Y') AS month_label,
-                   DATE_FORMAT(i.created_at, '%%Y-%%m') AS sort_key,
+            SELECT DATE_FORMAT(i.created_at, '%M %Y') AS month_label,
+                   DATE_FORMAT(i.created_at, '%Y-%m') AS sort_key,
                    COUNT(DISTINCT i.invoice_id) AS appointment_count,
                    COALESCE(SUM(i.amount_paid),0) AS total_revenue
             FROM invoices i WHERE i.status IN ('Paid','Partial')
@@ -46,8 +46,8 @@ class AnalyticsMixin:
             GROUP BY e.employee_id
         """, (email,), one=True)
         monthly = self.fetch("""
-            SELECT DATE_FORMAT(a.appointment_date, '%%M %%Y') AS month_label,
-                   DATE_FORMAT(a.appointment_date, '%%Y-%%m') AS sort_key,
+            SELECT DATE_FORMAT(a.appointment_date, '%M %Y') AS month_label,
+                   DATE_FORMAT(a.appointment_date, '%Y-%m') AS sort_key,
                    COUNT(*) AS total_appointments,
                    SUM(CASE WHEN a.status='Completed' THEN 1 ELSE 0 END) AS completed,
                    COALESCE(SUM(CASE WHEN a.status='Completed' THEN s.price ELSE 0 END),0) AS revenue
@@ -106,8 +106,8 @@ class AnalyticsMixin:
 
     def get_monthly_appointment_stats(self, months=6):
         return self.fetch("""
-            SELECT DATE_FORMAT(appointment_date, '%%M %%Y') AS month_label,
-                   DATE_FORMAT(appointment_date, '%%Y-%%m') AS sort_key,
+            SELECT DATE_FORMAT(appointment_date, '%M %Y') AS month_label,
+                   DATE_FORMAT(appointment_date, '%Y-%m') AS sort_key,
                    COUNT(*) AS total_visits,
                    SUM(CASE WHEN status='Completed' THEN 1 ELSE 0 END) AS completed,
                    SUM(CASE WHEN status='Cancelled' THEN 1 ELSE 0 END) AS cancelled
@@ -117,8 +117,8 @@ class AnalyticsMixin:
 
     def get_patient_retention(self, months=6):
         return self.fetch("""
-            SELECT DATE_FORMAT(a.appointment_date, '%%M %%Y') AS month_label,
-                   DATE_FORMAT(a.appointment_date, '%%Y-%%m') AS sort_key,
+            SELECT DATE_FORMAT(a.appointment_date, '%M %Y') AS month_label,
+                   DATE_FORMAT(a.appointment_date, '%Y-%m') AS sort_key,
                    COUNT(DISTINCT CASE WHEN a.appointment_date = (
                        SELECT MIN(a2.appointment_date) FROM appointments a2 WHERE a2.patient_id = a.patient_id
                    ) THEN a.patient_id END) AS new_patients,
@@ -132,8 +132,8 @@ class AnalyticsMixin:
 
     def get_cancellation_rate_trend(self, months=6):
         return self.fetch("""
-            SELECT DATE_FORMAT(appointment_date, '%%M %%Y') AS month_label,
-                   DATE_FORMAT(appointment_date, '%%Y-%%m') AS sort_key,
+            SELECT DATE_FORMAT(appointment_date, '%M %Y') AS month_label,
+                   DATE_FORMAT(appointment_date, '%Y-%m') AS sort_key,
                    COUNT(*) AS total,
                    SUM(CASE WHEN status='Cancelled' THEN 1 ELSE 0 END) AS cancelled,
                    ROUND(SUM(CASE WHEN status='Cancelled' THEN 1 ELSE 0 END)/COUNT(*)*100, 1) AS rate

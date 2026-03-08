@@ -84,7 +84,7 @@ class AppointmentMixin:
         ok, err = self._validate_appointment_date(data["date"])
         if not ok:
             return False
-        pid = self._lookup_patient_id(data["patient_name"])
+        pid = data.get("patient_id") or self._lookup_patient_id(data["patient_name"])
         if not pid:
             return False
         try:
@@ -119,7 +119,7 @@ class AppointmentMixin:
         ok, err = self._validate_appointment_date(data["date"])
         if not ok:
             return False
-        pid = self._lookup_patient_id(data["patient_name"])
+        pid = data.get("patient_id") or self._lookup_patient_id(data["patient_name"])
         if not pid:
             return False
         ok = self.exec("""

@@ -303,7 +303,7 @@ QPushButton#tblActionBtn {
     color: #FFFFFF;
     border: none;
     border-radius: 6px;
-    padding: 4px 16px;
+    padding: 4px 10px;
     font-size: 11px;
     font-weight: bold;
 }
@@ -318,7 +318,7 @@ QPushButton#tblDangerBtn {
     color: #FFFFFF;
     border: none;
     border-radius: 6px;
-    padding: 4px 16px;
+    padding: 4px 10px;
     font-size: 11px;
     font-weight: bold;
 }
@@ -333,7 +333,7 @@ QPushButton#tblSuccessBtn {
     color: #FFFFFF;
     border: none;
     border-radius: 6px;
-    padding: 4px 16px;
+    padding: 4px 10px;
     font-size: 11px;
     font-weight: bold;
 }
@@ -754,7 +754,7 @@ QLabel#bannerTitle {
     font-weight: bold;
     color: #FFFFFF;
     background: transparent;
-    padding: 2px 0px;
+    padding: 2px 0px 6px 0px;
 }
 
 /* Banner date line – more prominent than description */

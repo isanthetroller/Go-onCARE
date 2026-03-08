@@ -282,9 +282,14 @@ class MainWindow(QMainWindow):
         self._patients_page.patients_changed.connect(
             self._appointments_page.set_patient_names
         )
+        # Also pass patient dicts with IDs for the searchable dropdown
+        self._sync_appointment_patients()
+        self._patients_page.patients_changed.connect(
+            lambda _: self._sync_appointment_patients()
+        )
 
         # 3 – Clinical & POS
-        self._clinical_page = ClinicalPage(backend=self._backend, role=self._role)
+        self._clinical_page = ClinicalPage(backend=self._backend, role=self._role, user_email=self._user)
         self.stack.addWidget(self._clinical_page)
 
         # 4 – Data Analytics
@@ -320,6 +325,12 @@ class MainWindow(QMainWindow):
 
         lay.addWidget(self.stack)
         return wrapper
+
+    # ── Sync patient list for appointment dropdown ──────────────
+    def _sync_appointment_patients(self):
+        if self._backend:
+            patients = self._backend.get_active_patients() or []
+            self._appointments_page.set_patients(patients)
 
     # ── Live user-name refresh ─────────────────────────────────────
     def _refresh_user_display_name(self):

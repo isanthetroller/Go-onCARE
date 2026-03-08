@@ -31,6 +31,76 @@ class ClinicalMixin:
             self.log_activity("Edited", "Queue", f"Queue #{queue_id} updated (status={data.get('status','Waiting')})")
         return ok
 
+    def create_invoice_from_queue(self, queue_id):
+        """Auto-create an unpaid invoice when a queue entry is completed."""
+        try:
+            conn = self._get_connection()
+            with conn.cursor(dictionary=True) as cur:
+                cur.execute("""
+                    SELECT q.patient_id, q.appointment_id
+                    FROM queue_entries q WHERE q.queue_id = %s
+                """, (queue_id,))
+                qe = cur.fetchone()
+                if not qe or not qe["appointment_id"]:
+                    return False
+
+                cur.execute("""
+                    SELECT a.service_id, a.patient_id
+                    FROM appointments a WHERE a.appointment_id = %s
+                """, (qe["appointment_id"],))
+                appt = cur.fetchone()
+                if not appt:
+                    return False
+
+                cur.execute("SELECT price FROM services WHERE service_id = %s", (appt["service_id"],))
+                svc = cur.fetchone()
+                if not svc:
+                    return False
+                unit_price = float(svc["price"])
+
+                # Check patient discount
+                cur.execute("SELECT discount_type_id FROM patients WHERE patient_id = %s", (qe["patient_id"],))
+                pt = cur.fetchone()
+                discount = 0.0
+                if pt and pt["discount_type_id"]:
+                    cur.execute("SELECT discount_percent FROM discount_types WHERE discount_id = %s AND is_active = 1",
+                                (pt["discount_type_id"],))
+                    dt = cur.fetchone()
+                    if dt:
+                        discount = float(dt["discount_percent"])
+
+                total = unit_price * (1 - discount / 100)
+
+                # Check if invoice already exists for this appointment
+                cur.execute("SELECT invoice_id FROM invoices WHERE appointment_id = %s", (qe["appointment_id"],))
+                if cur.fetchone():
+                    return False
+
+                cur.execute("""
+                    INSERT INTO invoices (patient_id, appointment_id, discount_percent,
+                        total_amount, amount_paid, status, notes)
+                    VALUES (%s, %s, %s, %s, 0, 'Unpaid', 'Auto-generated on queue completion')
+                """, (qe["patient_id"], qe["appointment_id"], discount, total))
+                inv_id = cur.lastrowid
+                cur.execute("""
+                    INSERT INTO invoice_items (invoice_id, service_id, quantity, unit_price, subtotal)
+                    VALUES (%s, %s, 1, %s, %s)
+                """, (inv_id, appt["service_id"], unit_price, total))
+
+                # Mark appointment as Completed
+                cur.execute("UPDATE appointments SET status = 'Completed' WHERE appointment_id = %s",
+                            (qe["appointment_id"],))
+
+                conn.commit()
+            self.log_activity("Created", "Invoice", f"Invoice #{inv_id} auto-created from queue #{queue_id}")
+            return True
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            return False
+
     def sync_today_appointments_to_queue(self):
         try:
             conn = self._get_connection()

@@ -1,0 +1,100 @@
+═══════════════════════════════════════════════════════════════════
+        CLINICAL PAGE (clinical_page.py) — CODE BREAKDOWN
+              Total Lines: 701 | File: ui/shared/clinical_page.py
+═══════════════════════════════════════════════════════════════════
+
+
+  ┌──────────────────────────────────────────────────────────┐
+  │  CATEGORY                    LINES      PERCENTAGE       │
+  ├──────────────────────────────────────────────────────────┤
+  │  UI / Layout Code             ~301        ~43%           │
+  │  Business Logic / Handlers    ~359        ~51%           │
+  │  Imports / Comments            ~41         ~6%           │
+  ├──────────────────────────────────────────────────────────┤
+  │  TOTAL                         701        100%           │
+  └──────────────────────────────────────────────────────────┘
+
+
+───────────────────────────────────────────────────────────────────
+ 1. UI / LAYOUT CODE  (~301 lines, ~43%)
+───────────────────────────────────────────────────────────────────
+ This is code that builds the visual interface — creating widgets
+ (buttons, tables, labels, combo boxes), setting sizes, colors,
+ object names, cursors, and arranging them in layouts.
+
+   _build()              ~39 lines   Banner, tab row, stacked widget
+   _switch_tab()          ~5 lines   Tab styling toggle
+   _build_queue_tab()    ~86 lines   Status cards, toolbar, queue table
+   _build_billing_tab()  ~55 lines   Search bar, filters, billing table
+   _build_services_tab() ~40 lines   Search, category filter, service table
+   _load_queue() UI       ~36 lines   Table cell widgets, action buttons
+   _render_billing()  UI  ~22 lines   Table cell widgets, action buttons
+   _load_services() UI    ~18 lines   Table items, edit buttons
+
+
+───────────────────────────────────────────────────────────────────
+ 2. BUSINESS LOGIC / EVENT HANDLERS  (~359 lines, ~51%)
+───────────────────────────────────────────────────────────────────
+ This is code that handles user actions, communicates with the
+ database (via backend), processes data, filters/sorts results,
+ and shows messages.
+
+   __init__()             ~14 lines   Class initialization
+   refresh()             ~20 lines   Auto-refresh timer logic
+
+   QUEUE LOGIC:
+   _load_queue() logic    ~40 lines   Fetch & process queue data
+   _filter_queue()         ~8 lines   Filter rows by doctor
+   _on_sync_queue()        ~6 lines   Sync appointments to queue
+   _on_call_next()        ~19 lines   Call next patient logic
+   _on_edit_queue()       ~12 lines   Edit queue entry dialog
+   _on_complete_queue()    ~8 lines   Mark consultation complete
+   _on_cancel_queue()     ~14 lines   Cancel queue entry
+
+   BILLING LOGIC:
+   _load_billing()         ~9 lines   Fetch invoice data
+   _apply_billing_filters()~37 lines  Search, sort, filter invoices
+   _render_billing() logic ~20 lines  Process invoice data for display
+   _on_new_invoice()      ~16 lines   Create new invoice dialog
+   _on_add_payment()      ~24 lines   Record payment dialog
+   _on_void_invoice()     ~11 lines   Void invoice confirmation
+   _on_print_receipt()    ~80 lines   Format & display receipt text
+
+   SERVICES LOGIC:
+   _load_services() logic  ~15 lines  Fetch service data
+   _apply_svc_filters()    ~6 lines   Filter services by text/category
+
+
+───────────────────────────────────────────────────────────────────
+ 3. IMPORTS / COMMENTS  (~41 lines, ~6%)
+───────────────────────────────────────────────────────────────────
+   Import statements      ~21 lines   PyQt6 widgets, styles, dialogs
+   Section dividers        ~20 lines   Comment headers and blank lines
+
+
+───────────────────────────────────────────────────────────────────
+ BREAKDOWN BY TAB
+───────────────────────────────────────────────────────────────────
+
+   Patient Queue tab     ~248 lines   35% of file
+   Billing / POS tab     ~274 lines   39% of file
+   Services tab           ~79 lines   11% of file
+   Shared (init, build)  ~100 lines   15% of file
+
+
+───────────────────────────────────────────────────────────────────
+ SUMMARY
+───────────────────────────────────────────────────────────────────
+ The file is roughly a 43/51 split between UI layout code and
+ business logic, with 6% for imports and comments.
+
+ The UI portion is large because PyQt requires every widget to be
+ created, configured, and positioned in Python code (no .ui file).
+
+ The biggest single function is _on_print_receipt() at ~80 lines
+ because it builds the entire receipt text manually.
+
+ If this file were split by tab, each tab would be ~200-280 lines,
+ which is a more typical file size.
+
+═══════════════════════════════════════════════════════════════════

@@ -122,7 +122,7 @@ INSERT INTO employees (employee_id, first_name, last_name, role_id, department_i
 INSERT INTO patients (patient_id, first_name, last_name, sex, date_of_birth, phone, email, emergency_contact, blood_type, status) VALUES
     (1,  'Maria',    'Santos',      'Female', '1994-05-12', '09171234567', 'maria@email.com',      'Juan Santos – 09171234568',       'O+',      'Active'),
     (2,  'Juan',     'Dela Cruz',   'Male',   '1981-08-23', '09179876543', 'juan@email.com',       'Rosa Dela Cruz – 09179876544',    'A+',      'Active'),
-    (3,  'Ana',      'Reyes',       'Female', '1998-02-14', '09171112233', 'ana@email.com',        '',                                 'B+',      'Active'),
+    (3,  'Angela',   'Reyes',       'Female', '1998-02-14', '09171112233', 'angela@email.com',     '',                                 'B+',      'Active'),
     (4,  'Carlos',   'Garcia',      'Male',   '1966-11-30', '09174445566', 'carlos@email.com',     'Elena Garcia – 09174445567',      'AB+',     'Active'),
     (5,  'Lea',      'Mendoza',     'Female', '1989-07-19', '09177778899', 'lea@email.com',        'Roberto Mendoza – 09177778800',   'O-',      'Active'),
     (6,  'Roberto',  'Cruz',        'Male',   '1974-03-08', '09173334455', 'roberto@email.com',    'Maria Cruz – 09173334456',        'A-',      'Active'),
@@ -131,7 +131,7 @@ INSERT INTO patients (patient_id, first_name, last_name, sex, date_of_birth, pho
     (9,  'Rosa',     'Mendoza',     'Female', '1990-06-01', '09175551234', 'rosa@email.com',       '',                                 'O+',      'Active'),
     (10, 'Pedro',    'Villanueva',  'Male',   '1988-10-10', '09175559876', 'pedro.v@email.com',    '',                                 'A+',      'Active'),
     (11, 'Luis',     'Garcia',      'Male',   '1975-04-22', '09175554321', 'luis@email.com',       '',                                 'Unknown', 'Active'),
-    (12, 'Sofia',    'Reyes',       'Female', '1992-01-30', '09175556789', 'sofia.r@email.com',    '',                                 'AB-',     'Active'),
+    (12, 'Sophie',   'Reyes',       'Female', '1992-01-30', '09175556789', 'sophie.r@email.com',   '',                                 'AB-',     'Active'),
     (13, 'Elena',    'Bautista',    'Female', '2010-03-15', '09175550001', 'elena.b@email.com',    'Marco Bautista – 09175550010',    'O+',      'Active'),
     (14, 'Marco',    'Ramos',       'Male',   '2015-07-22', '09175550002', 'marco.r@email.com',    'Diana Ramos – 09175550020',       'A+',      'Active'),
     (15, 'Camille',  'Torres',      'Female', '1955-11-03', '09175550003', 'camille.t@email.com',  'Antonio Torres – 09175550030',    'B+',      'Active'),

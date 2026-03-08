@@ -26,10 +26,11 @@ from ui.shared.clinical_dialogs import (
 # ══════════════════════════════════════════════════════════════════════
 class ClinicalPage(QWidget):
 
-    def __init__(self, backend=None, role: str = "Admin"):
+    def __init__(self, backend=None, role: str = "Admin", user_email: str = ""):
         super().__init__()
         self._backend = backend
         self._role = role
+        self._user_email = user_email
         self._tab_buttons: dict[str, QPushButton] = {}
         self._queue_ids: list[int] = []
         self._service_ids: list[int] = []
@@ -150,30 +151,42 @@ class ClinicalPage(QWidget):
         # Toolbar: call next, doctor filter
         toolbar = QHBoxLayout(); toolbar.setSpacing(10)
 
-        call_btn = QPushButton("📢  Call Next")
-        call_btn.setObjectName("actionBtn"); call_btn.setMinimumHeight(40)
-        call_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        call_btn.clicked.connect(self._on_call_next)
-        toolbar.addWidget(call_btn)
+        self._call_btn = QPushButton("📢  Call Next")
+        self._call_btn.setObjectName("actionBtn"); self._call_btn.setMinimumHeight(40)
+        self._call_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._call_btn.clicked.connect(self._on_call_next)
+        toolbar.addWidget(self._call_btn)
         if self._role == "Admin":
-            call_btn.setVisible(False)
+            self._call_btn.setVisible(False)
 
         toolbar.addStretch()
 
         self._queue_doc_filter = QComboBox()
         self._queue_doc_filter.setObjectName("formCombo")
         self._queue_doc_filter.setMinimumHeight(40); self._queue_doc_filter.setMinimumWidth(180)
+        self._queue_doc_filter.blockSignals(True)
         self._queue_doc_filter.addItem("All Doctors", None)
         if self._backend:
             for d in self._backend.get_doctors():
                 self._queue_doc_filter.addItem(d["doctor_name"], d["employee_id"])
-        self._queue_doc_filter.currentIndexChanged.connect(lambda _: self._filter_queue())
+        # Doctor role: auto-select own name and hide the filter
+        if self._role == "Doctor" and self._user_email and self._backend:
+            my_id = self._backend.get_employee_id_by_email(self._user_email)
+            if my_id:
+                for i in range(self._queue_doc_filter.count()):
+                    if self._queue_doc_filter.itemData(i) == my_id:
+                        self._queue_doc_filter.setCurrentIndex(i)
+                        break
+            self._queue_doc_filter.setVisible(False)
+        self._queue_doc_filter.blockSignals(False)
         toolbar.addWidget(self._queue_doc_filter)
         lay.addLayout(toolbar)
 
         # Queue table
+        action_w = 180 if self._role == "Doctor" else 100
         cols = ["Queue #", "Patient", "Time", "Doctor", "Purpose", "Status", "Actions"]
-        self._queue_table = make_action_table(cols, min_h=420, row_h=48, action_col_width=100)
+        self._queue_table = make_action_table(cols, min_h=420, row_h=48, action_col_width=action_w)
+        self._queue_doc_filter.currentIndexChanged.connect(lambda _: self._filter_queue())
         # Auto-sync appointments into queue on first load
         if self._backend:
             try:
@@ -202,24 +215,38 @@ class ClinicalPage(QWidget):
                 t = f"{h:02d}:{m:02d}"
             elif hasattr(t, "strftime"):
                 t = t.strftime("%H:%M")
+            status = entry.get("status", "")
             values = [
                 str(entry.get("queue_id", "")),
                 entry.get("patient_name", ""),
                 str(t),
                 entry.get("doctor_name", ""),
                 entry.get("purpose", "") or "",
-                entry.get("status", ""),
+                status,
             ]
             for c, val in enumerate(values):
                 item = QTableWidgetItem(val)
                 if c == 5:
                     item.setForeground(QColor(status_color(val)))
                 self._queue_table.setItem(r, c, item)
-            edit_btn = make_table_btn("Edit")
-            edit_btn.clicked.connect(lambda checked, ri=r: self._on_edit_queue(ri))
-            if self._role == "Admin":
-                edit_btn.setVisible(False)
-            self._queue_table.setCellWidget(r, 6, make_action_cell(edit_btn))
+
+            # Doctor role: Complete / Cancel only after Call Next (In Progress)
+            if self._role == "Doctor":
+                btns = []
+                if status == "In Progress":
+                    done_btn = make_table_btn("Complete")
+                    done_btn.clicked.connect(lambda checked, ri=r: self._on_complete_queue(ri))
+                    btns.append(done_btn)
+                    cancel_btn = make_table_btn_danger("Cancel")
+                    cancel_btn.clicked.connect(lambda checked, ri=r: self._on_cancel_queue(ri))
+                    btns.append(cancel_btn)
+                self._queue_table.setCellWidget(r, 6, make_action_cell(*btns))
+            else:
+                edit_btn = make_table_btn("Edit")
+                edit_btn.clicked.connect(lambda checked, ri=r: self._on_edit_queue(ri))
+                if self._role == "Admin":
+                    edit_btn.setVisible(False)
+                self._queue_table.setCellWidget(r, 6, make_action_cell(edit_btn))
 
         # Update stat cards
         stats = self._backend.get_queue_stats()
@@ -229,6 +256,21 @@ class ClinicalPage(QWidget):
         avg_min = self._backend.get_avg_consultation_minutes()
         waiting_cnt = int(stats.get("waiting", 0) or 0)
         self._wait_lbl.setText(f"~{waiting_cnt * avg_min} min")
+
+        # Doctor: disable Call Next if there's already an In Progress entry for this doctor
+        if self._role == "Doctor":
+            doc_id = self._queue_doc_filter.currentData()
+            has_in_progress = any(
+                r < len(self._queue_doctor_ids) and self._queue_doctor_ids[r] == doc_id
+                and self._queue_table.item(r, 5) and self._queue_table.item(r, 5).text() == "In Progress"
+                for r in range(self._queue_table.rowCount())
+            )
+            self._call_btn.setEnabled(not has_in_progress)
+            if has_in_progress:
+                self._call_btn.setToolTip("Complete the current patient before calling next")
+            else:
+                self._call_btn.setToolTip("")
+
         self._filter_queue()
 
     def _filter_queue(self):
@@ -251,6 +293,14 @@ class ClinicalPage(QWidget):
         if not self._backend:
             return
         doc_id = self._queue_doc_filter.currentData()
+        # Doctor: block if there's an In Progress entry
+        if self._role == "Doctor" and doc_id:
+            for r in range(self._queue_table.rowCount()):
+                if (r < len(self._queue_doctor_ids) and self._queue_doctor_ids[r] == doc_id
+                        and self._queue_table.item(r, 5) and self._queue_table.item(r, 5).text() == "In Progress"):
+                    QMessageBox.warning(self, "Queue",
+                        "You still have a patient In Progress.\nComplete or cancel them first.")
+                    return
         entry = self._backend.call_next_queue(doctor_id=doc_id)
         if entry:
             self._load_queue()
@@ -271,6 +321,31 @@ class ClinicalPage(QWidget):
                 self._backend.update_queue_entry(self._queue_ids[row], d)
             self._load_queue()
             QMessageBox.information(self, "Success", f"Queue entry '{d['queue']}' updated.")
+
+    def _on_complete_queue(self, row):
+        if not self._backend or row >= len(self._queue_ids):
+            return
+        qid = self._queue_ids[row]
+        patient = self._queue_table.item(row, 1).text() if self._queue_table.item(row, 1) else ""
+        self._backend.update_queue_entry(qid, {"status": "Completed", "purpose": self._queue_table.item(row, 4).text() if self._queue_table.item(row, 4) else ""})
+        invoiced = self._backend.create_invoice_from_queue(qid)
+        self._load_queue()
+        msg = f"{patient}'s consultation marked as completed."
+        if invoiced:
+            msg += "\nAn invoice has been automatically created."
+        QMessageBox.information(self, "Completed", msg)
+
+    def _on_cancel_queue(self, row):
+        if not self._backend or row >= len(self._queue_ids):
+            return
+        qid = self._queue_ids[row]
+        patient = self._queue_table.item(row, 1).text() if self._queue_table.item(row, 1) else ""
+        reply = QMessageBox.question(self, "Cancel Queue Entry",
+            f"Cancel {patient}'s queue entry?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            self._backend.update_queue_entry(qid, {"status": "Cancelled", "purpose": self._queue_table.item(row, 4).text() if self._queue_table.item(row, 4) else ""})
+            self._load_queue()
 
     # ══════════════════════════════════════════════════════════════
     #  BILLING TAB

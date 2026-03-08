@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta
 from PyQt6.QtWidgets import (
     QDialog, QFormLayout, QLineEdit, QTextEdit, QComboBox,
     QDialogButtonBox, QLabel, QTimeEdit, QDateEdit,
-    QMessageBox,
+    QMessageBox, QCompleter,
 )
 from PyQt6.QtCore import Qt, QDate, QTime
 from ui.styles import style_dialog_btns
@@ -45,11 +45,12 @@ def _relative_label(iso: str) -> str:
 class AppointmentDialog(QDialog):
 
     def __init__(self, parent=None, *, title="New Appointment", data=None,
-                 patient_names=None, doctors=None, services=None, backend=None,
+                 patients=None, doctors=None, services=None, backend=None,
                  user_email: str = "", user_role: str = ""):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setMinimumWidth(600)
+        self._patients = patients or []
         self._doctors = doctors or []
         self._services = services or []
         self._backend = backend
@@ -61,11 +62,17 @@ class AppointmentDialog(QDialog):
 
         self.patient_combo = QComboBox(); self.patient_combo.setObjectName("formCombo")
         self.patient_combo.setMinimumHeight(40)
-        if patient_names:
-            self.patient_combo.addItems(patient_names)
-        else:
-            self.patient_combo.setEditable(True)
-            self.patient_combo.lineEdit().setPlaceholderText("Select or type patient name")
+        self.patient_combo.setEditable(True)
+        self.patient_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self.patient_combo.lineEdit().setPlaceholderText("Search patient name…")
+        for p in self._patients:
+            self.patient_combo.addItem(p["name"], p["patient_id"])
+        completer = QCompleter([p["name"] for p in self._patients], self)
+        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        self.patient_combo.setCompleter(completer)
+        if not data:
+            self.patient_combo.setCurrentIndex(-1)
 
         self.doctor_combo = QComboBox(); self.doctor_combo.setObjectName("formCombo"); self.doctor_combo.setMinimumHeight(40)
         preselect_idx = 0
@@ -126,7 +133,7 @@ class AppointmentDialog(QDialog):
         if data:
             p_idx = self.patient_combo.findText(data.get("patient",""))
             if p_idx >= 0: self.patient_combo.setCurrentIndex(p_idx)
-            elif self.patient_combo.isEditable(): self.patient_combo.setEditText(data.get("patient",""))
+            else: self.patient_combo.setEditText(data.get("patient",""))
             idx = self.doctor_combo.findText(data.get("doctor",""))
             if idx >= 0: self.doctor_combo.setCurrentIndex(idx)
             if data.get("date"):
@@ -144,6 +151,19 @@ class AppointmentDialog(QDialog):
             self.resched_reason.setText(data.get("reschedule_reason","") or "")
 
     def _validate_and_accept(self):
+        # Ensure patient exists in the system
+        patient_id = self.patient_combo.currentData()
+        patient_text = self.patient_combo.currentText().strip()
+        if not patient_text:
+            QMessageBox.warning(self, "Missing Patient",
+                "Please select a patient.")
+            return
+        if patient_id is None:
+            QMessageBox.warning(self, "Patient Not Found",
+                f"'{patient_text}' is not registered in the system.\n"
+                "Please select an existing patient from the list.")
+            self.patient_combo.setFocus()
+            return
         selected_date = self.date_edit.date()
         today = QDate.currentDate()
         if selected_date < today:
@@ -174,6 +194,7 @@ class AppointmentDialog(QDialog):
     def get_data(self) -> dict:
         return {
             "patient_name": self.patient_combo.currentText(),
+            "patient_id": self.patient_combo.currentData(),
             "doctor": self.doctor_combo.currentText(),
             "doctor_id": self.doctor_combo.currentData(),
             "date": self.date_edit.date().toString("yyyy-MM-dd"),

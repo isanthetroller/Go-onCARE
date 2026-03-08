@@ -242,8 +242,8 @@ class AnalyticsPage(QWidget):
             tbl.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
             tbl.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             tbl.setAlternatingRowColors(True)
-            tbl.setMaximumHeight(len(monthly) * 40 + 40)
-            tbl.verticalHeader().setDefaultSectionSize(36)
+            tbl.setMinimumHeight(max(len(monthly), 1) * 48 + 48)
+            tbl.verticalHeader().setDefaultSectionSize(48)
             configure_table(tbl)
             for r, m in enumerate(monthly):
                 tbl.setItem(r, 0, QTableWidgetItem(m.get("month_label", "")))
