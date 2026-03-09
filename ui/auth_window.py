@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QGraphicsDropShadowEffect, QDialog, QFormLayout, QAbstractButton,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QSize, QRect, QRectF, QPointF
-from PyQt6.QtGui import QColor, QPainter, QBrush, QPen, QPainterPath
+from PyQt6.QtGui import QColor, QPainter, QBrush, QPen, QPainterPath, QLinearGradient
 
 
 class _EyeToggleButton(QAbstractButton):
@@ -97,6 +97,35 @@ class _MedicalCrossWidget(QWidget):
         p.end()
 
 
+class _BrandPanel(QWidget):
+    """Left-side teal panel with logo, brand name, and tagline."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedWidth(340)
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        w, h = self.width(), self.height()
+
+        # Gradient background
+        grad = QLinearGradient(0, 0, 0, h)
+        grad.setColorAt(0.0, QColor("#2C6A70"))
+        grad.setColorAt(0.5, QColor("#388087"))
+        grad.setColorAt(1.0, QColor("#6FB3B8"))
+        p.fillRect(0, 0, w, h, QBrush(grad))
+
+        # Subtle decorative circles
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(QColor(255, 255, 255, 12)))
+        p.drawEllipse(QRectF(-60, h * 0.55, 260, 260))
+        p.setBrush(QBrush(QColor(255, 255, 255, 8)))
+        p.drawEllipse(QRectF(w * 0.5, -40, 200, 200))
+
+        p.end()
+
+
 class AuthWindow(QMainWindow):
     """Login window.  Emits *login_success* when the user signs in."""
 
@@ -104,69 +133,141 @@ class AuthWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("CareCRUD – Login")
-        self.setFixedSize(500, 680)
+        self.setWindowTitle("Go-onCare \u2013 Login")
+        self.setFixedSize(860, 580)
         self.setStyleSheet(AUTH_STYLE)
         self._backend = AuthBackend()
 
         bg = QWidget()
         bg.setObjectName("authBg")
         self.setCentralWidget(bg)
-        root = QVBoxLayout(bg)
-        root.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        root.setContentsMargins(32, 32, 32, 32)
+        root = QHBoxLayout(bg)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
-        root.addWidget(self._build_login())
+        root.addWidget(self._build_brand_panel())
+        root.addWidget(self._build_form_panel(), 1)
 
-    # ── Login ──────────────────────────────────────────────────────────
-    def _build_login(self) -> QWidget:
-        card = self._card()
-        lay = QVBoxLayout(card)
-        lay.setSpacing(16)
-        lay.setContentsMargins(40, 36, 40, 36)
+    # ── Left brand panel ───────────────────────────────────────────────
+    def _build_brand_panel(self) -> QWidget:
+        panel = _BrandPanel()
+        lay = QVBoxLayout(panel)
+        lay.setContentsMargins(36, 0, 36, 0)
+        lay.setSpacing(0)
+        lay.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        # Medical cross logo
-        cross = _MedicalCrossWidget(64)
+        # Medical cross logo (larger)
+        cross = _MedicalCrossWidget(80)
         lay.addWidget(cross, alignment=Qt.AlignmentFlag.AlignCenter)
-        lay.addSpacing(4)
+        lay.addSpacing(20)
+
+        brand = QLabel("Go-onCare")
+        brand.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        brand.setStyleSheet(
+            "font-size: 32px; font-weight: bold; color: #FFFFFF;"
+            " font-family: 'Segoe UI', sans-serif; background: transparent;")
+        lay.addWidget(brand)
+        lay.addSpacing(6)
+
+        tagline = QLabel("Healthcare Management\nSystem")
+        tagline.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        tagline.setStyleSheet(
+            "font-size: 14px; color: rgba(255,255,255,0.8);"
+            " font-family: 'Segoe UI', sans-serif; background: transparent;"
+            " line-height: 1.5;")
+        lay.addWidget(tagline)
+        lay.addSpacing(32)
+
+        # Feature highlights
+        for text in [
+            "Patient records & appointments",
+            "Clinical queue & billing",
+            "Analytics & reporting",
+        ]:
+            row = QHBoxLayout()
+            row.setSpacing(10)
+            dot = QLabel("\u2713")
+            dot.setFixedWidth(20)
+            dot.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            dot.setStyleSheet(
+                "color: #C2EDCE; font-size: 15px; font-weight: bold;"
+                " background: transparent;")
+            lbl = QLabel(text)
+            lbl.setStyleSheet(
+                "color: rgba(255,255,255,0.85); font-size: 13px;"
+                " background: transparent;")
+            row.addWidget(dot)
+            row.addWidget(lbl, 1)
+            lay.addLayout(row)
+            lay.addSpacing(6)
+
+        return panel
+
+    # ── Right form panel ───────────────────────────────────────────────
+    def _build_form_panel(self) -> QWidget:
+        panel = QWidget()
+        panel.setStyleSheet("background-color: #FFFFFF;")
+        outer = QVBoxLayout(panel)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        form_w = QWidget()
+        form_w.setFixedWidth(360)
+        lay = QVBoxLayout(form_w)
+        lay.setSpacing(16)
+        lay.setContentsMargins(0, 0, 0, 0)
 
         lay.addWidget(self._title("Welcome Back"))
-        lay.addWidget(self._subtitle("Sign in to continue to CareCRUD"))
-        lay.addSpacing(8)
+        lay.addWidget(self._subtitle("Sign in to your account"))
+        lay.addSpacing(12)
 
-        self.login_email = self._input("Email address")
-        self.login_pw    = self._input("Password", password=True)
-        # Allow Enter key to trigger login from either field
+        # Email field with label
+        email_lbl = QLabel("Email")
+        email_lbl.setStyleSheet(
+            "font-size: 13px; font-weight: 600; color: #2C3E50;"
+            " margin-bottom: 2px;")
+        lay.addWidget(email_lbl)
+        self.login_email = self._input("Enter your email address")
         self.login_email.returnPressed.connect(self._on_login)
-        self.login_pw.returnPressed.connect(self._on_login)
         lay.addWidget(self.login_email)
+        lay.addSpacing(4)
 
-        # Password row with toggle visibility button
-        pw_row = QHBoxLayout(); pw_row.setSpacing(0)
+        # Password field with label
+        pw_lbl = QLabel("Password")
+        pw_lbl.setStyleSheet(
+            "font-size: 13px; font-weight: 600; color: #2C3E50;"
+            " margin-bottom: 2px;")
+        lay.addWidget(pw_lbl)
+        self.login_pw = self._input("Enter your password", password=True)
+        self.login_pw.returnPressed.connect(self._on_login)
+        pw_row = QHBoxLayout()
+        pw_row.setSpacing(0)
         pw_row.addWidget(self.login_pw)
         self._pw_toggle = _EyeToggleButton()
         self._pw_toggle.clicked.connect(self._toggle_login_pw)
         pw_row.addWidget(self._pw_toggle)
         lay.addLayout(pw_row)
 
-        lay.addSpacing(4)
+        lay.addSpacing(8)
 
         btn = QPushButton("Sign In")
         btn.setObjectName("primaryBtn")
-        btn.setMinimumHeight(46)
+        btn.setMinimumHeight(48)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.clicked.connect(self._on_login)
         lay.addWidget(btn)
 
         # ── BEGIN QUICK LOGIN (TEMPORARY – delete this block to remove) ──
-        lay.addSpacing(8)
-        ql_sep = QFrame(); ql_sep.setFrameShape(QFrame.Shape.HLine)
+        lay.addSpacing(12)
+        ql_sep = QFrame()
+        ql_sep.setFrameShape(QFrame.Shape.HLine)
         ql_sep.setStyleSheet("color: #BADFE7;")
         lay.addWidget(ql_sep)
-        ql_label = QLabel("⚡ Quick Login (dev only)")
+        ql_label = QLabel("Quick Login (dev only)")
         ql_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         ql_label.setStyleSheet(
-            "font-size: 11px; font-weight: bold; color: #7F8C8D; letter-spacing: 1px;")
+            "font-size: 11px; font-weight: bold; color: #7F8C8D;"
+            " letter-spacing: 1px;")
         lay.addWidget(ql_label)
         _quick_accounts = [
             ("Admin",        "admin@carecrud.com",       "admin123",     "#388087"),
@@ -179,7 +280,7 @@ class AuthWindow(QMainWindow):
         ql_row2 = QHBoxLayout(); ql_row2.setSpacing(6)
         for i, (role, email, pw, color) in enumerate(_quick_accounts):
             qb = QPushButton(role)
-            qb.setMinimumHeight(36)
+            qb.setMinimumHeight(34)
             qb.setCursor(Qt.CursorShape.PointingHandCursor)
             fg = "#FFFFFF" if role != "HR" else "#2C3E50"
             qb.setStyleSheet(
@@ -198,7 +299,8 @@ class AuthWindow(QMainWindow):
         lay.addLayout(ql_row2)
         # ── END QUICK LOGIN (TEMPORARY) ──────────────────────────────
 
-        return card
+        outer.addWidget(form_w)
+        return panel
 
     # ── Handlers ───────────────────────────────────────────────────────
     def _on_login(self):

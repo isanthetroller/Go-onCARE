@@ -1,5 +1,5 @@
 /* ================================================================
-   CareCRUD – Authentication Window Stylesheet
+   Go-onCare – Authentication Window Stylesheet
    ================================================================
    Applied to the login screen (AuthWindow).
    Uses the teal gradient background with a white card overlay.
@@ -7,11 +7,11 @@
 
 
 /* ── Auth background ────────────────────────────────────────────────
-   Full-window gradient that covers the QMainWindow and the
-   central widget (#authBg). Blends dark-teal → teal → accent.     */
+   Full-window background. The left panel paints its own gradient,
+   the right panel is white.                                        */
 QMainWindow,
 QWidget#authBg {
-    background-color: #388087;
+    background-color: #FFFFFF;
 }
 
 
@@ -26,8 +26,8 @@ QWidget#cardWidget {
 /* ── Typography ─────────────────────────────────────────────────────
    Title / subtitle / switch-label used on the auth card.           */
 QLabel#titleLabel {
-    color: #388087;
-    font-size: 30px;
+    color: #2C3E50;
+    font-size: 26px;
     font-weight: bold;
     font-family: 'Segoe UI', sans-serif;
 }
@@ -36,6 +36,7 @@ QLabel#subtitleLabel {
     color: #7F8C8D;
     font-size: 14px;
     font-family: 'Segoe UI', sans-serif;
+    margin-bottom: 4px;
 }
 
 QLabel#switchLabel {

@@ -4,24 +4,35 @@
 class ClinicalMixin:
 
     # ── Queue ──────────────────────────────────────────────────────────
-    def get_queue_entries(self):
-        return self.fetch("""
+    def get_queue_entries(self, doctor_id=None):
+        sql = """
             SELECT q.queue_id, q.queue_time, q.purpose, q.status,
                    CONCAT(p.first_name,' ',p.last_name) AS patient_name,
                    CONCAT(e.first_name,' ',e.last_name) AS doctor_name, q.doctor_id
             FROM queue_entries q
             INNER JOIN patients p ON q.patient_id = p.patient_id
             INNER JOIN employees e ON q.doctor_id = e.employee_id
-            WHERE q.created_at = CURDATE() ORDER BY q.queue_time
-        """)
+            WHERE q.created_at = CURDATE()
+        """
+        params = ()
+        if doctor_id is not None:
+            sql += " AND q.doctor_id = %s"
+            params = (doctor_id,)
+        sql += " ORDER BY q.queue_time"
+        return self.fetch(sql, params)
 
-    def get_queue_stats(self):
-        row = self.fetch("""
+    def get_queue_stats(self, doctor_id=None):
+        sql = """
             SELECT SUM(CASE WHEN status='Waiting' THEN 1 ELSE 0 END) AS waiting,
                    SUM(CASE WHEN status='In Progress' THEN 1 ELSE 0 END) AS in_progress,
                    SUM(CASE WHEN status='Completed' THEN 1 ELSE 0 END) AS completed
             FROM queue_entries WHERE created_at = CURDATE()
-        """, one=True)
+        """
+        params = ()
+        if doctor_id is not None:
+            sql += " AND doctor_id = %s"
+            params = (doctor_id,)
+        row = self.fetch(sql, params, one=True)
         return row if row and row.get("waiting") is not None else {"waiting": 0, "in_progress": 0, "completed": 0}
 
     def update_queue_entry(self, queue_id, data):
@@ -152,7 +163,7 @@ class ClinicalMixin:
                        FROM queue_entries qe INNER JOIN patients p ON qe.patient_id = p.patient_id
                        WHERE qe.created_at = CURDATE() AND qe.status = 'Waiting'"""
                 params = []
-                if doctor_id:
+                if doctor_id is not None:
                     q += " AND qe.doctor_id = %s"
                     params.append(doctor_id)
                 cur.execute(q + " ORDER BY qe.queue_time LIMIT 1", params)

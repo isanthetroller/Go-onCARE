@@ -10,6 +10,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QSize, QTimer
 from PyQt6.QtGui import QFont, QColor, QAction
 
 from ui.styles import MAIN_STYLE
+from ui.icons import get_icon, NAV_ICON_MAP
 from ui.shared.dashboard_page     import DashboardPage
 from ui.shared.patients_page      import PatientsPage
 from ui.shared.appointments_page  import AppointmentsPage
@@ -31,6 +32,14 @@ _ALL_NAV = [
     ("Employees",      5),
     ("Activity Log",   6),
     ("Settings",       7),
+]
+
+# Category groupings for the sidebar
+_NAV_CATEGORIES = [
+    ("OVERVIEW",      ["Dashboard"]),
+    ("PATIENT CARE",  ["Patients", "Appointments", "Clinical & POS"]),
+    ("INSIGHTS",      ["Data Analytics", "Activity Log"]),
+    ("ADMINISTRATION",["Employees", "Settings"]),
 ]
 
 _ROLE_ACCESS = {
@@ -63,7 +72,7 @@ class MainWindow(QMainWindow):
     def __init__(self, user_email: str = "admin@carecrud.com",
                  user_role: str = "Admin", user_name: str = "Admin"):
         super().__init__()
-        self.setWindowTitle("CareCRUD \u2013 Healthcare Management System")
+        self.setWindowTitle("Go-onCare \u2013 Healthcare Management System")
         self.setMinimumSize(1200, 750)
         self.setStyleSheet(MAIN_STYLE)
 
@@ -119,8 +128,8 @@ class MainWindow(QMainWindow):
         sidebar.setFixedWidth(250)
 
         lay = QVBoxLayout(sidebar)
-        lay.setContentsMargins(16, 20, 16, 20)
-        lay.setSpacing(4)
+        lay.setContentsMargins(16, 20, 16, 16)
+        lay.setSpacing(0)
 
         # Logo area
         logo_frame = QWidget()
@@ -129,7 +138,7 @@ class MainWindow(QMainWindow):
         logo_lay.setContentsMargins(14, 12, 14, 12)
         logo_lay.setSpacing(10)
 
-        logo_icon = QLabel("CC")
+        logo_icon = QLabel("GC")
         logo_icon.setObjectName("logoIcon")
         logo_icon.setFixedSize(44, 44)
         logo_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -137,7 +146,7 @@ class MainWindow(QMainWindow):
 
         brand_col = QVBoxLayout()
         brand_col.setSpacing(0)
-        brand = QLabel("CareCRUD")
+        brand = QLabel("Go-onCare")
         brand.setObjectName("brandLabel")
         brand_sub = QLabel("Healthcare Management")
         brand_sub.setObjectName("brandSubLabel")
@@ -147,25 +156,42 @@ class MainWindow(QMainWindow):
         logo_lay.addStretch()
 
         lay.addWidget(logo_frame)
-        lay.addSpacing(20)
+        lay.addSpacing(16)
 
-        sec = QLabel("MAIN MENU")
-        sec.setObjectName("sidebarSection")
-        lay.addWidget(sec)
-        lay.addSpacing(4)
-
+        # Build categorized navigation
         allowed = _ROLE_ACCESS.get(self._role, _ROLE_ACCESS["Admin"])
-        self._nav_map = [(label, idx) for label, idx in _ALL_NAV if label in allowed]
+        nav_lookup = {label: idx for label, idx in _ALL_NAV}
+        self._nav_map = []
 
-        for nav_idx, (label, stack_idx) in enumerate(self._nav_map):
-            btn = QPushButton(label)
-            btn.setObjectName("navBtn")
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setMinimumHeight(44)
-            btn.setToolTip(_NAV_TOOLTIPS.get(label, label))
-            btn.clicked.connect(lambda checked, i=nav_idx: self._select_nav(i))
-            self._nav_buttons.append(btn)
-            lay.addWidget(btn)
+        for cat_name, cat_items in _NAV_CATEGORIES:
+            # Filter to only items this role can see
+            visible = [item for item in cat_items if item in allowed]
+            if not visible:
+                continue
+
+            sec = QLabel(cat_name)
+            sec.setObjectName("sidebarSection")
+            lay.addSpacing(12)
+            lay.addWidget(sec)
+            lay.addSpacing(4)
+
+            for label in visible:
+                stack_idx = nav_lookup[label]
+                nav_idx = len(self._nav_map)
+                self._nav_map.append((label, stack_idx))
+
+                btn = QPushButton(label)
+                btn.setObjectName("navBtn")
+                btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                btn.setMinimumHeight(40)
+                btn.setToolTip(_NAV_TOOLTIPS.get(label, label))
+                icon_key = NAV_ICON_MAP.get(label)
+                if icon_key:
+                    btn.setIcon(get_icon(icon_key))
+                    btn.setIconSize(QSize(18, 18))
+                btn.clicked.connect(lambda checked, i=nav_idx: self._select_nav(i))
+                self._nav_buttons.append(btn)
+                lay.addWidget(btn)
 
         lay.addStretch()
 
@@ -173,14 +199,14 @@ class MainWindow(QMainWindow):
         sep.setObjectName("sidebarSep")
         sep.setFixedHeight(1)
         lay.addWidget(sep)
-        lay.addSpacing(12)
+        lay.addSpacing(10)
 
         # User section
         user_card = QFrame()
         user_card.setObjectName("userCard")
         user_card_lay = QVBoxLayout(user_card)
-        user_card_lay.setContentsMargins(14, 14, 14, 14)
-        user_card_lay.setSpacing(10)
+        user_card_lay.setContentsMargins(12, 12, 12, 12)
+        user_card_lay.setSpacing(8)
 
         user_row = QHBoxLayout()
         user_row.setSpacing(10)
@@ -197,13 +223,9 @@ class MainWindow(QMainWindow):
         user_col.setSpacing(1)
         self._sidebar_name_label = QLabel(_display_name)
         self._sidebar_name_label.setObjectName("userName")
-        user_email = QLabel(self._user)
-        user_email.setObjectName("userEmail")
-        user_email.setWordWrap(True)
-        user_col.addWidget(self._sidebar_name_label)
-        user_col.addWidget(user_email)
         role_badge = QLabel(self._role)
         role_badge.setObjectName("roleBadge")
+        user_col.addWidget(self._sidebar_name_label)
         user_col.addWidget(role_badge)
         user_row.addLayout(user_col)
         user_row.addStretch()
@@ -211,9 +233,11 @@ class MainWindow(QMainWindow):
 
         logout_btn = QPushButton("Log Out")
         logout_btn.setObjectName("logoutBtn")
-        logout_btn.setMinimumHeight(36)
+        logout_btn.setMinimumHeight(34)
         logout_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         logout_btn.setToolTip("Sign out and return to login")
+        logout_btn.setIcon(get_icon("nav_logout"))
+        logout_btn.setIconSize(QSize(16, 16))
         logout_btn.clicked.connect(self.logout_requested.emit)
         user_card_lay.addWidget(logout_btn)
 
@@ -237,14 +261,21 @@ class MainWindow(QMainWindow):
         lay.setContentsMargins(24, 0, 24, 0)
         lay.setSpacing(16)
 
+        # Page title + breadcrumb-style subtitle
+        title_col = QVBoxLayout()
+        title_col.setSpacing(0)
         self._top_title = QLabel("Dashboard")
         self._top_title.setObjectName("topTitle")
-        lay.addWidget(self._top_title)
+        self._top_subtitle = QLabel(f"Welcome, {self._user_name}")
+        self._top_subtitle.setObjectName("topSubtitle")
+        title_col.addWidget(self._top_title)
+        title_col.addWidget(self._top_subtitle)
+        lay.addLayout(title_col)
         lay.addStretch()
 
         self._search_bar = QLineEdit()
         self._search_bar.setObjectName("searchBar")
-        self._search_bar.setPlaceholderText("🔍  Search patients, appointments, staff…")
+        self._search_bar.setPlaceholderText("Search patients, appointments, staff...")
         self._search_bar.setFixedWidth(320)
         self._search_bar.setMinimumHeight(36)
         self._search_bar.returnPressed.connect(self._on_global_search)
@@ -389,6 +420,8 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentIndex(stack_idx)
         if hasattr(self, "_top_title"):
             self._top_title.setText(label)
+        if hasattr(self, "_top_subtitle"):
+            self._top_subtitle.setText(_NAV_TOOLTIPS.get(label, ""))
         # Refresh user display name from DB
         self._refresh_user_display_name()
         # Refresh the target page on navigation

@@ -215,21 +215,33 @@ class AnalyticsMixin:
         except Exception:
             return defaults
 
-    def get_period_comparison(self):
+    def get_period_comparison(self, doctor_email=None):
         defaults = {"revenue_delta": 0, "appts_delta": 0, "patients_delta": 0, "completed_delta": 0}
         try:
             conn = self._get_connection()
             with conn.cursor(dictionary=True) as cur:
                 months = {}
                 for label, offset in [("curr", 0), ("prev", 1)]:
-                    cur.execute("""
-                        SELECT COALESCE(SUM(CASE WHEN a.status='Completed' THEN s.price ELSE 0 END),0) AS revenue,
-                               COUNT(*) AS appts, COUNT(DISTINCT a.patient_id) AS patients,
-                               SUM(CASE WHEN a.status='Completed' THEN 1 ELSE 0 END) AS completed
-                        FROM appointments a INNER JOIN services s ON a.service_id=s.service_id
-                        WHERE YEAR(a.appointment_date) = YEAR(CURDATE() - INTERVAL %s MONTH)
-                          AND MONTH(a.appointment_date) = MONTH(CURDATE() - INTERVAL %s MONTH)
-                    """, (offset, offset))
+                    if doctor_email:
+                        cur.execute("""
+                            SELECT COALESCE(SUM(CASE WHEN a.status='Completed' THEN s.price ELSE 0 END),0) AS revenue,
+                                   COUNT(*) AS appts, COUNT(DISTINCT a.patient_id) AS patients,
+                                   SUM(CASE WHEN a.status='Completed' THEN 1 ELSE 0 END) AS completed
+                            FROM appointments a INNER JOIN services s ON a.service_id=s.service_id
+                            INNER JOIN employees e ON a.doctor_id = e.employee_id
+                            WHERE YEAR(a.appointment_date) = YEAR(CURDATE() - INTERVAL %s MONTH)
+                              AND MONTH(a.appointment_date) = MONTH(CURDATE() - INTERVAL %s MONTH)
+                              AND e.email = %s
+                        """, (offset, offset, doctor_email))
+                    else:
+                        cur.execute("""
+                            SELECT COALESCE(SUM(CASE WHEN a.status='Completed' THEN s.price ELSE 0 END),0) AS revenue,
+                                   COUNT(*) AS appts, COUNT(DISTINCT a.patient_id) AS patients,
+                                   SUM(CASE WHEN a.status='Completed' THEN 1 ELSE 0 END) AS completed
+                            FROM appointments a INNER JOIN services s ON a.service_id=s.service_id
+                            WHERE YEAR(a.appointment_date) = YEAR(CURDATE() - INTERVAL %s MONTH)
+                              AND MONTH(a.appointment_date) = MONTH(CURDATE() - INTERVAL %s MONTH)
+                        """, (offset, offset))
                     months[label] = cur.fetchone()
             c, p = months["curr"], months["prev"]
             def delta(cv, pv):

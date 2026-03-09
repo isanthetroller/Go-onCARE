@@ -118,7 +118,7 @@ class EmployeesPage(QWidget):
         bar = QHBoxLayout()
         self.search = QLineEdit()
         self.search.setObjectName("searchBar")
-        self.search.setPlaceholderText("🔍  Search employees by name, role, or department…")
+        self.search.setPlaceholderText("Search employees by name, role, or department...")
         self.search.setMinimumHeight(42)
         self.search.textChanged.connect(lambda _: self._apply_filters())
         bar.addWidget(self.search)

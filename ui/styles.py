@@ -186,7 +186,7 @@ def make_banner(title_text: str, subtitle_text: str,
         btn.setObjectName("bannerBtn")
         btn.setMinimumHeight(42)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn.setToolTip(btn_text.replace("\uff0b", "").strip())
+        btn.setToolTip(btn_text.replace("\uff0b", "").replace("+", "").strip())
         btn.clicked.connect(btn_slot)
         banner_lay.addWidget(btn, alignment=Qt.AlignmentFlag.AlignVCenter)
 

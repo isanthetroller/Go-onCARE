@@ -1,4 +1,4 @@
-# CareCRUD - main entry point
+# Go-onCare - main entry point
 
 import sys
 sys.dont_write_bytecode = True

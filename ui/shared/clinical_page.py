@@ -8,13 +8,14 @@ from PyQt6.QtWidgets import (
     QComboBox, QStackedWidget, QDialog,
     QMessageBox,
 )
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QSize
 from PyQt6.QtGui import QColor
 from ui.styles import (
     configure_table, make_page_layout, finish_page, make_banner, make_read_only_table,
     make_table_btn, make_table_btn_danger, make_action_table,
     format_timedelta, status_color, TAB_ACTIVE, TAB_INACTIVE, make_action_cell,
 )
+from ui.icons import get_icon
 from ui.shared.clinical_dialogs import (
     QueueEditDialog, ServiceEditDialog, NewInvoiceDialog,
     PaymentDialog, BulkPriceDialog,
@@ -35,6 +36,11 @@ class ClinicalPage(QWidget):
         self._queue_ids: list[int] = []
         self._service_ids: list[int] = []
         self._invoice_ids: list[int] = []
+        self._my_doctor_id = None
+        if self._role == "Doctor" and self._user_email and self._backend:
+            self._my_doctor_id = self._backend.get_employee_id_by_email(self._user_email)
+            if not self._my_doctor_id:
+                self._my_doctor_id = -1  # Sentinel: show nothing if lookup fails
         self._build()
         # Auto-refresh data every 10 seconds
         self._refresh_timer = QTimer(self)
@@ -117,7 +123,7 @@ class ClinicalPage(QWidget):
         status_row = QHBoxLayout()
         stats = {"waiting": 0, "in_progress": 0, "completed": 0}
         if self._backend:
-            stats = self._backend.get_queue_stats()
+            stats = self._backend.get_queue_stats(doctor_id=self._my_doctor_id)
         self._queue_stat_labels = {}
         for key, label, color in [
             ("waiting",     "Waiting",          "#E8B931"),
@@ -151,7 +157,9 @@ class ClinicalPage(QWidget):
         # Toolbar: call next, doctor filter
         toolbar = QHBoxLayout(); toolbar.setSpacing(10)
 
-        self._call_btn = QPushButton("📢  Call Next")
+        self._call_btn = QPushButton("Call Next")
+        self._call_btn.setIcon(get_icon("megaphone"))
+        self._call_btn.setIconSize(QSize(18, 18))
         self._call_btn.setObjectName("actionBtn"); self._call_btn.setMinimumHeight(40)
         self._call_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._call_btn.clicked.connect(self._on_call_next)
@@ -203,7 +211,8 @@ class ClinicalPage(QWidget):
         self._queue_doctor_ids = []
         if not self._backend:
             return
-        rows = self._backend.get_queue_entries() or []
+        doc_id = self._my_doctor_id if self._role == "Doctor" else self._queue_doc_filter.currentData()
+        rows = self._backend.get_queue_entries(doctor_id=doc_id) or []
         for entry in rows:
             r = self._queue_table.rowCount()
             self._queue_table.insertRow(r)
@@ -249,7 +258,8 @@ class ClinicalPage(QWidget):
                 self._queue_table.setCellWidget(r, 6, make_action_cell(edit_btn))
 
         # Update stat cards
-        stats = self._backend.get_queue_stats()
+        doc_id_for_stats = self._my_doctor_id if self._role == "Doctor" else doc_id
+        stats = self._backend.get_queue_stats(doctor_id=doc_id_for_stats)
         for key, lbl in self._queue_stat_labels.items():
             lbl.setText(str(stats.get(key, 0) or 0))
         # Update est wait
@@ -259,10 +269,8 @@ class ClinicalPage(QWidget):
 
         # Doctor: disable Call Next if there's already an In Progress entry for this doctor
         if self._role == "Doctor":
-            doc_id = self._queue_doc_filter.currentData()
             has_in_progress = any(
-                r < len(self._queue_doctor_ids) and self._queue_doctor_ids[r] == doc_id
-                and self._queue_table.item(r, 5) and self._queue_table.item(r, 5).text() == "In Progress"
+                self._queue_table.item(r, 5) and self._queue_table.item(r, 5).text() == "In Progress"
                 for r in range(self._queue_table.rowCount())
             )
             self._call_btn.setEnabled(not has_in_progress)
@@ -274,6 +282,11 @@ class ClinicalPage(QWidget):
         self._filter_queue()
 
     def _filter_queue(self):
+        # Doctor role: data is already filtered at DB level, show all loaded rows
+        if self._role == "Doctor":
+            for r in range(self._queue_table.rowCount()):
+                self._queue_table.setRowHidden(r, False)
+            return
         doc_id = self._queue_doc_filter.currentData()
         for r in range(self._queue_table.rowCount()):
             if doc_id is None:
@@ -292,7 +305,7 @@ class ClinicalPage(QWidget):
     def _on_call_next(self):
         if not self._backend:
             return
-        doc_id = self._queue_doc_filter.currentData()
+        doc_id = self._my_doctor_id if self._role == "Doctor" else self._queue_doc_filter.currentData()
         # Doctor: block if there's an In Progress entry
         if self._role == "Doctor" and doc_id:
             for r in range(self._queue_table.rowCount()):
@@ -362,12 +375,14 @@ class ClinicalPage(QWidget):
         bar = QHBoxLayout()
         self._billing_search = QLineEdit()
         self._billing_search.setObjectName("searchBar")
-        self._billing_search.setPlaceholderText("🔍  Search invoices…")
+        self._billing_search.setPlaceholderText("Search invoices...")
         self._billing_search.setMinimumHeight(42)
         self._billing_search.textChanged.connect(self._apply_billing_filters)
         bar.addWidget(self._billing_search)
 
-        new_btn = QPushButton("＋  New Invoice")
+        new_btn = QPushButton("New Invoice")
+        new_btn.setIcon(get_icon("plus"))
+        new_btn.setIconSize(QSize(18, 18))
         new_btn.setObjectName("actionBtn"); new_btn.setMinimumHeight(42)
         new_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         new_btn.clicked.connect(self._on_new_invoice)
@@ -633,7 +648,7 @@ class ClinicalPage(QWidget):
         bar = QHBoxLayout()
         self._svc_search = QLineEdit()
         self._svc_search.setObjectName("searchBar")
-        self._svc_search.setPlaceholderText("🔍  Search services…")
+        self._svc_search.setPlaceholderText("Search services...")
         self._svc_search.setMinimumHeight(42)
         self._svc_search.textChanged.connect(self._on_svc_search)
         bar.addWidget(self._svc_search)
@@ -648,13 +663,17 @@ class ClinicalPage(QWidget):
         self._svc_cat_filter.currentTextChanged.connect(lambda _: self._apply_svc_filters())
         bar.addWidget(self._svc_cat_filter)
 
-        add_btn = QPushButton("＋  Add Service")
+        add_btn = QPushButton("Add Service")
+        add_btn.setIcon(get_icon("plus"))
+        add_btn.setIconSize(QSize(18, 18))
         add_btn.setObjectName("actionBtn"); add_btn.setMinimumHeight(42)
         add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         add_btn.clicked.connect(self._on_add_service)
         bar.addWidget(add_btn)
 
-        bulk_btn = QPushButton("💲  Bulk Price Update")
+        bulk_btn = QPushButton("Bulk Price Update")
+        bulk_btn.setIcon(get_icon("dollar"))
+        bulk_btn.setIconSize(QSize(18, 18))
         bulk_btn.setObjectName("actionBtn"); bulk_btn.setMinimumHeight(42)
         bulk_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         bulk_btn.clicked.connect(self._on_bulk_price)

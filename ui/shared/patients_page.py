@@ -7,12 +7,13 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView,
     QComboBox, QDialog, QMessageBox,
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize
 from ui.styles import (
     make_page_layout, finish_page, make_banner, make_read_only_table,
     make_action_table, make_table_btn, make_table_btn_danger, status_color,
     make_action_cell,
 )
+from ui.icons import get_icon
 from ui.shared.patient_dialogs import PatientDialog, PatientProfileDialog, MergeDialog
 
 
@@ -47,7 +48,7 @@ class PatientsPage(QWidget):
         scroll, lay = make_page_layout()
 
         # ── Banner ─────────────────────────────────────────────────
-        btn_text = "\uff0b  Add Patient" if self._role not in ("Cashier", "Doctor") else ""
+        btn_text = "+  Add Patient" if self._role not in ("Cashier", "Doctor") else ""
         lay.addWidget(make_banner(
             "Patient Records", "Manage and view all patient information",
             btn_text=btn_text, btn_slot=self._on_add,
@@ -56,7 +57,7 @@ class PatientsPage(QWidget):
         # ── Toolbar ────────────────────────────────────────────────
         bar = QHBoxLayout(); bar.setSpacing(10)
         self.search = QLineEdit(); self.search.setObjectName("searchBar")
-        self.search.setPlaceholderText("🔍  Search patients by name, ID, or condition…")
+        self.search.setPlaceholderText("Search patients by name, ID, or condition...")
         self.search.setMinimumHeight(42); self.search.textChanged.connect(self._apply_filters)
         bar.addWidget(self.search)
 
@@ -86,7 +87,9 @@ class PatientsPage(QWidget):
 
         # Merge button (Admin / Receptionist only)
         if self._role in ("Admin", "Receptionist"):
-            merge_btn = QPushButton("🔗  Merge")
+            merge_btn = QPushButton("Merge")
+            merge_btn.setIcon(get_icon("link"))
+            merge_btn.setIconSize(QSize(18, 18))
             merge_btn.setObjectName("actionBtn"); merge_btn.setMinimumHeight(42)
             merge_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             merge_btn.setToolTip("Merge duplicate patient records")

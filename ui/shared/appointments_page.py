@@ -83,7 +83,7 @@ class AppointmentsPage(QWidget):
         lay.setSpacing(16)
 
         # Banner
-        btn_text = "\uff0b  New Appointment" if self._role not in ("Cashier", "Doctor") else ""
+        btn_text = "+  New Appointment" if self._role not in ("Cashier", "Doctor") else ""
         lay.addWidget(make_banner(
             "Appointment Scheduling",
             "View and manage all doctor-patient appointments",
@@ -105,7 +105,7 @@ class AppointmentsPage(QWidget):
         # Filter bar
         bar = QHBoxLayout(); bar.setSpacing(10)
         self.search = QLineEdit(); self.search.setObjectName("searchBar")
-        self.search.setPlaceholderText("🔍  Search by patient, doctor, or service…")
+        self.search.setPlaceholderText("Search by patient, doctor, or service...")
         self.search.setMinimumHeight(42); self.search.textChanged.connect(self._apply_filters)
         bar.addWidget(self.search)
         self.doc_filter = QComboBox(); self.doc_filter.setObjectName("formCombo")

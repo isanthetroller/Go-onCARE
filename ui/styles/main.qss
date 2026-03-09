@@ -1,5 +1,5 @@
 /* ================================================================
-   CareCRUD – Main Application Stylesheet
+   Go-onCare – Main Application Stylesheet
    ================================================================
    Applied to the main window after login (MainWindow).
    Covers the sidebar, top bar, content pages, tables, forms,
@@ -121,33 +121,33 @@ QLabel#brandSubLabel {
 /* Navigation button (idle state) */
 QPushButton#navBtn {
     text-align: left;
-    padding: 11px 16px 11px 18px;
+    padding: 9px 14px 9px 16px;
     border: none;
-    border-radius: 10px;
+    border-radius: 8px;
     color: #2C3E50;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 500;
     background: transparent;
-    margin: 2px 0px;
+    margin: 1px 0px;
 }
 
 QPushButton#navBtn:hover {
-    background-color: #BADFE7;
-    color: #2C3E50;
+    background-color: #E8F4F6;
+    color: #388087;
 }
 
 /* Navigation button (active / selected page) */
 QPushButton#navBtnActive {
     text-align: left;
-    padding: 11px 16px;
+    padding: 9px 14px 9px 16px;
     border: none;
-    border-radius: 10px;
-    color: #2C3E50;
-    font-size: 14px;
+    border-radius: 8px;
+    color: #388087;
+    font-size: 13px;
     font-weight: bold;
-    background-color: #BADFE7;
+    background-color: #E0F2F4;
     border-left: 3px solid #388087;
-    margin: 2px 0px;
+    margin: 1px 0px;
 }
 
 /* Logout button (bordered, turns red on hover) */
@@ -156,8 +156,9 @@ QPushButton#logoutBtn {
     color: #D9534F;
     border: 1px solid #D9534F;
     border-radius: 8px;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: bold;
+    padding: 6px 0px;
 }
 
 QPushButton#logoutBtn:hover {
@@ -165,13 +166,14 @@ QPushButton#logoutBtn:hover {
     color: #FFFFFF;
 }
 
-/* Section header ("MAIN MENU") */
+/* Section header (category labels like "PATIENT CARE") */
 QLabel#sidebarSection {
-    color: #7F8C8D;
-    font-size: 11px;
+    color: #95A5A6;
+    font-size: 10px;
     font-weight: bold;
-    text-transform: uppercase;
-    padding-left: 4px;
+    letter-spacing: 1.2px;
+    padding-left: 6px;
+    padding-top: 2px;
 }
 
 
@@ -999,7 +1001,7 @@ QLabel#userAvatar {
 /* User info card container */
 QFrame#userCard {
     background-color: #F6F6F2;
-    border-radius: 10px;
+    border-radius: 12px;
 }
 
 /* Display name */
@@ -1037,6 +1039,13 @@ QLabel#topTitle {
     font-size: 20px;
     font-weight: bold;
     color: #2C3E50;
+}
+
+/* Top-bar subtitle / breadcrumb */
+QLabel#topSubtitle {
+    font-size: 12px;
+    color: #95A5A6;
+    font-weight: 500;
 }
 
 

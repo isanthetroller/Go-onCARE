@@ -44,7 +44,7 @@ class SettingsPage(QWidget):
         pl = QVBoxLayout(prof_card); pl.setContentsMargins(20, 16, 20, 16); pl.setSpacing(14)
 
         # Change password
-        pw_lbl = QLabel("🔒  Change Password")
+        pw_lbl = QLabel("Change Password")
         pw_lbl.setStyleSheet("font-weight: bold; font-size: 13px;")
         pl.addWidget(pw_lbl)
         pw_row = QHBoxLayout(); pw_row.setSpacing(10)

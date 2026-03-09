@@ -127,7 +127,7 @@ class EmployeeDialog(QDialog):
     def _build_buttons(self, form, data):
         btn_row = QHBoxLayout(); btn_row.setSpacing(12)
         if data:
-            fire_btn = QPushButton("🔥  Fire")
+            fire_btn = QPushButton("Fire")
             fire_btn.setMinimumHeight(32); fire_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             fire_btn.setObjectName("dialogDangerBtn")
             fire_btn.clicked.connect(self._on_fire)

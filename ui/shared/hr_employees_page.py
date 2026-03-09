@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QTableWidgetItem, QHeaderView, QTabWidget, QScrollArea, QFrame,
     QComboBox, QDialog, QMessageBox, QTextEdit, QInputDialog,
 )
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QSize
 from PyQt6.QtGui import QColor
 from ui.styles import (
     make_table_btn, make_banner,
@@ -13,6 +13,7 @@ from ui.styles import (
     make_interactive_table, make_action_table,
     status_color, make_action_cell,
 )
+from ui.icons import get_icon
 from ui.shared.hr_employee_dialogs import HREmployeeDialog, HREmployeeProfileDialog, UserAccountDialog
 from backend import AuthBackend
 
@@ -130,11 +131,11 @@ class HREmployeesPage(QWidget):
 
         # ── Tab widget (fills remaining space) ────────────────────
         self._tabs = QTabWidget()
-        self._tabs.addTab(self._build_employees_tab(), "\U0001F465  Employees")
-        self._tabs.addTab(self._build_leave_tab(), "\U0001F4CB  Leave Management")
-        self._tabs.addTab(self._build_payroll_tab(), "\U0001F4B0  Payroll \u0026 Staffing")
+        self._tabs.addTab(self._build_employees_tab(), "Employees")
+        self._tabs.addTab(self._build_leave_tab(), "Leave Management")
+        self._tabs.addTab(self._build_payroll_tab(), "Payroll & Staffing")
         if self._role == "Admin":
-            self._tabs.addTab(self._build_accounts_tab(), "\U0001F510  User Accounts")
+            self._tabs.addTab(self._build_accounts_tab(), "User Accounts")
         lay.addWidget(self._tabs, 1)
 
         outer.addWidget(container)
@@ -184,7 +185,7 @@ class HREmployeesPage(QWidget):
         bar = QHBoxLayout(); bar.setSpacing(10)
         self.search = QLineEdit()
         self.search.setObjectName("searchBar")
-        self.search.setPlaceholderText("\U0001F50D  Search employees by name, role, department, email\u2026")
+        self.search.setPlaceholderText("Search employees by name, role, department, email...")
         self.search.setMinimumHeight(42)
         self.search.textChanged.connect(lambda _: self._apply_filters())
         bar.addWidget(self.search, 2)
@@ -313,21 +314,27 @@ class HREmployeesPage(QWidget):
         ua_header.addWidget(ua_title)
         ua_header.addStretch()
 
-        create_btn = QPushButton("\uff0b  Create Account")
+        create_btn = QPushButton("Create Account")
+        create_btn.setIcon(get_icon("plus"))
+        create_btn.setIconSize(QSize(18, 18))
         create_btn.setObjectName("actionBtn"); create_btn.setMinimumHeight(38)
         create_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         create_btn.setToolTip("Create a new user account for an employee")
         create_btn.clicked.connect(self._on_create_account)
         ua_header.addWidget(create_btn)
 
-        reset_btn = QPushButton("\U0001F511  Reset Password")
+        reset_btn = QPushButton("Reset Password")
+        reset_btn.setIcon(get_icon("key"))
+        reset_btn.setIconSize(QSize(18, 18))
         reset_btn.setObjectName("actionBtn"); reset_btn.setMinimumHeight(38)
         reset_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         reset_btn.setToolTip("Reset a user's password")
         reset_btn.clicked.connect(self._on_reset_password)
         ua_header.addWidget(reset_btn)
 
-        del_btn = QPushButton("\U0001F5D1  Delete Account")
+        del_btn = QPushButton("Delete Account")
+        del_btn.setIcon(get_icon("trash"))
+        del_btn.setIconSize(QSize(18, 18))
         del_btn.setObjectName("dangerBtn"); del_btn.setMinimumHeight(38)
         del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         del_btn.setToolTip("Permanently delete a user account")

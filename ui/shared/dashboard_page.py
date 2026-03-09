@@ -8,12 +8,13 @@ from PyQt6.QtWidgets import (
     QPushButton, QDialog, QDateEdit, QTextEdit, QFormLayout,
     QMessageBox,
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QDate
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QDate, QSize
 from PyQt6.QtGui import QColor
 from ui.styles import (
     configure_table, make_page_layout, finish_page, make_card,
     make_read_only_table, ACTION_COLORS, status_color,
 )
+from ui.icons import get_icon
 from ui.shared.chart_widgets import BarChartWidget
 
 
@@ -58,10 +59,10 @@ class DashboardPage(QWidget):
 
         act_row = QHBoxLayout(); act_row.setSpacing(12)
         quick_actions = [
-            ("\u2795  New Patient", 1), ("\U0001F4C5  New Appointment", 2),
-            ("\U0001F3E5  Clinical Queue", 3), ("\U0001F4CA  Analytics", 4),
+            ("New Patient", "new_patient", 1), ("New Appointment", "calendar_plus", 2),
+            ("Clinical Queue", "nav_clinical", 3), ("Analytics", "nav_analytics", 4),
         ]
-        for text, pi in quick_actions:
+        for text, icon_key, pi in quick_actions:
             if self._role == "Doctor" and pi in (1, 2):
                 continue
             if self._role == "HR" and pi in (1, 2, 3, 4):
@@ -71,6 +72,8 @@ class DashboardPage(QWidget):
             if self._role == "Receptionist" and pi == 4:
                 continue
             btn = QPushButton(text)
+            btn.setIcon(get_icon(icon_key))
+            btn.setIconSize(QSize(18, 18))
             btn.setObjectName("actionBtn")
             btn.setMinimumHeight(44)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -88,7 +91,9 @@ class DashboardPage(QWidget):
             lv_title = QLabel("My Leave Requests")
             lv_title.setObjectName("cardTitle")
             lv_hdr.addWidget(lv_title); lv_hdr.addStretch()
-            req_btn = QPushButton("📝  Request Leave")
+            req_btn = QPushButton("Request Leave")
+            req_btn.setIcon(get_icon("edit"))
+            req_btn.setIconSize(QSize(18, 18))
             req_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             req_btn.setObjectName("actionBtn")
             req_btn.setMinimumHeight(44)
@@ -278,8 +283,9 @@ class DashboardPage(QWidget):
 
     # ── Data refresh ──────────────────────────────────────────────
     def _refresh_kpis(self):
-        s = self._backend.get_dashboard_summary() if self._backend else {}
-        cmp = self._backend.get_period_comparison() if self._backend else {}
+        doc_email = self._user_email if self._role == "Doctor" else None
+        s = self._backend.get_dashboard_summary(doctor_email=doc_email) if self._backend else {}
+        cmp = self._backend.get_period_comparison(doctor_email=doc_email) if self._backend else {}
 
         if "today_appts" in self._kpi_labels:
             today_appts = s.get("today_appts", 0)
@@ -326,7 +332,8 @@ class DashboardPage(QWidget):
         self._kpi_labels["active_staff_sub"].setText("")
 
     def _refresh_schedule(self):
-        upcoming = self._backend.get_upcoming_appointments(5) if self._backend else []
+        doc_email = self._user_email if self._role == "Doctor" else None
+        upcoming = self._backend.get_upcoming_appointments(5, doctor_email=doc_email) if self._backend else []
         self._sched_badge.setText(f"{len(upcoming)} upcoming")
         self._sched_table.setRowCount(len(upcoming))
         for r, row in enumerate(upcoming):
@@ -344,7 +351,8 @@ class DashboardPage(QWidget):
                 self._sched_table.setItem(r, c, item)
 
     def _refresh_chart(self):
-        monthly = self._backend.get_patient_stats_monthly(6) if self._backend else []
+        doc_email = self._user_email if self._role == "Doctor" else None
+        monthly = self._backend.get_patient_stats_monthly(6, doctor_email=doc_email) if self._backend else []
         data = [(m["month_label"], m["visit_count"]) for m in monthly]
         self._chart_widget.set_data(data)
         total = sum(v for _, v in data)
