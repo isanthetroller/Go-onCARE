@@ -26,7 +26,10 @@
 8. [How the Backend Works](#8-how-the-backend-works)
 9. [How the UI Works](#9-how-the-ui-works)
 10. [Database Relationships Explained](#10-database-relationships-explained)
-11. [Common Defense Questions & Answers](#11-common-defense-questions--answers)
+11. [Doctor Data Isolation](#11-doctor-data-isolation)
+12. [Input Validation System](#12-input-validation-system)
+13. [System Analysis — What Makes Sense & What Doesn't](#13-system-analysis)
+14. [Common Defense Questions & Answers](#14-common-defense-questions--answers)
 
 ---
 
@@ -883,7 +886,160 @@ def delete_patient(self, patient_id):
 
 ---
 
-## 11. COMMON DEFENSE QUESTIONS & ANSWERS
+## 11. DOCTOR DATA ISOLATION
+
+### The Problem
+In a multi-doctor clinic, each doctor should ONLY see data related to their own patients and appointments — not every doctor's data. This is both a **privacy** and **UX** requirement.
+
+### How It Works
+When a Doctor logs in, the system stores their email (e.g., `ana.reyes@carecrud.com`). This email is used to look up their `employee_id` (which is their `doctor_id` in appointments/queue tables). Every query then filters by this ID.
+
+### Isolation Points
+
+| Feature | How It's Filtered | Backend Method |
+|---------|-------------------|----------------|
+| **Dashboard KPIs** | Passes `doctor_email` to count only the doctor's own appointments, patients, and revenue | `get_dashboard_summary(doctor_email=)` |
+| **Dashboard Schedule** | Only shows upcoming appointments assigned to this doctor | `get_upcoming_appointments(doctor_email=)` |
+| **Dashboard Chart** | Monthly visits chart shows only this doctor's patient visits | `get_patient_stats_monthly(doctor_email=)` |
+| **Patient List** | JOINs through appointments to show only patients who have appointments with this doctor | `get_patients_for_doctor(email)` |
+| **Appointment List** | Filters appointments WHERE doctor's email matches | `get_appointments(doctor_email=)` |
+| **Clinical Queue** | Filters queue entries WHERE doctor_id matches | `get_queue_entries(doctor_id=)` |
+| **Call Next** | Only calls the next patient in THIS doctor's queue | `call_next_queue(doctor_id=)` |
+| **Analytics** | Shows only the doctor's own stats (appointments, revenue, completion rate) | `get_doctor_own_stats(email)` |
+| **Global Search** | Searches only patients/appointments linked to this doctor | `global_search(doctor_email=)` |
+| **Patient Profile** | Verifies the patient has appointments with this doctor before returning data | `get_patient_full_profile(patient_id, doctor_email=)` |
+
+### How the SQL Filtering Works (Example)
+```sql
+-- Normal query (Admin sees all patients):
+SELECT * FROM patients ORDER BY patient_id
+
+-- Doctor-filtered query (Doctor sees only their patients):
+SELECT DISTINCT p.* FROM patients p
+INNER JOIN appointments a ON p.patient_id = a.patient_id
+INNER JOIN employees e ON a.doctor_id = e.employee_id
+WHERE e.email = 'ana.reyes@carecrud.com'
+```
+
+### Defense-in-Depth
+The isolation works at **two layers**:
+1. **UI layer** — the page checks `if self._role == "Doctor"` and calls the filtered backend method
+2. **Backend layer** — the method itself accepts a `doctor_email` or `doctor_id` parameter and alters the SQL query
+
+This means even if someone bypasses the UI check, the backend still enforces the filter.
+
+---
+
+## 12. INPUT VALIDATION SYSTEM
+
+### The Problem
+Users may type invalid data into input fields — numbers in name fields, letters in phone fields, malformed emails, excessively long text, etc. This must be caught before it corrupts the database.
+
+### Two-Layer Approach
+
+**Layer 1: Real-Time Keystroke Blocking (QValidator)**
+- Prevents invalid characters from being typed at all
+- The cursor simply doesn't move when the user presses an invalid key
+- Defined in `ui/validators.py`
+
+| Validator | What It Allows | Applied To |
+|-----------|---------------|------------|
+| `NameValidator` | Letters, spaces, hyphens, dots, apostrophes only | Patient name, Employee name |
+| `PhoneDigitsValidator` | Digits only (max 10) | Phone fields |
+| `PriceValidator` | Digits and one decimal point | Service price field |
+
+**Layer 2: Submit-Time Validation (in `accept()` method)**
+- Runs when the user clicks "Save"
+- Checks for empty required fields, format rules, and minimum lengths
+- Shows a warning dialog and blocks save if validation fails
+
+| Check | Rule | Where Used |
+|-------|------|-----------|
+| `validate_name()` | Min 2 characters, letters only, required | Patient dialog, Employee dialog |
+| `validate_email()` | Must match `name@domain.ext` pattern | Patient dialog, Employee dialog, Login |
+| `validate_phone_digits()` | Exactly 10 digits | Patient dialog, Employee dialog |
+| `validate_price()` | Must be a valid positive number | Service dialog |
+| `validate_required()` | Cannot be empty/whitespace | Service name, Discount type name |
+
+**Layer 3: Max Length Enforcement**
+All text fields have `setMaxLength()` to prevent excessively long input:
+
+| Field | Max Length |
+|-------|-----------|
+| Names | 100 characters |
+| Email | 150 characters |
+| Emergency contact | 150 characters |
+| Service name | 150 characters |
+| Cancel/reschedule reasons | 300 characters |
+| Other conditions | 300 characters |
+| Invoice notes | 300 characters |
+| Legal basis | 200 characters |
+| Discount type name | 100 characters |
+| Phone digits | 10 characters |
+| Price | 12 characters |
+
+### Example: What Happens When a User Tries to Type "123" in the Patient Name Field
+1. User presses "1" → `NameValidator.validate()` returns `Invalid` → character is rejected
+2. The text field doesn't change — the "1" never appears
+3. User tries "Maria" → each letter passes validation → text appears normally
+4. On Save, `validate_name("Maria")` confirms it's ≥ 2 chars and letters-only → passes
+
+---
+
+## 13. SYSTEM ANALYSIS
+
+### What Makes Sense (and Why)
+
+#### 1. Role System — Well-Designed
+Each of the 5 roles (Admin, Doctor, Cashier, Receptionist, HR) has appropriate access. Admin controls everything, Doctor sees only their own data, Cashier handles billing, Receptionist handles front-desk intake, HR manages personnel. Roles are enforced at three levels: sidebar visibility, page-level button hiding, and SQL query filtering.
+
+#### 2. Patient Workflow — Textbook Outpatient Flow
+Registration → Appointment → Queue → Clinical Visit → Invoice → Payment. This mirrors how a real outpatient clinic operates. The automated steps (appointment sync to queue, auto-invoice on completion) reduce manual work.
+
+#### 3. Appointment Conflict Detection — Prevents Double-Booking
+Before saving an appointment, the system checks if the doctor already has a non-cancelled appointment at the same date and time. If a conflict exists, it warns the user but allows override (because real clinics sometimes intentionally double-book). Appointments are date-range limited to prevent scheduling too far in advance.
+
+#### 4. Clinical Queue — Correct State Machine
+The queue follows a logical flow: Waiting → In Progress → Completed/Cancelled. A doctor can only have one "In Progress" patient at a time (prevents serving two simultaneously). The "Call Next" button picks the earliest waiting patient (FIFO). Estimated wait time uses the average consultation duration from the last 30 days.
+
+#### 5. Discount Enforcement — Security-Conscious
+When an invoice is created, the system ignores any discount value from the UI and re-fetches the patient's discount from the database. This prevents cashiers from giving unauthorized discounts. The discount is based on Philippine laws (RA 9994 for Senior Citizens, RA 7277 for PWDs).
+
+#### 6. Leave Request Auto-Cancellation — Real-World Awareness
+When HR approves a leave request, all the doctor's appointments during the leave period are automatically cancelled with the reason "Employee on approved leave." This prevents patients from showing up when their doctor isn't available. The auto-expire mechanism restores the employee to "Active" after their leave ends.
+
+#### 7. Activity Logging — Full Audit Trail
+Every important action is logged with timestamp, user, role, action, and details. This is essential for accountability in healthcare and supports Philippine DOH record-keeping requirements.
+
+#### 8. Patient Merge — Practical Deduplication
+Receptionists and Admins can merge duplicate patient records. The "Remove" patient's data (appointments, invoices, queue, conditions) is transferred to the "Keep" patient, then the duplicate is deleted. This handles real-world data entry mistakes.
+
+#### 9. Billing System — Multi-Line Items with Partial Payments
+Invoices support multiple service line items, quantity, per-item discounts, and partial payments. Status tracks correctly: Unpaid → Partial → Paid. Void preserves the record for audit trail rather than deleting it.
+
+### What Could Be Improved (and Why)
+
+#### 1. Plaintext Passwords — Security Risk
+Passwords are stored as plain strings in the database. If the database were compromised, all passwords would be readable. **Industry standard**: use bcrypt or argon2 to hash passwords.
+
+#### 2. No Time-Slot Duration for Appointments
+The conflict check only matches exact time — if two appointments are at 10:00 and 10:05, no conflict is detected. Real clinics need duration-based slots (e.g., 30-minute blocks).
+
+#### 3. No Walk-In Patient Shortcut
+Currently, a patient **must** have an appointment to enter the queue (the queue syncs from confirmed appointments). A walk-in patient who arrives without an appointment has no streamlined entry path. A "Walk-In" button that creates an appointment + queue entry in one step would improve workflow.
+
+#### 4. No Leave Balance Tracking
+Employees can request unlimited leave — there's no concept of leave entitlement (e.g., 15 vacation days, 10 sick days per year). HR has no way to enforce leave quotas.
+
+#### 5. Minimum Password Length Is Only 4 Characters
+Healthcare systems handling patient data should enforce stronger password policies (8+ characters with complexity requirements).
+
+#### 6. Cashier Sees Full Patient Medical Records
+Cashiers have access to the Patients page with full details including blood type, medical conditions, and emergency contacts. For privacy, cashiers should only see billing-relevant information (name, ID, discount status).
+
+---
+
+## 14. COMMON DEFENSE QUESTIONS & ANSWERS
 
 ### Architecture & Design
 

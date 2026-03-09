@@ -133,7 +133,7 @@ class HREmployeesPage(QWidget):
         self._tabs = QTabWidget()
         self._tabs.addTab(self._build_employees_tab(), "Employees")
         self._tabs.addTab(self._build_leave_tab(), "Leave Management")
-        self._tabs.addTab(self._build_payroll_tab(), "Payroll & Staffing")
+        self._tabs.addTab(self._build_payroll_tab(), "Payroll && Staffing")
         if self._role == "Admin":
             self._tabs.addTab(self._build_accounts_tab(), "User Accounts")
         lay.addWidget(self._tabs, 1)
@@ -416,10 +416,12 @@ class HREmployeesPage(QWidget):
         no_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         yes_btn.setStyleSheet(
             "QPushButton { background-color: #5CB85C; color: #FFF; border: none;"
-            " border-radius: 4px; padding: 8px 24px; font-size: 13px; font-weight: bold; }")
+            " border-radius: 8px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
+            " QPushButton:hover { background-color: #4CAE4C; }")
         no_btn.setStyleSheet(
-            "QPushButton { background-color: #6c757d; color: #FFF; border: none;"
-            " border-radius: 4px; padding: 8px 24px; font-size: 13px; font-weight: bold; }")
+            "QPushButton { background-color: #FFFFFF; color: #2C3E50; border: 2px solid #BADFE7;"
+            " border-radius: 8px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
+            " QPushButton:hover { background-color: #F0F7F8; border-color: #388087; }")
         msg.exec()
         if msg.clickedButton() == yes_btn:
             hr_emp_id = self._backend.get_employee_id_by_email(
@@ -469,14 +471,16 @@ class HREmployeesPage(QWidget):
         cancel_btn = QPushButton("Cancel"); cancel_btn.setMinimumHeight(36)
         cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         cancel_btn.setStyleSheet(
-            "QPushButton { background-color: #6c757d; color: #FFF; border: none;"
-            " border-radius: 4px; padding: 8px 24px; font-size: 13px; font-weight: bold; }")
+            "QPushButton { background-color: #FFFFFF; color: #2C3E50; border: 2px solid #BADFE7;"
+            " border-radius: 8px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
+            " QPushButton:hover { background-color: #F0F7F8; border-color: #388087; }")
         cancel_btn.clicked.connect(dlg.reject)
         decline_btn = QPushButton("Decline"); decline_btn.setMinimumHeight(36)
         decline_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         decline_btn.setStyleSheet(
             "QPushButton { background-color: #D9534F; color: #FFF; border: none;"
-            " border-radius: 4px; padding: 8px 24px; font-size: 13px; font-weight: bold; }")
+            " border-radius: 8px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
+            " QPushButton:hover { background-color: #C9302C; }")
 
         def _do_decline():
             reason_text = reason_edit.toPlainText().strip()
@@ -594,13 +598,13 @@ class HREmployeesPage(QWidget):
         no_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         yes_btn.setStyleSheet(
             "QPushButton { background-color: #D9534F; color: #FFF; border: none;"
-            " border-radius: 4px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
-            " QPushButton:hover { background-color: #c9302c; }"
+            " border-radius: 8px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
+            " QPushButton:hover { background-color: #C9302C; }"
         )
         no_btn.setStyleSheet(
-            "QPushButton { background-color: #6c757d; color: #FFF; border: none;"
-            " border-radius: 4px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
-            " QPushButton:hover { background-color: #5a6268; }"
+            "QPushButton { background-color: #FFFFFF; color: #2C3E50; border: 2px solid #BADFE7;"
+            " border-radius: 8px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
+            " QPushButton:hover { background-color: #F0F7F8; border-color: #388087; }"
         )
         msg.exec()
         if msg.clickedButton() == yes_btn:

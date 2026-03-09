@@ -114,9 +114,11 @@ class AppointmentDialog(QDialog):
 
         self.cancel_reason = QLineEdit(); self.cancel_reason.setObjectName("formInput")
         self.cancel_reason.setPlaceholderText("Reason (if cancelling)"); self.cancel_reason.setMinimumHeight(38)
+        self.cancel_reason.setMaxLength(300)
 
         self.resched_reason = QLineEdit(); self.resched_reason.setObjectName("formInput")
         self.resched_reason.setPlaceholderText("Reason (if rescheduling)"); self.resched_reason.setMinimumHeight(38)
+        self.resched_reason.setMaxLength(300)
 
         form.addRow("Patient", self.patient_combo)
         form.addRow("Doctor", self.doctor_combo)

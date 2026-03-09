@@ -27,7 +27,7 @@ _ALL_NAV = [
     ("Dashboard",      0),
     ("Patients",       1),
     ("Appointments",   2),
-    ("Clinical & POS", 3),
+    ("Clinical && POS", 3),
     ("Data Analytics", 4),
     ("Employees",      5),
     ("Activity Log",   6),
@@ -37,18 +37,18 @@ _ALL_NAV = [
 # Category groupings for the sidebar
 _NAV_CATEGORIES = [
     ("OVERVIEW",      ["Dashboard"]),
-    ("PATIENT CARE",  ["Patients", "Appointments", "Clinical & POS"]),
+    ("PATIENT CARE",  ["Patients", "Appointments", "Clinical && POS"]),
     ("INSIGHTS",      ["Data Analytics", "Activity Log"]),
     ("ADMINISTRATION",["Employees", "Settings"]),
 ]
 
 _ROLE_ACCESS = {
-    "Admin":        {"Dashboard", "Patients", "Appointments", "Clinical & POS",
+    "Admin":        {"Dashboard", "Patients", "Appointments", "Clinical && POS",
                      "Data Analytics", "Employees", "Activity Log", "Settings"},
     "HR":           {"Dashboard", "Employees", "Activity Log", "Settings"},
-    "Doctor":       {"Dashboard", "Patients", "Appointments", "Clinical & POS", "Data Analytics", "Settings"},
-    "Cashier":      {"Dashboard", "Patients", "Appointments", "Clinical & POS", "Settings"},
-    "Receptionist": {"Dashboard", "Patients", "Appointments", "Clinical & POS", "Settings"},
+    "Doctor":       {"Dashboard", "Patients", "Appointments", "Clinical && POS", "Data Analytics", "Settings"},
+    "Cashier":      {"Dashboard", "Patients", "Appointments", "Clinical && POS", "Settings"},
+    "Receptionist": {"Dashboard", "Patients", "Appointments", "Clinical && POS", "Settings"},
 }
 
 
@@ -56,7 +56,7 @@ _NAV_TOOLTIPS = {
     "Dashboard":      "Overview, KPIs, and schedule",
     "Patients":       "Manage patient records",
     "Appointments":   "Schedule and track appointments",
-    "Clinical & POS": "Queue, billing, and records",
+    "Clinical && POS": "Queue, billing, and records",
     "Data Analytics": "Reports, charts, and insights",
     "Employees":      "Staff directory and management",
     "Activity Log":   "Audit trail of system actions",
@@ -328,7 +328,7 @@ class MainWindow(QMainWindow):
             lambda _: self._sync_appointment_patients()
         )
 
-        # 3 – Clinical & POS
+        # 3 – Clinical && POS
         self._clinical_page = ClinicalPage(backend=self._backend, role=self._role, user_email=self._user)
         self.stack.addWidget(self._clinical_page)
 
@@ -438,7 +438,8 @@ class MainWindow(QMainWindow):
         if len(query) < 2:
             return
         include_emp = self._role in ("Admin", "HR")
-        results = self._backend.global_search(query, include_employees=include_emp)
+        doc_email = self._user if self._role == "Doctor" else None
+        results = self._backend.global_search(query, include_employees=include_emp, doctor_email=doc_email)
         patients = results.get("patients", [])
         appts = results.get("appointments", [])
         employees = results.get("employees", [])
@@ -446,51 +447,113 @@ class MainWindow(QMainWindow):
         if total == 0:
             QMessageBox.information(self, "Search", f"No results for \"{query}\".")
             return
+
         dlg = QDialog(self)
-        dlg.setWindowTitle(f"Search Results — \"{query}\"")
-        dlg.setMinimumSize(640, 420)
-        lay = QVBoxLayout(dlg); lay.setSpacing(12); lay.setContentsMargins(16, 16, 16, 16)
-        if patients:
-            lay.addWidget(QLabel(f"Patients ({len(patients)})"))
-            tbl = QTableWidget(len(patients), 4)
-            tbl.setHorizontalHeaderLabels(["ID", "Name", "Phone", "Status"])
+        dlg.setObjectName("searchResultsDlg")
+        dlg.setWindowTitle(f"Search Results")
+        dlg.setMinimumSize(700, 460)
+
+        lay = QVBoxLayout(dlg)
+        lay.setSpacing(16)
+        lay.setContentsMargins(28, 24, 28, 24)
+
+        # Header
+        hdr_row = QHBoxLayout()
+        hdr_col = QVBoxLayout(); hdr_col.setSpacing(2)
+        title = QLabel(f"Search Results")
+        title.setObjectName("searchTitle")
+        sub = QLabel(f"{total} result{'s' if total != 1 else ''} for \"{query}\"")
+        sub.setObjectName("searchSubtitle")
+        hdr_col.addWidget(title)
+        hdr_col.addWidget(sub)
+        hdr_row.addLayout(hdr_col)
+        hdr_row.addStretch()
+        lay.addLayout(hdr_row)
+
+        # Separator
+        sep = QFrame()
+        sep.setFixedHeight(1)
+        sep.setStyleSheet("background-color: #BADFE7;")
+        lay.addWidget(sep)
+
+        def _section_header(text, count):
+            row = QHBoxLayout(); row.setSpacing(8)
+            lbl = QLabel(text)
+            lbl.setObjectName("searchSectionLabel")
+            badge = QLabel(str(count))
+            badge.setObjectName("searchBadge")
+            row.addWidget(lbl)
+            row.addWidget(badge)
+            row.addStretch()
+            return row
+
+        def _result_table(headers, rows, max_h=200):
+            from ui.styles import configure_table
+            tbl = QTableWidget(len(rows), len(headers))
+            tbl.setHorizontalHeaderLabels(headers)
             tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
             tbl.verticalHeader().setVisible(False)
             tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+            tbl.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+            tbl.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+            tbl.setAlternatingRowColors(True)
+            tbl.verticalHeader().setDefaultSectionSize(36)
+            tbl.setMaximumHeight(min(len(rows) * 36 + 38, max_h))
+            tbl.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            configure_table(tbl)
+            return tbl
+
+        if patients:
+            lay.addLayout(_section_header("Patients", len(patients)))
+            tbl = _result_table(["ID", "Name", "Phone", "Status"], patients)
             for r, p in enumerate(patients):
                 tbl.setItem(r, 0, QTableWidgetItem(f"PT-{p['patient_id']:04d}"))
                 tbl.setItem(r, 1, QTableWidgetItem(p.get("name", "")))
                 tbl.setItem(r, 2, QTableWidgetItem(p.get("phone", "") or ""))
-                tbl.setItem(r, 3, QTableWidgetItem(p.get("status", "")))
-            tbl.setMaximumHeight(min(len(patients) * 36 + 36, 200))
+                status_text = p.get("status", "")
+                si = QTableWidgetItem(status_text)
+                from ui.styles import STATUS_COLORS
+                sc = STATUS_COLORS.get(status_text)
+                if sc:
+                    si.setForeground(QColor(sc))
+                tbl.setItem(r, 3, si)
             lay.addWidget(tbl)
+
         if appts:
-            lay.addWidget(QLabel(f"Appointments ({len(appts)})"))
-            tbl = QTableWidget(len(appts), 4)
-            tbl.setHorizontalHeaderLabels(["ID", "Patient", "Date", "Status"])
-            tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-            tbl.verticalHeader().setVisible(False)
-            tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+            lay.addLayout(_section_header("Appointments", len(appts)))
+            tbl = _result_table(["ID", "Patient", "Date", "Status"], appts)
             for r, a in enumerate(appts):
                 tbl.setItem(r, 0, QTableWidgetItem(str(a.get("appointment_id", ""))))
                 tbl.setItem(r, 1, QTableWidgetItem(a.get("patient_name", "")))
                 d = a.get("appointment_date", "")
                 tbl.setItem(r, 2, QTableWidgetItem(str(d)))
-                tbl.setItem(r, 3, QTableWidgetItem(a.get("status", "")))
-            tbl.setMaximumHeight(min(len(appts) * 36 + 36, 200))
+                status_text = a.get("status", "")
+                si = QTableWidgetItem(status_text)
+                sc = STATUS_COLORS.get(status_text)
+                if sc:
+                    si.setForeground(QColor(sc))
+                tbl.setItem(r, 3, si)
             lay.addWidget(tbl)
+
         if employees:
-            lay.addWidget(QLabel(f"Employees ({len(employees)})"))
-            tbl = QTableWidget(len(employees), 3)
-            tbl.setHorizontalHeaderLabels(["ID", "Name", "Email"])
-            tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-            tbl.verticalHeader().setVisible(False)
-            tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+            lay.addLayout(_section_header("Employees", len(employees)))
+            tbl = _result_table(["ID", "Name", "Email"], employees)
             for r, e in enumerate(employees):
                 tbl.setItem(r, 0, QTableWidgetItem(str(e.get("employee_id", ""))))
                 tbl.setItem(r, 1, QTableWidgetItem(e.get("name", "")))
                 tbl.setItem(r, 2, QTableWidgetItem(e.get("email", "")))
-            tbl.setMaximumHeight(min(len(employees) * 36 + 36, 200))
             lay.addWidget(tbl)
+
         lay.addStretch()
+
+        # Close button
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        close_btn = QPushButton("Close")
+        close_btn.setObjectName("searchCloseBtn")
+        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_btn.clicked.connect(dlg.accept)
+        btn_row.addWidget(close_btn)
+        lay.addLayout(btn_row)
+
         dlg.exec()

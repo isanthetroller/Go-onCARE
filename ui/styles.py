@@ -318,13 +318,13 @@ def fmt_peso(amount) -> str:
 
 # ── Tab button styling (used by appointments + clinical) ─────────────
 _TAB_STYLE = (
-    "QPushButton {{ background: {bg}; color: {fg}; border: none;"
+    "QPushButton {{ background: {bg}; color: {fg}; border: {bd};"
     " border-radius: 8px; padding: 8px 20px;"
     " font-size: 13px; font-weight: bold; }}"
     " QPushButton:hover {{ background: {hv}; }}"
 )
-TAB_ACTIVE = _TAB_STYLE.format(bg="#388087", fg="#FFFFFF", hv="#2C6A70")
-TAB_INACTIVE = _TAB_STYLE.format(bg="#FFFFFF", fg="#2C3E50", hv="#BADFE7")
+TAB_ACTIVE = _TAB_STYLE.format(bg="#388087", fg="#FFFFFF", hv="#2C6A70", bd="none")
+TAB_INACTIVE = _TAB_STYLE.format(bg="#FFFFFF", fg="#2C3E50", hv="#BADFE7", bd="1.5px solid #CADCE0")
 
 
 # ── Loading cursor context manager ────────────────────────────────────

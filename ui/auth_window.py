@@ -228,6 +228,7 @@ class AuthWindow(QMainWindow):
             " margin-bottom: 2px;")
         lay.addWidget(email_lbl)
         self.login_email = self._input("Enter your email address")
+        self.login_email.setMaxLength(150)
         self.login_email.returnPressed.connect(self._on_login)
         lay.addWidget(self.login_email)
         lay.addSpacing(4)
@@ -304,10 +305,13 @@ class AuthWindow(QMainWindow):
 
     # ── Handlers ───────────────────────────────────────────────────────
     def _on_login(self):
+        import re
         email = self.login_email.text().strip()
         pw    = self.login_pw.text().strip()
         if not email:
             return self._err("Please enter your email address.")
+        if not re.match(r'^[\w.+-]+@[\w-]+\.[\w.]+$', email):
+            return self._err("Please enter a valid email address.")
         if not pw:
             return self._err("Please enter your password.")
         try:
@@ -418,7 +422,7 @@ class _ForcePasswordChangeDialog(QDialog):
         self.new_pw.setMinimumHeight(42)
         self.new_pw.setStyleSheet(
             "QLineEdit { padding: 10px 14px; border: 2px solid #BADFE7;"
-            " border-radius: 10px; font-size: 13px; background: #FFF; }"
+            " border-radius: 8px; font-size: 13px; background: #FFF; }"
             "QLineEdit:focus { border: 2px solid #388087; }")
 
         self.confirm_pw = QLineEdit()
@@ -453,8 +457,8 @@ class _ForcePasswordChangeDialog(QDialog):
         save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         save_btn.setStyleSheet(
             "QPushButton { background-color: #388087; color: #FFF; border: none;"
-            " border-radius: 10px; font-size: 14px; font-weight: bold; }"
-            "QPushButton:hover { background-color: #2C6B70; }")
+            " border-radius: 8px; font-size: 14px; font-weight: bold; }"
+            "QPushButton:hover { background-color: #2C6A70; }")
         save_btn.clicked.connect(self._on_save)
         lay.addWidget(save_btn)
 

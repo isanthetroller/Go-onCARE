@@ -18,7 +18,16 @@ class PatientMixin:
             GROUP BY p.patient_id ORDER BY p.patient_id
         """)
 
-    def get_patient_full_profile(self, patient_id):
+    def get_patient_full_profile(self, patient_id, doctor_email=None):
+        # If doctor_email is set, verify this patient belongs to the doctor
+        if doctor_email:
+            check = self.fetch("""
+                SELECT 1 FROM appointments a
+                INNER JOIN employees e ON a.doctor_id = e.employee_id
+                WHERE a.patient_id = %s AND e.email = %s LIMIT 1
+            """, (patient_id, doctor_email), one=True)
+            if not check:
+                return {}
         info = self.fetch("""
             SELECT p.*, GROUP_CONCAT(pc.condition_name SEPARATOR ', ') AS conditions
             FROM patients p LEFT JOIN patient_conditions pc ON p.patient_id = pc.patient_id

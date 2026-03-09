@@ -56,6 +56,17 @@ class AnalyticsPage(QWidget):
 
     # ── Build ─────────────────────────────────────────────────────
     def _build(self):
+        # Doctor role: skip loading all-system data, build doctor-only view
+        if self._role == "Doctor":
+            scroll, lay = make_page_layout()
+            lay.addWidget(make_banner(
+                "Data Analytics & Reports",
+                "Hospital performance, revenue, trends, and insights"))
+            self._build_doctor_view(lay)
+            lay.addStretch()
+            finish_page(self, scroll)
+            return
+
         data = self._load_data()
         stats = data.get("stats", {})
 
@@ -64,13 +75,6 @@ class AnalyticsPage(QWidget):
         lay.addWidget(make_banner(
             "Data Analytics & Reports",
             "Hospital performance, revenue, trends, and insights"))
-
-        # ── Doctor-only view: own performance & revenue ───────────
-        if self._role == "Doctor":
-            self._build_doctor_view(lay)
-            lay.addStretch()
-            finish_page(self, scroll)
-            return
 
         if self._role == "Admin":
             # ── Period Comparison KPIs ────────────────────────────

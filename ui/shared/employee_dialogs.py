@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QDate, QEvent
 from PyQt6.QtGui import QColor
 from ui.styles import configure_table, make_table_btn, status_color
+from ui.validators import NameValidator, PhoneDigitsValidator, validate_name, validate_email, validate_phone_digits
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -45,6 +46,8 @@ class EmployeeDialog(QDialog):
         self.name_edit.setPlaceholderText("Full name")
         self.name_edit.setMinimumHeight(38)
         self.name_edit.setMinimumWidth(320)
+        self.name_edit.setValidator(NameValidator())
+        self.name_edit.setMaxLength(100)
 
         self.role_combo = QComboBox(); self.role_combo.setObjectName("formCombo")
         self.role_combo.addItems(["Doctor", "Cashier", "Receptionist", "Admin", "HR"])
@@ -91,6 +94,7 @@ class EmployeeDialog(QDialog):
         )
         self.phone_edit.setPlaceholderText("9XXXXXXXXX")
         self.phone_edit.setMaxLength(10)
+        self.phone_edit.setValidator(PhoneDigitsValidator())
         self.phone_edit.installEventFilter(self)
         phone_lay.addWidget(self._phone_prefix)
         phone_lay.addWidget(self.phone_edit, 1)
@@ -100,6 +104,7 @@ class EmployeeDialog(QDialog):
         self.email_edit.setPlaceholderText("Email")
         self.email_edit.setMinimumHeight(38)
         self.email_edit.setMinimumWidth(320)
+        self.email_edit.setMaxLength(150)
 
         self.hire_date = QDateEdit(); self.hire_date.setCalendarPopup(True)
         self.hire_date.setDate(QDate.currentDate()); self.hire_date.setObjectName("formCombo")
@@ -178,20 +183,20 @@ class EmployeeDialog(QDialog):
         return super().eventFilter(obj, event)
 
     def accept(self):
-        import re
         from PyQt6.QtWidgets import QMessageBox
-        if not self.name_edit.text().strip():
-            QMessageBox.warning(self, "Validation", "Full Name is required."); return
+        err = validate_name(self.name_edit.text(), "Full Name")
+        if err:
+            QMessageBox.warning(self, "Validation", err); return
         if not self.phone_edit.text().strip():
             QMessageBox.warning(self, "Validation", "Phone number is required."); return
+        err = validate_phone_digits(self.phone_edit.text())
+        if err:
+            QMessageBox.warning(self, "Validation", err); return
         if not self.email_edit.text().strip():
             QMessageBox.warning(self, "Validation", "Email is required."); return
-        digits = self.phone_edit.text().strip()
-        if not re.match(r'^\d{10}$', digits):
-            QMessageBox.warning(self, "Validation",
-                                "Enter exactly 10 digits after +63\n"
-                                "Example: 9171234567")
-            return
+        err = validate_email(self.email_edit.text())
+        if err:
+            QMessageBox.warning(self, "Validation", err); return
         super().accept()
 
     def get_data(self) -> dict:

@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 from ui.styles import configure_table, style_dialog_btns
+from ui.validators import PriceValidator, validate_required, validate_price
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -39,6 +40,7 @@ class QueueEditDialog(QDialog):
         self.doctor_edit.setReadOnly(True)
         self.purpose_edit = QLineEdit(data.get("purpose", "") if data else "")
         self.purpose_edit.setObjectName("formInput"); self.purpose_edit.setMinimumHeight(38)
+        self.purpose_edit.setMaxLength(200)
         self.status_combo = QComboBox()
         self.status_combo.setObjectName("formCombo")
         self.status_combo.addItems(["Waiting", "In Progress", "Completed", "Cancelled"])
@@ -95,8 +97,11 @@ class ServiceEditDialog(QDialog):
 
         self.name_edit = QLineEdit(data.get("name", "") if data else "")
         self.name_edit.setObjectName("formInput"); self.name_edit.setMinimumHeight(38)
+        self.name_edit.setMaxLength(150)
         self.price_edit = QLineEdit(data.get("price", "") if data else "")
         self.price_edit.setObjectName("formInput"); self.price_edit.setMinimumHeight(38)
+        self.price_edit.setValidator(PriceValidator())
+        self.price_edit.setMaxLength(12)
         self.cat_combo = QComboBox(); self.cat_combo.setObjectName("formCombo")
         self.cat_combo.setEditable(True)
         self.cat_combo.setMinimumHeight(38)
@@ -119,9 +124,18 @@ class ServiceEditDialog(QDialog):
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
         )
         style_dialog_btns(btns)
-        btns.accepted.connect(self.accept)
+        btns.accepted.connect(self._validate_and_accept)
         btns.rejected.connect(self.reject)
         form.addRow(btns)
+
+    def _validate_and_accept(self):
+        err = validate_required(self.name_edit.text(), "Service Name")
+        if err:
+            QMessageBox.warning(self, "Validation", err); return
+        err = validate_price(self.price_edit.text(), "Price")
+        if err:
+            QMessageBox.warning(self, "Validation", err); return
+        self.accept()
 
     def get_data(self) -> dict:
         return {
@@ -324,6 +338,7 @@ class NewInvoiceDialog(QDialog):
         self.notes.setObjectName("formInput")
         self.notes.setMinimumHeight(38)
         self.notes.setPlaceholderText("Optional notes…")
+        self.notes.setMaxLength(300)
         notes_col.addWidget(self.notes)
         bot_form.addLayout(notes_col, 2)
 
@@ -335,14 +350,15 @@ class NewInvoiceDialog(QDialog):
         cancel_btn = QPushButton("Cancel"); cancel_btn.setMinimumHeight(38)
         cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         cancel_btn.setStyleSheet(
-            "QPushButton { background-color: #6c757d; color: #FFF; border: none;"
-            " border-radius: 6px; padding: 8px 24px; font-size: 13px; font-weight: bold; }")
+            "QPushButton { background-color: #FFFFFF; color: #2C3E50; border: 2px solid #BADFE7;"
+            " border-radius: 8px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
+            " QPushButton:hover { background-color: #F0F7F8; border-color: #388087; }")
         cancel_btn.clicked.connect(self.reject)
         save_btn = QPushButton("Create Invoice"); save_btn.setMinimumHeight(38)
         save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         save_btn.setStyleSheet(
             "QPushButton { background-color: #388087; color: #FFF; border: none;"
-            " border-radius: 6px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
+            " border-radius: 8px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
             " QPushButton:hover { background-color: #2C6A70; }")
         save_btn.clicked.connect(self._validate_and_accept)
         btn_row.addWidget(cancel_btn); btn_row.addWidget(save_btn)
@@ -567,14 +583,15 @@ class PaymentDialog(QDialog):
         cancel_btn = QPushButton("Cancel"); cancel_btn.setMinimumHeight(38)
         cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         cancel_btn.setStyleSheet(
-            "QPushButton { background-color: #6c757d; color: #FFF; border: none;"
-            " border-radius: 6px; padding: 8px 24px; font-size: 13px; font-weight: bold; }")
+            "QPushButton { background-color: #FFFFFF; color: #2C3E50; border: 2px solid #BADFE7;"
+            " border-radius: 8px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
+            " QPushButton:hover { background-color: #F0F7F8; border-color: #388087; }")
         cancel_btn.clicked.connect(self.reject)
         pay_btn = QPushButton("Confirm Payment"); pay_btn.setMinimumHeight(38)
         pay_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         pay_btn.setStyleSheet(
             "QPushButton { background-color: #388087; color: #FFF; border: none;"
-            " border-radius: 6px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
+            " border-radius: 8px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
             " QPushButton:hover { background-color: #2C6A70; }")
         pay_btn.clicked.connect(self._on_confirm)
         btn_row.addWidget(cancel_btn); btn_row.addWidget(pay_btn)

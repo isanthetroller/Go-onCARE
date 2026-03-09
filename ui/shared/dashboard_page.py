@@ -473,14 +473,15 @@ class DashboardPage(QWidget):
         cancel_btn = QPushButton("Cancel"); cancel_btn.setMinimumHeight(36)
         cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         cancel_btn.setStyleSheet(
-            "QPushButton { background-color: #6c757d; color: #FFF; border: none;"
-            " border-radius: 4px; padding: 8px 24px; font-size: 13px; font-weight: bold; }")
+            "QPushButton { background-color: #FFFFFF; color: #2C3E50; border: 2px solid #BADFE7;"
+            " border-radius: 8px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
+            " QPushButton:hover { background-color: #F0F7F8; border-color: #388087; }")
         cancel_btn.clicked.connect(dlg.reject)
         submit_btn = QPushButton("Submit Request"); submit_btn.setMinimumHeight(36)
         submit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         submit_btn.setStyleSheet(
             "QPushButton { background-color: #388087; color: #FFF; border: none;"
-            " border-radius: 4px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
+            " border-radius: 8px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
             " QPushButton:hover { background-color: #2C6A70; }")
 
         def _do_submit():

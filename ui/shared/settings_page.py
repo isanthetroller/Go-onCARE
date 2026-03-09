@@ -376,6 +376,7 @@ class _DiscountTypeDialog(QDialog):
         self.name_edit.setObjectName("formInput")
         self.name_edit.setMinimumHeight(38)
         self.name_edit.setPlaceholderText("e.g. Senior Citizen, PWD, Pregnant")
+        self.name_edit.setMaxLength(100)
 
         self.percent_spin = QDoubleSpinBox()
         self.percent_spin.setMinimum(0)
@@ -388,6 +389,7 @@ class _DiscountTypeDialog(QDialog):
         self.legal_edit.setObjectName("formInput")
         self.legal_edit.setMinimumHeight(38)
         self.legal_edit.setPlaceholderText("e.g. RA 9994 – Expanded Senior Citizens Act")
+        self.legal_edit.setMaxLength(200)
 
         self.active_check = QCheckBox("Active")
         self.active_check.setChecked(True)

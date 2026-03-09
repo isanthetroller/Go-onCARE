@@ -41,6 +41,7 @@ class HREmployeeDialog(EmployeeDialog):
         self.emergency_edit.setStyleSheet(self._INPUT_STYLE)
         self.emergency_edit.setPlaceholderText("Emergency contact (name – phone)")
         self.emergency_edit.setMinimumHeight(38)
+        self.emergency_edit.setMaxLength(150)
 
         form.insertRow(notes_row, "Monthly Salary",    self.salary_spin)
         form.insertRow(notes_row + 1, "Emergency Contact", self.emergency_edit)

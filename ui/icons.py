@@ -462,7 +462,7 @@ NAV_ICON_MAP = {
     "Dashboard":      "nav_dashboard",
     "Patients":       "nav_patients",
     "Appointments":   "nav_appointments",
-    "Clinical & POS": "nav_clinical",
+    "Clinical && POS": "nav_clinical",
     "Data Analytics": "nav_analytics",
     "Employees":      "nav_employees",
     "Activity Log":   "nav_activity_log",

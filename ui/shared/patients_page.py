@@ -283,7 +283,8 @@ class PatientsPage(QWidget):
     def _on_view(self, row: int):
         pid = self._patient_ids[row] if row < len(self._patient_ids) else None
         if not pid or not self._backend: return
-        profile = self._backend.get_patient_full_profile(pid)
+        doc_email = self._user_email if self._role == "Doctor" else None
+        profile = self._backend.get_patient_full_profile(pid, doctor_email=doc_email)
         if not profile:
             QMessageBox.warning(self, "Error", "Could not load patient profile."); return
         dlg = PatientProfileDialog(self, profile=profile)

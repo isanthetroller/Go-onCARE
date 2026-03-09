@@ -1102,12 +1102,27 @@ QPushButton#truncateBtn:hover {
 
 QMessageBox, QInputDialog {
     background-color: #FFFFFF;
+    border: 1px solid #BADFE7;
+    border-radius: 14px;
 }
 
 QMessageBox QLabel, QInputDialog QLabel {
     color: #2C3E50;
     font-size: 13px;
-    min-width: 260px;
+    min-width: 300px;
+    padding: 4px 0px;
+    line-height: 1.5;
+}
+
+QMessageBox QLabel#qt_msgboxex_icon_label {
+    min-width: 0px;
+    padding: 0px;
+}
+
+QMessageBox QPushButton, QInputDialog QPushButton, QInputDialog QLineEdit {
+    border-radius: 8px;
+    font-size: 12px;
+    min-height: 34px;
 }
 
 QMessageBox QPushButton, QInputDialog QPushButton {
@@ -1115,11 +1130,12 @@ QMessageBox QPushButton, QInputDialog QPushButton {
     color: #FFFFFF;
     border: none;
     border-radius: 8px;
-    padding: 8px 24px;
+    padding: 8px 28px;
     font-size: 12px;
     font-weight: bold;
-    min-height: 32px;
-    min-width: 80px;
+    min-height: 34px;
+    min-width: 90px;
+    margin: 2px 4px;
 }
 
 QMessageBox QPushButton:hover, QInputDialog QPushButton:hover {
@@ -1128,6 +1144,98 @@ QMessageBox QPushButton:hover, QInputDialog QPushButton:hover {
 
 QMessageBox QPushButton:pressed, QInputDialog QPushButton:pressed {
     background-color: #245558;
+}
+
+/* "No" / "Cancel" secondary buttons */
+QMessageBox QPushButton[text="No"],
+QMessageBox QPushButton[text="Cancel"],
+QMessageBox QPushButton[text="&No"],
+QMessageBox QPushButton[text="&Cancel"] {
+    background-color: #FFFFFF;
+    color: #2C3E50;
+    border: 2px solid #BADFE7;
+}
+
+QMessageBox QPushButton[text="No"]:hover,
+QMessageBox QPushButton[text="Cancel"]:hover,
+QMessageBox QPushButton[text="&No"]:hover,
+QMessageBox QPushButton[text="&Cancel"]:hover {
+    background-color: #F0F7F8;
+    border-color: #388087;
+}
+
+QInputDialog QLineEdit, QInputDialog QTextEdit {
+    padding: 8px 14px;
+    border: 2px solid #BADFE7;
+    border-radius: 8px;
+    font-size: 13px;
+    background-color: #FFFFFF;
+    color: #2C3E50;
+}
+
+QInputDialog QLineEdit:focus, QInputDialog QTextEdit:focus {
+    border: 2px solid #388087;
+}
+
+
+/* ================================================================
+   GLOBAL SEARCH RESULTS DIALOG
+   ================================================================ */
+
+QDialog#searchResultsDlg {
+    background-color: #FFFFFF;
+    border: 1px solid #BADFE7;
+    border-radius: 14px;
+}
+
+QLabel#searchTitle {
+    font-size: 18px;
+    font-weight: bold;
+    color: #388087;
+    padding: 0px;
+}
+
+QLabel#searchSubtitle {
+    font-size: 12px;
+    color: #7F8C8D;
+    padding: 0px;
+}
+
+QLabel#searchSectionLabel {
+    font-size: 13px;
+    font-weight: bold;
+    color: #2C3E50;
+    padding: 4px 0px;
+}
+
+QLabel#searchBadge {
+    font-size: 11px;
+    font-weight: bold;
+    color: #388087;
+    background-color: #E8F4F5;
+    border-radius: 10px;
+    padding: 3px 10px;
+}
+
+QLabel#searchEmpty {
+    font-size: 13px;
+    color: #7F8C8D;
+    padding: 24px;
+}
+
+QPushButton#searchCloseBtn {
+    background-color: #388087;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 32px;
+    font-size: 12px;
+    font-weight: bold;
+    min-height: 36px;
+}
+
+QPushButton#searchCloseBtn:hover {
+    background-color: #2C6A70;
 }
 
 

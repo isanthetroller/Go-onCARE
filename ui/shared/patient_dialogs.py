@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QDate, QEvent
 from ui.styles import configure_table, style_dialog_btns
+from ui.validators import NameValidator, PhoneDigitsValidator, validate_name, validate_email, validate_phone_digits
 
 
 # ── Patient Add/Edit Dialog ───────────────────────────────────────────
@@ -35,6 +36,8 @@ class PatientDialog(QDialog):
         form.setContentsMargins(28, 28, 28, 28)
 
         self.name_edit = self._input("Full name")
+        self.name_edit.setValidator(NameValidator())
+        self.name_edit.setMaxLength(100)
         self.sex_combo = QComboBox(); self.sex_combo.setObjectName("formCombo")
         self.sex_combo.addItems(["Male", "Female"])
         self.dob_edit = QDateEdit(); self.dob_edit.setCalendarPopup(True)
@@ -72,12 +75,15 @@ class PatientDialog(QDialog):
         )
         self.phone_edit.setPlaceholderText("9XXXXXXXXX")
         self.phone_edit.setMaxLength(10)
+        self.phone_edit.setValidator(PhoneDigitsValidator())
         self.phone_edit.installEventFilter(self)
         phone_lay.addWidget(self._phone_prefix)
         phone_lay.addWidget(self.phone_edit, 1)
 
         self.email_edit = self._input("Email")
+        self.email_edit.setMaxLength(150)
         self.emergency_edit = self._input("Emergency contact (name / phone)")
+        self.emergency_edit.setMaxLength(150)
         self.blood_combo = QComboBox(); self.blood_combo.setObjectName("formCombo")
         self.blood_combo.addItems(["Unknown", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"])
 
@@ -110,6 +116,7 @@ class PatientDialog(QDialog):
             "QScrollArea { border: none; background: transparent; }"
         )
         self.cond_custom = self._input("Other conditions (comma-separated)")
+        self.cond_custom.setMaxLength(300)
 
         self.status_combo = QComboBox(); self.status_combo.setObjectName("formCombo")
         self.status_combo.addItems(["Active", "Inactive"])
@@ -219,13 +226,15 @@ class PatientDialog(QDialog):
         return super().eventFilter(obj, event)
 
     def accept(self):
-        import re
-        digits = self.phone_edit.text().strip()
-        if digits and not re.match(r'^\d{10}$', digits):
-            QMessageBox.warning(self, "Validation",
-                                "Enter exactly 10 digits after +63\n"
-                                "Example: 9171234567")
-            return
+        err = validate_name(self.name_edit.text(), "Full Name")
+        if err:
+            QMessageBox.warning(self, "Validation", err); return
+        err = validate_phone_digits(self.phone_edit.text())
+        if err:
+            QMessageBox.warning(self, "Validation", err); return
+        err = validate_email(self.email_edit.text())
+        if err:
+            QMessageBox.warning(self, "Validation", err); return
         super().accept()
 
 
