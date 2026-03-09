@@ -548,7 +548,7 @@ QDateEdit#formCombo::drop-down {
 QDateEdit#formCombo::down-arrow {
     width: 16px;
     height: 16px;
-    image: url(ui/styles/calendar.svg);
+    image: url(./calendar.svg);
 }
 
 QDateEdit::up-button,
