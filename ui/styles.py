@@ -43,6 +43,7 @@ STATUS_COLORS = {
     # Appointment / queue statuses
     "Completed": "#5CB85C", "Confirmed": "#388087", "Pending": "#E8B931",
     "Cancelled": "#D9534F", "In Progress": "#6FB3B8", "Waiting": "#E8B931",
+    "Triaged": "#3498DB",
     # Leave request statuses
     "Approved": "#5CB85C", "Declined": "#D9534F",
     # Invoice statuses

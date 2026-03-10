@@ -5,7 +5,7 @@ from datetime import datetime
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QFrame,
-    QComboBox, QStackedWidget, QDialog,
+    QComboBox, QStackedWidget, QDialog, QFormLayout,
     QMessageBox,
 )
 from PyQt6.QtCore import Qt, QTimer, QSize
@@ -81,10 +81,10 @@ class ClinicalPage(QWidget):
         tab_row = QHBoxLayout(); tab_row.setSpacing(8)
         self._stack = QStackedWidget()
         tab_labels: list[str] = []
-        if self._role in ("Admin", "Doctor"):
+        if self._role in ("Admin", "Doctor", "Nurse"):
             tab_labels.append("Patient Queue")
             self._stack.addWidget(self._build_queue_tab())
-        if self._role in ("Admin", "Receptionist", "Cashier"):
+        if self._role in ("Admin", "Receptionist"):
             tab_labels.append("Billing / POS")
             self._stack.addWidget(self._build_billing_tab())
         if self._role == "Admin":
@@ -127,6 +127,7 @@ class ClinicalPage(QWidget):
         self._queue_stat_labels = {}
         for key, label, color in [
             ("waiting",     "Waiting",          "#E8B931"),
+            ("triaged",     "Triaged",          "#3498DB"),
             ("in_progress", "In Progress",      "#388087"),
             ("completed",   "Completed Today",  "#5CB85C"),
         ]:
@@ -157,14 +158,14 @@ class ClinicalPage(QWidget):
         # Toolbar: call next, doctor filter
         toolbar = QHBoxLayout(); toolbar.setSpacing(10)
 
-        self._call_btn = QPushButton("Call Next")
+        self._call_btn = QPushButton("Start Triage" if self._role == "Nurse" else "Call Next")
         self._call_btn.setIcon(get_icon("megaphone"))
         self._call_btn.setIconSize(QSize(18, 18))
         self._call_btn.setObjectName("actionBtn"); self._call_btn.setMinimumHeight(40)
         self._call_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._call_btn.clicked.connect(self._on_call_next)
         toolbar.addWidget(self._call_btn)
-        if self._role == "Admin":
+        if self._role in ("Admin",):
             self._call_btn.setVisible(False)
 
         toolbar.addStretch()
@@ -191,8 +192,8 @@ class ClinicalPage(QWidget):
         lay.addLayout(toolbar)
 
         # Queue table
-        action_w = 180 if self._role == "Doctor" else 100
-        cols = ["Queue #", "Patient", "Time", "Doctor", "Purpose", "Status", "Actions"]
+        action_w = 180 if self._role == "Doctor" else (220 if self._role == "Nurse" else 100)
+        cols = ["Queue #", "Patient", "Time", "Doctor", "Purpose", "Vitals", "Nurse Notes", "Status", "Actions"]
         self._queue_table = make_action_table(cols, min_h=420, row_h=48, action_col_width=action_w)
         self._queue_doc_filter.currentIndexChanged.connect(lambda _: self._filter_queue())
         # Auto-sync appointments into queue on first load
@@ -225,22 +226,52 @@ class ClinicalPage(QWidget):
             elif hasattr(t, "strftime"):
                 t = t.strftime("%H:%M")
             status = entry.get("status", "")
+            # Build vitals summary
+            bp = entry.get("blood_pressure", "") or ""
+            ht = entry.get("height_cm")
+            wt = entry.get("weight_kg")
+            temp = entry.get("temperature")
+            vitals_parts = []
+            if bp: vitals_parts.append(f"BP:{bp}")
+            if ht: vitals_parts.append(f"H:{ht}cm")
+            if wt: vitals_parts.append(f"W:{wt}kg")
+            if temp: vitals_parts.append(f"T:{temp}°C")
+            vitals_str = " | ".join(vitals_parts) if vitals_parts else "—"
+
+            nurse_notes = entry.get("nurse_notes", "") or ""
+            notes_preview = nurse_notes[:30] + ("…" if len(nurse_notes) > 30 else "") if nurse_notes else "—"
+
             values = [
                 str(entry.get("queue_id", "")),
                 entry.get("patient_name", ""),
                 str(t),
                 entry.get("doctor_name", ""),
                 entry.get("purpose", "") or "",
+                vitals_str,
+                notes_preview,
                 status,
             ]
             for c, val in enumerate(values):
                 item = QTableWidgetItem(val)
-                if c == 5:
+                if c == 7:
                     item.setForeground(QColor(status_color(val)))
                 self._queue_table.setItem(r, c, item)
 
+            # Nurse role: Triage button for Waiting, Update Vitals for Triaged/In Progress
+            if self._role == "Nurse":
+                btns = []
+                if status == "Waiting":
+                    triage_btn = make_table_btn("Triage")
+                    triage_btn.clicked.connect(lambda checked, ri=r, e=entry: self._on_record_vitals(ri, e))
+                    btns.append(triage_btn)
+                elif status in ("Triaged", "In Progress"):
+                    label = "Update Vitals"
+                    vitals_btn = make_table_btn(label)
+                    vitals_btn.clicked.connect(lambda checked, ri=r, e=entry: self._on_record_vitals(ri, e))
+                    btns.append(vitals_btn)
+                self._queue_table.setCellWidget(r, 8, make_action_cell(*btns))
             # Doctor role: Complete / Cancel only after Call Next (In Progress)
-            if self._role == "Doctor":
+            elif self._role == "Doctor":
                 btns = []
                 if status == "In Progress":
                     done_btn = make_table_btn("Complete")
@@ -249,13 +280,13 @@ class ClinicalPage(QWidget):
                     cancel_btn = make_table_btn_danger("Cancel")
                     cancel_btn.clicked.connect(lambda checked, ri=r: self._on_cancel_queue(ri))
                     btns.append(cancel_btn)
-                self._queue_table.setCellWidget(r, 6, make_action_cell(*btns))
+                self._queue_table.setCellWidget(r, 8, make_action_cell(*btns))
             else:
                 edit_btn = make_table_btn("Edit")
                 edit_btn.clicked.connect(lambda checked, ri=r: self._on_edit_queue(ri))
                 if self._role == "Admin":
                     edit_btn.setVisible(False)
-                self._queue_table.setCellWidget(r, 6, make_action_cell(edit_btn))
+                self._queue_table.setCellWidget(r, 8, make_action_cell(edit_btn))
 
         # Update stat cards
         doc_id_for_stats = self._my_doctor_id if self._role == "Doctor" else doc_id
@@ -270,12 +301,23 @@ class ClinicalPage(QWidget):
         # Doctor: disable Call Next if there's already an In Progress entry for this doctor
         if self._role == "Doctor":
             has_in_progress = any(
-                self._queue_table.item(r, 5) and self._queue_table.item(r, 5).text() == "In Progress"
+                self._queue_table.item(r, 7) and self._queue_table.item(r, 7).text() == "In Progress"
                 for r in range(self._queue_table.rowCount())
             )
             self._call_btn.setEnabled(not has_in_progress)
             if has_in_progress:
                 self._call_btn.setToolTip("Complete the current patient before calling next")
+            else:
+                self._call_btn.setToolTip("")
+        # Nurse: disable Start Triage if no Waiting patients
+        elif self._role == "Nurse":
+            has_waiting = any(
+                self._queue_table.item(r, 7) and self._queue_table.item(r, 7).text() == "Waiting"
+                for r in range(self._queue_table.rowCount())
+            )
+            self._call_btn.setEnabled(has_waiting)
+            if not has_waiting:
+                self._call_btn.setToolTip("No patients waiting for triage")
             else:
                 self._call_btn.setToolTip("")
 
@@ -310,21 +352,33 @@ class ClinicalPage(QWidget):
         if self._role == "Doctor" and doc_id:
             for r in range(self._queue_table.rowCount()):
                 if (r < len(self._queue_doctor_ids) and self._queue_doctor_ids[r] == doc_id
-                        and self._queue_table.item(r, 5) and self._queue_table.item(r, 5).text() == "In Progress"):
+                        and self._queue_table.item(r, 7) and self._queue_table.item(r, 7).text() == "In Progress"):
                     QMessageBox.warning(self, "Queue",
                         "You still have a patient In Progress.\nComplete or cancel them first.")
                     return
-        entry = self._backend.call_next_queue(doctor_id=doc_id)
+        entry = self._backend.call_next_queue(doctor_id=doc_id, role=self._role)
         if entry:
             self._load_queue()
-            QMessageBox.information(self, "Called",
-                                    f"Now seeing: {entry.get('patient_name', 'Unknown')}")
+            if self._role == "Nurse":
+                # Auto-open triage dialog for the called patient
+                qid = entry.get("queue_id")
+                for r in range(self._queue_table.rowCount()):
+                    if r < len(self._queue_ids) and self._queue_ids[r] == qid:
+                        self._on_record_vitals(r)
+                        break
+                else:
+                    QMessageBox.information(self, "Triage",
+                        f"Triage: {entry.get('patient_name', 'Unknown')}")
+            else:
+                QMessageBox.information(self, "Called",
+                    f"Now seeing: {entry.get('patient_name', 'Unknown')}")
         else:
-            QMessageBox.information(self, "Queue", "No waiting patients in queue.")
+            msg = "No waiting patients to triage." if self._role == "Nurse" else "No waiting patients in queue."
+            QMessageBox.information(self, "Queue", msg)
 
     def _on_edit_queue(self, row):
         data = {}
-        keys = ["queue", "patient", "time", "doctor", "purpose", "status"]
+        keys = ["queue", "patient", "time", "doctor", "purpose", "vitals", "nurse_notes", "status"]
         for c, key in enumerate(keys):
             data[key] = self._queue_table.item(row, c).text() if self._queue_table.item(row, c) else ""
         dlg = QueueEditDialog(self, data=data)
@@ -334,6 +388,98 @@ class ClinicalPage(QWidget):
                 self._backend.update_queue_entry(self._queue_ids[row], d)
             self._load_queue()
             QMessageBox.information(self, "Success", f"Queue entry '{d['queue']}' updated.")
+
+    def _on_record_vitals(self, row, entry=None):
+        """Nurse records or updates vitals (BP, height, weight, temperature) and triage notes."""
+        if not self._backend or row >= len(self._queue_ids):
+            return
+        qid = self._queue_ids[row]
+        patient = self._queue_table.item(row, 1).text() if self._queue_table.item(row, 1) else ""
+        from PyQt6.QtWidgets import QDoubleSpinBox
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Record Vitals – {patient}")
+        dlg.setMinimumWidth(440)
+        fl = QFormLayout(dlg)
+        fl.setSpacing(12); fl.setContentsMargins(24, 24, 24, 24)
+
+        bp_edit = QLineEdit()
+        bp_edit.setPlaceholderText("e.g. 120/80")
+        bp_edit.setMinimumHeight(36)
+        bp_edit.setMaxLength(20)
+
+        height_spin = QDoubleSpinBox()
+        height_spin.setRange(0, 300); height_spin.setDecimals(1)
+        height_spin.setSuffix(" cm"); height_spin.setMinimumHeight(36)
+
+        weight_spin = QDoubleSpinBox()
+        weight_spin.setRange(0, 500); weight_spin.setDecimals(1)
+        weight_spin.setSuffix(" kg"); weight_spin.setMinimumHeight(36)
+
+        temp_spin = QDoubleSpinBox()
+        temp_spin.setRange(30, 45); temp_spin.setDecimals(1)
+        temp_spin.setValue(36.5); temp_spin.setSuffix(" °C")
+        temp_spin.setMinimumHeight(36)
+
+        from PyQt6.QtWidgets import QTextEdit
+        notes_edit = QTextEdit()
+        notes_edit.setPlaceholderText("Triage observations, chief complaint, symptoms…")
+        notes_edit.setMaximumHeight(100)
+        notes_edit.setStyleSheet(
+            "QTextEdit { padding: 8px; border: 2px solid #BADFE7;"
+            " border-radius: 10px; font-size: 13px; background: #FFF; }")
+
+        # Pre-fill existing vitals if updating
+        if entry:
+            bp_val = entry.get("blood_pressure", "") or ""
+            if bp_val:
+                bp_edit.setText(bp_val)
+            ht_val = entry.get("height_cm")
+            if ht_val:
+                height_spin.setValue(float(ht_val))
+            wt_val = entry.get("weight_kg")
+            if wt_val:
+                weight_spin.setValue(float(wt_val))
+            temp_val = entry.get("temperature")
+            if temp_val:
+                temp_spin.setValue(float(temp_val))
+            nn = entry.get("nurse_notes", "") or ""
+            if nn:
+                notes_edit.setPlainText(nn)
+
+        fl.addRow("Blood Pressure", bp_edit)
+        fl.addRow("Height", height_spin)
+        fl.addRow("Weight", weight_spin)
+        fl.addRow("Temperature", temp_spin)
+        fl.addRow("Nurse Notes", notes_edit)
+
+        btn_row = QHBoxLayout(); btn_row.setSpacing(10); btn_row.addStretch()
+        cancel_btn = QPushButton("Cancel"); cancel_btn.setMinimumHeight(34)
+        cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        cancel_btn.setObjectName("dialogCancelBtn")
+        cancel_btn.clicked.connect(dlg.reject)
+        save_btn = QPushButton("Save Vitals"); save_btn.setMinimumHeight(34)
+        save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        save_btn.setObjectName("dialogSaveBtn")
+        save_btn.clicked.connect(dlg.accept)
+        btn_row.addWidget(cancel_btn); btn_row.addWidget(save_btn)
+        fl.addRow(btn_row)
+
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            bp = bp_edit.text().strip()
+            ht = height_spin.value() if height_spin.value() > 0 else None
+            wt = weight_spin.value() if weight_spin.value() > 0 else None
+            temp = temp_spin.value()
+            notes = notes_edit.toPlainText().strip()
+            if not bp and not ht and not wt:
+                QMessageBox.warning(self, "Validation", "Please enter at least blood pressure.")
+                return
+            ok = self._backend.record_vitals(qid, bp, ht, wt, temp, notes)
+            if ok:
+                self._load_queue()
+                QMessageBox.information(self, "Vitals Recorded",
+                    f"Vitals for {patient} saved successfully.")
+            else:
+                QMessageBox.warning(self, "Error", "Failed to save vitals.")
 
     def _on_complete_queue(self, row):
         if not self._backend or row >= len(self._queue_ids):
@@ -499,7 +645,7 @@ class ClinicalPage(QWidget):
 
             # Actions: Pay | Print | Void
             btns = []
-            if status not in ("Paid", "Voided") and self._role in ("Cashier",):
+            if status not in ("Paid", "Voided") and self._role in ("Receptionist",):
                 pay_btn = make_table_btn("Pay")
                 pay_btn.clicked.connect(lambda checked, iid=inv_id: self._on_add_payment(iid))
                 btns.append(pay_btn)
@@ -507,7 +653,7 @@ class ClinicalPage(QWidget):
                 prt_btn = make_table_btn("Print")
                 prt_btn.clicked.connect(lambda checked, iid=inv_id: self._on_print_receipt(iid))
                 btns.append(prt_btn)
-            if status != "Voided" and self._role in ("Admin", "Cashier"):
+            if status != "Voided" and self._role in ("Admin", "Receptionist"):
                 void_btn = make_table_btn_danger("Void")
                 void_btn.clicked.connect(lambda checked, iid=inv_id: self._on_void_invoice(iid))
                 btns.append(void_btn)

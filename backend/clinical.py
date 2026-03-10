@@ -8,7 +8,9 @@ class ClinicalMixin:
         sql = """
             SELECT q.queue_id, q.queue_time, q.purpose, q.status,
                    CONCAT(p.first_name,' ',p.last_name) AS patient_name,
-                   CONCAT(e.first_name,' ',e.last_name) AS doctor_name, q.doctor_id
+                   CONCAT(e.first_name,' ',e.last_name) AS doctor_name, q.doctor_id,
+                   q.blood_pressure, q.height_cm, q.weight_kg, q.temperature,
+                   q.nurse_notes
             FROM queue_entries q
             INNER JOIN patients p ON q.patient_id = p.patient_id
             INNER JOIN employees e ON q.doctor_id = e.employee_id
@@ -24,6 +26,7 @@ class ClinicalMixin:
     def get_queue_stats(self, doctor_id=None):
         sql = """
             SELECT SUM(CASE WHEN status='Waiting' THEN 1 ELSE 0 END) AS waiting,
+                   SUM(CASE WHEN status='Triaged' THEN 1 ELSE 0 END) AS triaged,
                    SUM(CASE WHEN status='In Progress' THEN 1 ELSE 0 END) AS in_progress,
                    SUM(CASE WHEN status='Completed' THEN 1 ELSE 0 END) AS completed
             FROM queue_entries WHERE created_at = CURDATE()
@@ -33,13 +36,29 @@ class ClinicalMixin:
             sql += " AND doctor_id = %s"
             params = (doctor_id,)
         row = self.fetch(sql, params, one=True)
-        return row if row and row.get("waiting") is not None else {"waiting": 0, "in_progress": 0, "completed": 0}
+        return row if row and row.get("waiting") is not None else {"waiting": 0, "triaged": 0, "in_progress": 0, "completed": 0}
 
     def update_queue_entry(self, queue_id, data):
-        ok = self.exec("UPDATE queue_entries SET status=%s, purpose=%s WHERE queue_id=%s",
+        ok = self.exec("UPDATE queue_entries SET status=%s, purpose=%s, updated_at=NOW() WHERE queue_id=%s",
                        (data.get("status", "Waiting"), data.get("purpose", ""), queue_id))
         if ok:
             self.log_activity("Edited", "Queue", f"Queue #{queue_id} updated (status={data.get('status','Waiting')})")
+        return ok
+
+    def record_vitals(self, queue_id, blood_pressure, height_cm, weight_kg, temperature, nurse_notes=None):
+        """Nurse records vitals and triage notes. Auto-sets status to 'Triaged' if currently 'Waiting'."""
+        # Check current status to decide whether to auto-triage
+        cur_entry = self.fetch("SELECT status FROM queue_entries WHERE queue_id=%s", (queue_id,), one=True)
+        new_status_clause = ""
+        if cur_entry and cur_entry.get("status") == "Waiting":
+            new_status_clause = ", status='Triaged'"
+        ok = self.exec(
+            f"UPDATE queue_entries SET blood_pressure=%s, height_cm=%s, weight_kg=%s, temperature=%s, "
+            f"nurse_notes=%s, updated_at=NOW(){new_status_clause} WHERE queue_id=%s",
+            (blood_pressure or None, height_cm or None, weight_kg or None, temperature or None,
+             nurse_notes or None, queue_id))
+        if ok:
+            self.log_activity("Edited", "Queue", f"Vitals recorded for queue #{queue_id}")
         return ok
 
     def create_invoice_from_queue(self, queue_id):
@@ -155,21 +174,33 @@ class ClinicalMixin:
                 pass
             return 0
 
-    def call_next_queue(self, doctor_id=None):
+    def call_next_queue(self, doctor_id=None, role=None):
         try:
             conn = self._get_connection()
+            entry = None
             with conn.cursor(dictionary=True) as cur:
-                q = """SELECT queue_id, CONCAT(p.first_name,' ',p.last_name) AS patient_name
-                       FROM queue_entries qe INNER JOIN patients p ON qe.patient_id = p.patient_id
-                       WHERE qe.created_at = CURDATE() AND qe.status = 'Waiting'"""
-                params = []
-                if doctor_id is not None:
-                    q += " AND qe.doctor_id = %s"
-                    params.append(doctor_id)
-                cur.execute(q + " ORDER BY qe.queue_time LIMIT 1", params)
-                entry = cur.fetchone()
+                # Doctor prefers Triaged patients first (nurse has prepared them),
+                # then falls back to Waiting. Nurse only picks Waiting.
+                if role == "Nurse":
+                    status_order = ["Waiting"]
+                else:
+                    status_order = ["Triaged", "Waiting"]
+                for target_status in status_order:
+                    q = """SELECT queue_id, CONCAT(p.first_name,' ',p.last_name) AS patient_name
+                           FROM queue_entries qe INNER JOIN patients p ON qe.patient_id = p.patient_id
+                           WHERE qe.created_at = CURDATE() AND qe.status = %s"""
+                    params = [target_status]
+                    if doctor_id is not None:
+                        q += " AND qe.doctor_id = %s"
+                        params.append(doctor_id)
+                    cur.execute(q + " ORDER BY qe.queue_time LIMIT 1", params)
+                    entry = cur.fetchone()
+                    if entry:
+                        break
                 if entry:
-                    cur.execute("UPDATE queue_entries SET status='In Progress' WHERE queue_id=%s", (entry["queue_id"],))
+                    new_status = "In Progress" if role != "Nurse" else "Waiting"
+                    cur.execute("UPDATE queue_entries SET status=%s, updated_at=NOW() WHERE queue_id=%s",
+                                (new_status, entry["queue_id"]))
                     conn.commit()
             if entry:
                 self.log_activity("Edited", "Queue", f"Called next: {entry['patient_name']} (queue #{entry['queue_id']})")

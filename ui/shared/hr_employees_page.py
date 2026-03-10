@@ -2,7 +2,7 @@
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QTableWidgetItem, QHeaderView, QTabWidget, QScrollArea, QFrame,
+    QTableWidgetItem, QHeaderView, QStackedWidget, QScrollArea, QFrame,
     QComboBox, QDialog, QMessageBox, QTextEdit, QInputDialog,
 )
 from PyQt6.QtCore import Qt, QTimer, QSize
@@ -11,7 +11,7 @@ from ui.styles import (
     make_table_btn, make_banner,
     make_card, make_stat_card, make_read_only_table,
     make_interactive_table, make_action_table,
-    status_color, make_action_cell,
+    status_color, make_action_cell, TAB_ACTIVE, TAB_INACTIVE,
 )
 from ui.icons import get_icon
 from ui.shared.hr_employee_dialogs import HREmployeeDialog, HREmployeeProfileDialog, UserAccountDialog
@@ -125,22 +125,52 @@ class HREmployeesPage(QWidget):
         lay.setSpacing(16)
 
         # ── Banner (always visible above tabs) ────────────────────
-        lay.addWidget(make_banner(
+        banner = make_banner(
             "HR Employee Management",
-            "Comprehensive staff management \u2013 salary, leave, performance"))
+            "Comprehensive staff management \u2013 salary, leave, performance")
+        banner_lay = banner.layout()
+        add_btn = QPushButton("\uff0b  Add Employee")
+        add_btn.setObjectName("bannerBtn"); add_btn.setMinimumHeight(42)
+        add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        add_btn.clicked.connect(self._on_add)
+        banner_lay.addWidget(add_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
+        lay.addWidget(banner)
 
-        # ── Tab widget (fills remaining space) ────────────────────
-        self._tabs = QTabWidget()
-        self._tabs.addTab(self._build_employees_tab(), "Employees")
-        self._tabs.addTab(self._build_leave_tab(), "Leave Management")
-        self._tabs.addTab(self._build_payroll_tab(), "Payroll && Staffing")
+        # ── Custom tab buttons + stacked widget ────────────────────
+        self._tab_buttons: dict[str, QPushButton] = {}
+        self._stack = QStackedWidget()
+        tab_row = QHBoxLayout(); tab_row.setSpacing(8)
+
+        tab_labels = ["Employees", "Leave Management", "Payroll && Staffing"]
+        self._stack.addWidget(self._build_employees_tab())
+        self._stack.addWidget(self._build_leave_tab())
+        self._stack.addWidget(self._build_payroll_tab())
         if self._role == "Admin":
-            self._tabs.addTab(self._build_accounts_tab(), "User Accounts")
-        lay.addWidget(self._tabs, 1)
+            tab_labels.append("User Accounts")
+            self._stack.addWidget(self._build_accounts_tab())
+
+        for i, label in enumerate(tab_labels):
+            btn = QPushButton(label)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setMinimumHeight(38)
+            btn.clicked.connect(
+                lambda checked, idx=i, lbl=label: self._switch_tab(idx, lbl))
+            self._tab_buttons[label] = btn
+            tab_row.addWidget(btn)
+        tab_row.addStretch()
+        lay.addLayout(tab_row)
+        lay.addWidget(self._stack, 1)
+        if tab_labels:
+            self._switch_tab(0, tab_labels[0])
 
         outer.addWidget(container)
 
     # ── Tab helpers ───────────────────────────────────────────────
+
+    def _switch_tab(self, index: int, label: str):
+        self._stack.setCurrentIndex(index)
+        for name, btn in self._tab_buttons.items():
+            btn.setStyleSheet(TAB_ACTIVE if name == label else TAB_INACTIVE)
 
     @staticmethod
     def _make_tab_scroll():
@@ -159,27 +189,19 @@ class HREmployeesPage(QWidget):
     def _build_employees_tab(self):
         scroll, lay = self._make_tab_scroll()
 
-        # ── Stat cards: row 1 (employee counts) ──────────────────
+        # ── Stat cards row (6 unified cards) ─────────────────────
         self._stat_labels = {}
-        row1 = QHBoxLayout(); row1.setSpacing(14)
+        stat_row = QHBoxLayout(); stat_row.setSpacing(16)
         for key, label, color in [
-            ("total",    "Total Staff", "#388087"),
-            ("active",   "Active",      "#5CB85C"),
-            ("on_leave", "On Leave",    "#E8B931"),
-            ("inactive", "Inactive",    "#D9534F"),
-        ]:
-            row1.addWidget(make_stat_card(key, label, color, self._stat_labels))
-        lay.addLayout(row1)
-
-        # ── Stat cards: row 2 (payroll) ──────────────────────────
-        row2 = QHBoxLayout(); row2.setSpacing(14)
-        for key, label, color in [
+            ("total",         "Total Staff",   "#388087"),
+            ("active",        "Active",        "#5CB85C"),
+            ("on_leave",      "On Leave",      "#E8B931"),
+            ("inactive",      "Inactive",      "#D9534F"),
             ("avg_salary",    "Avg Salary",    "#6FB3B8"),
-            ("total_payroll", "Total Payroll", "#388087"),
+            ("total_payroll", "Total Payroll", "#2C6A70"),
         ]:
-            row2.addWidget(make_stat_card(key, label, color, self._stat_labels))
-        row2.addStretch(2)          # keep payroll cards from stretching too wide
-        lay.addLayout(row2)
+            stat_row.addWidget(make_stat_card(key, label, color, self._stat_labels))
+        lay.addLayout(stat_row)
 
         # ── Filter bar ────────────────────────────────────────────
         bar = QHBoxLayout(); bar.setSpacing(10)
@@ -188,17 +210,17 @@ class HREmployeesPage(QWidget):
         self.search.setPlaceholderText("Search employees by name, role, department, email...")
         self.search.setMinimumHeight(42)
         self.search.textChanged.connect(lambda _: self._apply_filters())
-        bar.addWidget(self.search, 2)
+        bar.addWidget(self.search)
 
         for attr, items, width in [
-            ("role_filter",   ["All Roles", "Doctor", "Cashier", "Receptionist",
-                               "Admin", "HR"], 130),
+            ("role_filter",   ["All Roles", "Doctor", "Nurse", "Receptionist",
+                               "Admin", "HR"], 140),
             ("dept_filter",   ["All Departments", "General Medicine", "Cardiology",
                                "Dentistry", "Pediatrics", "Laboratory",
                                "Front Desk", "Management", "Pharmacy",
-                               "Human Resources"], 160),
+                               "Human Resources"], 170),
             ("status_filter", ["All Status", "Active", "On Leave", "Inactive"], 130),
-            ("type_filter",   ["All Types", "Full-time", "Part-time", "Contract"], 120),
+            ("type_filter",   ["All Types", "Full-time", "Part-time", "Contract"], 130),
         ]:
             combo = QComboBox()
             combo.setObjectName("formCombo")
@@ -207,7 +229,6 @@ class HREmployeesPage(QWidget):
             combo.currentTextChanged.connect(lambda _: self._apply_filters())
             setattr(self, attr, combo)
             bar.addWidget(combo)
-
         lay.addLayout(bar)
 
         # ── Main employee table ──────────────────────────────────
@@ -541,6 +562,40 @@ class HREmployeesPage(QWidget):
         dlg = HREmployeeProfileDialog(self, emp_data=emp, backend=self._backend)
         dlg.exec()
 
+    # ── Add ───────────────────────────────────────────────────────
+    def _on_add(self):
+        dlg = HREmployeeDialog(self, title="Add Employee")
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            d = dlg.get_data()
+            if not d["name"].strip():
+                QMessageBox.warning(self, "Validation", "Employee name is required.")
+                return
+            phone = d.get("phone", "").strip()
+            if phone and self._backend:
+                existing = self._backend.check_duplicate_phone(phone)
+                if existing:
+                    QMessageBox.warning(self, "Duplicate Phone",
+                        f"Phone number {phone} is already assigned to "
+                        f"{existing['full_name']} (ID: {existing['employee_id']}).")
+                    return
+            reply = QMessageBox.question(self, "Confirm Add Employee",
+                f"Are you sure you want to add '{d['name']}' as a new employee?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+            ok = self._backend.add_employee(d)
+            if ok is True:
+                # Save doctor schedules if applicable
+                if d.get("role") == "Doctor" and d.get("schedules"):
+                    emp_id = self._backend.get_employee_id_by_email(d.get("email", ""))
+                    if emp_id:
+                        self._backend.save_doctor_schedules(emp_id, d["schedules"])
+                self._load_from_db()
+                QMessageBox.information(self, "Success", f"Employee '{d['name']}' added.")
+            else:
+                err = ok if isinstance(ok, str) else ''
+                QMessageBox.warning(self, "Error", f"Failed to save employee.\n{err}")
+
     # ── Edit ──────────────────────────────────────────────────────
     def _on_edit(self, row: int):
         if row >= len(self._employees):
@@ -559,6 +614,13 @@ class HREmployeesPage(QWidget):
             "emergency_contact": emp.get("emergency_contact", ""),
             "notes":             emp.get("notes", ""),
         }
+        # Load doctor schedules for prefill
+        if data.get("role") == "Doctor" and self._backend:
+            try:
+                emp_id = int(data["id"])
+                data["schedules"] = self._backend.get_doctor_schedules(emp_id) or []
+            except (ValueError, KeyError):
+                data["schedules"] = []
 
         dlg = HREmployeeDialog(self, title="Edit Employee", data=data)
         result = dlg.exec()
@@ -580,6 +642,9 @@ class HREmployeesPage(QWidget):
                 err = ok if isinstance(ok, str) else ''
                 QMessageBox.warning(self, "Error", f"Failed to update employee.\n{err}")
                 return
+            # Save doctor schedules if applicable
+            if d.get("role") == "Doctor" and "schedules" in d:
+                self._backend.save_doctor_schedules(emp_id, d["schedules"])
             self._load_from_db()
             QMessageBox.information(self, "Success", f"Employee '{d['name']}' updated.")
 

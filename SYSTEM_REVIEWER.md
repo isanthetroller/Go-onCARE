@@ -30,21 +30,25 @@
 12. [Input Validation System](#12-input-validation-system)
 13. [System Analysis — What Makes Sense & What Doesn't](#13-system-analysis)
 14. [Common Defense Questions & Answers](#14-common-defense-questions--answers)
+15. [Real-Life System Flow Simulation](#15-real-life-system-flow-simulation)
 
 ---
 
 ## 1. SYSTEM OVERVIEW
 
-**Go-onCARE** is a desktop clinic management system that handles:
-- Patient registration and medical records
-- Appointment scheduling with conflict detection
-- Clinical patient queue (doctor workflow)
+**Go-onCARE** is a desktop clinic management system for a **walk-in outpatient clinic** that handles:
+- Patient registration and medical records (with address and civil status)
+- **Walk-in only** appointment scheduling (always today, auto-confirmed, auto-queued)
+- Clinical patient queue with **nurse triage** (vitals + nurse notes) and doctor consultation
 - Billing / Point-of-Sale with invoicing and payments
 - Employee and HR management (payroll, leave requests)
+- **Doctor weekly availability scheduling** (compact day-select-then-time picker)
 - Analytics and reporting
 - Activity logging (audit trail)
 
-It uses **5 user roles** — Admin, Doctor, Cashier, Receptionist, HR — each seeing only the pages and buttons relevant to their job.
+It uses **5 user roles** — Admin, HR, Receptionist, Nurse, Doctor — each seeing only the pages and buttons relevant to their job.
+
+**Walk-In Clinic Flow:** Patient arrives → Receptionist creates appointment (always today) → Auto-synced to queue as "Waiting" → Nurse calls next patient, records vitals & triage notes → Doctor calls next patient, conducts consultation → Doctor completes visit → Auto-invoice generated.
 
 ---
 
@@ -163,6 +167,8 @@ ui/
   auth_window.py         ← Login screen
   main_window.py         ← Main app window (sidebar + pages)
   styles.py              ← Reusable UI helper functions
+  validators.py          ← Input validators (name, phone, price)
+  icons.py               ← SVG icon data for sidebar/buttons
   styles/
     auth.qss             ← Login screen stylesheet
     main.qss             ← Main app stylesheet
@@ -192,13 +198,13 @@ database/
 
 ## 4. DATABASE DESIGN
 
-### All Tables (16 total)
+### All Tables (19 total)
 
 #### Lookup Tables (store fixed reference data)
 | Table | Purpose | Key Columns |
 |-------|---------|-------------|
 | `departments` | Hospital departments | department_id, department_name |
-| `roles` | User roles (Doctor, Cashier, etc.) | role_id, role_name |
+| `roles` | User roles (Admin, Doctor, Nurse, Receptionist, HR) | role_id, role_name |
 | `services` | Medical services with prices | service_id, service_name, price, category, is_active |
 | `payment_methods` | How patients pay (Cash, GCash, etc.) | method_id, method_name |
 | `standard_conditions` | Common medical conditions list | condition_id, condition_name |
@@ -210,14 +216,15 @@ database/
 | `users` | Login accounts | user_id, email, password, full_name, role_id, must_change_password |
 | `user_preferences` | User settings | pref_id, user_email, dark_mode |
 | `employees` | Staff records | employee_id, first_name, last_name, role_id, department_id, phone, email, hire_date, status, salary |
-| `patients` | Patient records | patient_id, first_name, last_name, sex, date_of_birth, phone, email, blood_type, discount_type_id, status |
+| `patients` | Patient records | patient_id, first_name, last_name, sex, date_of_birth, phone, email, address, civil_status, blood_type, discount_type_id, status |
 | `patient_conditions` | Patient medical conditions | condition_id, patient_id, condition_name |
 
 #### Transaction Tables (things that happen)
 | Table | Purpose | Key Columns |
 |-------|---------|-------------|
 | `appointments` | Scheduled visits | appointment_id, patient_id, doctor_id, service_id, date, time, status |
-| `queue_entries` | Daily patient queue | queue_id, patient_id, doctor_id, appointment_id, status |
+| `doctor_schedules` | Doctor weekly availability | schedule_id, doctor_id, day_of_week, start_time, end_time (UNIQUE per doctor+day) |
+| `queue_entries` | Daily patient queue | queue_id, patient_id, doctor_id, appointment_id, blood_pressure, height_cm, weight_kg, temperature, nurse_notes, status, updated_at |
 | `invoices` | Bills | invoice_id, patient_id, total_amount, amount_paid, status, discount_percent |
 | `invoice_items` | Line items on each bill | item_id, invoice_id, service_id, quantity, unit_price, subtotal |
 | `activity_log` | Audit trail | log_id, user_email, action, record_type, record_detail |
@@ -230,6 +237,7 @@ database/
 departments ←── employees ──→ roles
                     ↑
                     │ (doctor_id)
+                    ├── doctor_schedules (weekly availability per doctor)
 patients ──→ appointments ──→ services
    ↑              ↑
    │              │
@@ -242,6 +250,7 @@ patients ──→ appointments ──→ services
 users ──→ roles
 employees ──→ leave_requests
 employees ──→ notifications
+queue_entries ──→ patients, employees, appointments (+ vitals + nurse_notes)
 activity_log (standalone, tracks everything)
 ```
 
@@ -298,18 +307,18 @@ This query **joins** the appointments table with patients and employees to get h
 
 ### What Each Role Can See:
 
-| Page | Admin | Doctor | Cashier | Receptionist | HR |
-|------|:-----:|:------:|:-------:|:------------:|:--:|
+| Page | Admin | Doctor | Nurse | Receptionist | HR |
+|------|:-----:|:------:|:-----:|:------------:|:--:|
 | Dashboard | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Patients | ✅ Full CRUD | 👁️ View own | 👁️ Read-only | ✅ Full CRUD | ❌ |
-| Appointments | ✅ Full CRUD | 👁️ View/Confirm own | 👁️ Read-only | ✅ Full CRUD | ❌ |
-| Clinical Queue | ✅ View | ✅ Call Next/Complete | ❌ | ❌ | ❌ |
-| Billing/POS | ✅ View | ❌ | ✅ Pay/Void | ✅ Create invoices | ❌ |
+| Patients | ✅ Full CRUD | 👁️ View own | 👁️ View profiles | ✅ Full CRUD | ❌ |
+| Appointments | ✅ Full CRUD | 👁️ View/Confirm own | ❌ | ✅ Full CRUD + Doctor Availability | ❌ |
+| Clinical Queue | ✅ View | ✅ Call Next/Complete | ✅ Start Triage/Record Vitals & Notes | ❌ | ❌ |
+| Billing/POS | ✅ View | ❌ | ❌ | ✅ Create/Pay/Void invoices | ❌ |
 | Services & Pricing | ✅ Full CRUD | ❌ | ❌ | ❌ | ❌ |
 | Employees (Admin) | ✅ Full CRUD | ❌ | ❌ | ❌ | ❌ |
 | HR Module | ✅ + User Accounts | ❌ | ❌ | ❌ | ✅ |
 | Analytics | ✅ Full | ✅ Own stats | ❌ | ❌ | ❌ |
-| Activity Log | ✅ Full | ✅ | ✅ | ✅ | ✅ Logins only |
+| Activity Log | ✅ Full | ✅ | ❌ | ✅ | ✅ Logins only |
 | Settings | ✅ Full + DB mgmt | ✅ Profile only | ✅ Profile only | ✅ Profile only | ✅ Profile only |
 
 ### How It's Implemented:
@@ -318,7 +327,7 @@ This query **joins** the appointments table with patients and employees to get h
 3. **Button-level**: Individual buttons check `self._role` before appearing
    ```python
    # Example: Only Admin and Receptionist see the "Add Patient" button
-   if self._role not in ("Cashier", "Doctor"):
+   if self._role not in ("Nurse", "Doctor"):
        banner_btn.setVisible(True)
    ```
 4. **Data-level**: Doctors only see their own patients/appointments (filtered SQL queries)
@@ -329,15 +338,33 @@ This query **joins** the appointments table with patients and employees to get h
 
 ### 7.1 Dashboard
 
-**What it shows:**
-- Greeting with current date/time (updates every second)
-- 4 KPI cards: Today's Appointments, Active Patients, Today's Revenue, Active Staff
-- Delta percentages (↑/↓ compared to last month)
-- Quick action buttons (New Patient, New Appointment, Clinical Queue, Analytics)
-- Today's Schedule (upcoming appointments)
+**What it shows (role-specific):**
+
+Each role gets a tailored dashboard with a role-specific banner subtitle explaining their focus:
+
+**All roles see:**
+- Greeting banner with current date/time (updates every second)
+- Role-specific subtitle (e.g., Nurse: "Your triage queue — call patients and record their vitals.")
+- KPI cards (role-specific — see below)
+- Quick action buttons (role-specific — see below)
+- My Leave Requests (for all non-HR roles)
+
+**Admin/Doctor/Receptionist see:**
+- KPI cards: Today's Appointments, Active Patients, Today's Revenue, Active Staff (with ↑/↓ delta vs last month)
+- Quick actions: New Patient, New Appointment, Clinical Queue, Analytics (filtered by role access)
+- Today's Schedule (upcoming appointments table)
 - Monthly Visits bar chart (last 6 months)
-- My Leave Requests (for employees, not Admin/HR)
-- Recent Activity (Admin only)
+- Recent Activity log (Admin only)
+
+**Nurse sees (triage-focused dashboard):**
+- KPI cards: **Awaiting Triage** (Waiting count — red if patients need triage, green "all caught up!"), **Triaged Today** (Triaged count — blue "ready for doctor"), **Total In Queue** (Waiting + Triaged + In Progress), **Active Staff**
+- Quick actions: **Start Triage** (→ Clinical Queue), **View Patients** (→ Patients page)
+- **Patient Queue** card (replaces Today's Schedule) — live mini-table showing active queue entries (Waiting, Triaged, In Progress) with Patient, Time, Doctor, Vitals (✓/—), and Status columns. "Go to Clinical Queue →" button
+- **Today's Queue Summary** card (replaces Monthly Visits chart) — visual status breakdown showing Waiting/Triaged/In Progress/Completed counts with colored dots, plus a Completion Rate percentage
+
+**HR sees:**
+- KPI cards: Today's Revenue, Active Staff (appointment and patient KPIs are hidden)
+- Quick actions: **Manage Staff** (→ Employees page), **Activity Log** (→ Activity Log page)
 
 **How KPIs are calculated:**
 ```sql
@@ -360,7 +387,7 @@ SELECT COUNT(*) FROM employees WHERE status = 'Active'
 delta = ((current_month_value - last_month_value) / last_month_value) × 100
 ```
 
-**Auto-refresh:** Every 10 seconds, KPIs and schedule are reloaded from the database.
+**Auto-refresh:** Every 10 seconds, KPIs and schedule are reloaded from the database. The refresh method uses an `isVisible()` guard for efficiency (skips when user is on another page), but accepts a `force=True` parameter that bypasses this check. On initial load and whenever the user navigates to the Dashboard, `refresh(force=True)` is called via `QTimer.singleShot(0, ...)` to ensure the page is fully visible before loading data. This solves the issue where `QStackedWidget` processes show events asynchronously — without the force parameter, the dashboard would appear blank until the user switched away and back.
 
 ---
 
@@ -370,8 +397,8 @@ delta = ((current_month_value - last_month_value) / last_month_value) × 100
 
 | Operation | Who Can | What Happens |
 |-----------|---------|-------------|
-| **Create** | Admin, Receptionist | Opens form → fills name, sex, DOB, phone, email, emergency contact, blood type, discount, conditions, status, notes → INSERT into `patients` + `patient_conditions` |
-| **Read** | All roles | Table shows all patients (Doctor sees only own patients via JOIN with appointments) |
+| **Create** | Admin, Receptionist | Opens form → fills name, sex, DOB, civil status, address, phone, email, emergency contact, blood type, discount, conditions, status, notes → INSERT into `patients` + `patient_conditions` |
+| **Read** | All with access | Table shows all patients (Doctor sees only own patients via JOIN with appointments). **Nurse** has View button to see patient profiles (read-only). |
 | **Update** | Admin, Receptionist | Opens same form pre-filled → UPDATE `patients` + DELETE/re-INSERT `patient_conditions` |
 | **Delete** | Admin, Receptionist | Confirmation dialog → Cascading delete: invoice_items → invoices → queue_entries → appointments → patient_conditions → patients |
 
@@ -407,35 +434,44 @@ delta = ((current_month_value - last_month_value) / last_month_value) × 100
 
 ### 7.3 Appointment Scheduling
 
-**How creating an appointment works:**
+**Walk-In Only Design:**
+This is a **walk-in clinic** — all appointments are for today only. When a receptionist creates an appointment:
+1. The date is **always today** (no future scheduling)
+2. The status is **always "Confirmed"** (no pending step needed)
+3. The appointment is **automatically synced to the queue** as a "Waiting" entry
+
+**How creating a walk-in appointment works:**
 1. User clicks "+ New Appointment"
-2. Dialog opens with: Patient (searchable dropdown), Doctor, Date, Time, Service, Status, Notes
+2. Dialog opens with: Patient (searchable dropdown), Doctor, Time, Service, Notes
 3. **Patient search**: Editable combo box with autocomplete — user types a name, suggestions filter as they type
-4. **Date validation**: Cannot schedule in the past; cannot schedule beyond next month's last day
-5. **Conflict detection**: Before saving, checks if the doctor already has an appointment at the same date+time
+4. **Doctor availability check**: Only shows doctors who are available today (based on `doctor_schedules.day_of_week`)
+5. **Conflict detection**: Before saving, checks if the doctor already has an appointment at the same time
    ```sql
    SELECT COUNT(*) FROM appointments 
    WHERE doctor_id = %s AND appointment_date = %s AND appointment_time = %s 
    AND status != 'Cancelled'
    ```
 6. If conflict found, warns user but allows saving anyway (with confirmation)
-7. On save: resolves patient name to `patient_id` via:
-   ```sql
-   SELECT patient_id FROM patients 
-   WHERE CONCAT(first_name, ' ', last_name) = %s LIMIT 1
-   ```
-8. INSERT into `appointments` table
+7. On save: resolves patient name to `patient_id`, INSERT into `appointments` with today's date and "Confirmed" status
+8. Queue sync runs automatically — the new appointment appears in the Clinical Queue
+
+**Doctor Availability Tab (Receptionist):**
+The Appointments page has a **"Doctor Availability"** tab that shows each doctor's weekly schedule. This helps receptionists assign patients to doctors who are actually working today.
+- Shows a table of all doctors with their scheduled days and times
+- Data comes from the `doctor_schedules` table
+- Managed by Admin in the Employee Management page using a compact schedule picker
 
 **Quick Filter Tabs:**
 - Today, Tomorrow, This Week, This Month, All
 - These filter the table rows client-side (no new query needed)
 
-**Status Flow:**
+**Status Flow (Walk-In):**
 ```
-Pending → Confirmed → Completed
-              ↘ Cancelled
+Confirmed → Completed (via queue completion)
+      ↘ Cancelled
 ```
-- **Doctor** can: View details, Confirm (Pending→Confirmed), Cancel (with reason)
+- Walk-in appointments skip the "Pending" step entirely
+- **Doctor** can: View details, Cancel (with reason)
 - **Admin/Receptionist** can: Create, Edit all fields, Delete
 
 ---
@@ -444,7 +480,7 @@ Pending → Confirmed → Completed
 
 This is the most complex page with **3 tabs**:
 
-#### Tab 1: Patient Queue (Admin, Doctor)
+#### Tab 1: Patient Queue (Admin, Doctor, Nurse)
 
 **How the queue works:**
 1. When the page loads, it **syncs** today's confirmed appointments to the queue:
@@ -452,12 +488,39 @@ This is the most complex page with **3 tabs**:
    -- For each confirmed appointment today that's not already in the queue:
    INSERT INTO queue_entries (patient_id, doctor_id, appointment_id, queue_time, purpose, status)
    ```
-2. Queue shows: Queue #, Patient, Doctor, Time, Purpose, Status
-3. **Doctor workflow:**
-   - Doctor clicks **"Call Next"** → system finds the first "Waiting" entry for that doctor and sets it to "In Progress"
+2. Queue shows **9 columns**: Queue #, Patient, Time, Doctor, Purpose, Vitals, Nurse Notes, Status, Actions
+3. **Queue Status Flow (5 states):**
+   ```
+   Waiting → [Nurse triages] → Triaged → [Doctor calls] → In Progress → Completed/Cancelled
+   ```
+   - **Waiting**: Patient is in queue, not yet seen by anyone
+   - **Triaged**: Nurse has recorded vitals — patient is ready for the doctor
+   - **In Progress**: Doctor is currently consulting the patient
+   - **Completed/Cancelled**: Visit finished or cancelled
+4. **Nurse workflow (Triage):**
+   - Nurse clicks **"Start Triage"** → system finds the first "Waiting" entry (Nurse can only pick "Waiting" patients)
+   - The triage vitals dialog opens automatically after calling the patient
+   - Nurse records **vitals** (blood pressure, height, weight, temperature) and **triage notes** (free-text observations)
+   - **On save, the system automatically sets the patient's status to "Triaged"** — this is the key handoff to the doctor
+   - Nurse can also click **"Triage"** on any specific Waiting patient, or **"Update Vitals"** on Triaged/In Progress patients
+   - The "Start Triage" button is **disabled** when no Waiting patients exist (tooltip: "No patients waiting for triage")
+5. **Doctor workflow:**
+   - Doctor clicks **"Call Next"** → system **prefers "Triaged" patients first** (nurse has prepared them), then falls back to "Waiting" if no triaged patients exist. Filtered to the doctor's own patients.
+   - This creates a clear **Nurse → Doctor handoff pipeline**: the doctor always gets patients the nurse has already screened
    - Doctor can only have **one** "In Progress" patient at a time
    - After consultation, clicks **"Complete"** → marks queue entry as Completed, marks appointment as Completed, auto-creates an invoice
    - Or clicks **"Cancel"** → marks both queue entry and appointment as Cancelled
+
+**Nurse Vitals & Notes Dialog:**
+```python
+# When nurse clicks "Triage" (on Waiting patients) or "Update Vitals" (on Triaged/In Progress):
+# - Dialog shows: Blood Pressure, Height (cm), Weight (kg), Temperature (°C)
+# - Plus a QTextEdit for nurse notes (observations, triage assessment)
+# - If updating, all fields are pre-filled with existing values
+# - On save: UPDATE queue_entries SET blood_pressure, height_cm, weight_kg, temperature, nurse_notes
+# - CRITICAL: If the patient was "Waiting", status is automatically set to "Triaged"
+#   This is the Nurse → Doctor handoff — the doctor's "Call Next" prefers Triaged patients
+```
 
 **Auto-invoice on completion:**
 ```python
@@ -466,7 +529,7 @@ This is the most complex page with **3 tabs**:
 # 2. Check if patient has a discount (from discount_types table)
 # 3. Calculate: subtotal = price × quantity, then apply discount
 # 4. INSERT invoice + INSERT invoice_item
-# 5. Invoice status = 'Unpaid' (cashier handles payment later)
+# 5. Invoice status = 'Unpaid' (receptionist handles payment later)
 ```
 
 **Wait Time Estimation:**
@@ -478,7 +541,7 @@ FROM queue_entries WHERE status = 'Completed' AND created_at >= DATE_SUB(CURDATE
 -- Estimated wait = waiting_count × avg_minutes
 ```
 
-#### Tab 2: Billing / POS (Admin, Receptionist, Cashier)
+#### Tab 2: Billing / POS (Admin, Receptionist)
 
 **Invoice table shows:** Invoice #, Patient, Services, Total, Paid, Status, Actions
 
@@ -496,22 +559,22 @@ FROM queue_entries WHERE status = 'Completed' AND created_at >= DATE_SUB(CURDATE
 SELECT discount_percent FROM discount_types 
 WHERE discount_id = (SELECT discount_type_id FROM patients WHERE patient_id = %s)
 
-# This prevents cashiers from giving unauthorized discounts
+# This prevents staff from giving unauthorized discounts
 ```
 
-**Payment processing (Cashier only):**
+**Payment processing (Receptionist):**
 1. Click "Pay" on an unpaid/partial invoice
 2. Dialog shows remaining balance
 3. Enter payment amount (capped at remaining balance)
 4. UPDATE invoice: add to amount_paid, update status
 
-**Void (Admin, Cashier):**
+**Void (Admin, Receptionist):**
 - Sets invoice status to "Voided" — the invoice remains in the system for audit trail
 
 **Role restrictions:**
-- **Receptionist**: Can create invoices, but CANNOT pay or void
-- **Cashier**: Can pay and void, can create invoices
+- **Receptionist**: Can create invoices, pay, and void
 - **Admin**: Can view but buttons are hidden (oversight role)
+- **Nurse/Doctor**: No access to billing
 
 #### Tab 3: Services & Pricing (Admin only)
 
@@ -536,8 +599,22 @@ WHERE discount_id = (SELECT discount_type_id FROM patients WHERE patient_id = %s
 |-----------|-------------|
 | **Add** | Dialog: name, role, department, type, phone (+63 prefix), email, hire date, status, notes → INSERT into `employees` → **Auto-creates a user account** |
 | **Edit** | Same dialog pre-filled → UPDATE `employees` → syncs email to `users` table |
-| **Fire** | "Fire" button in edit dialog → cascade deletes all related data (appointments, invoices, queue, notifications, leave requests) |
+| **Fire** | "Fire" button in edit dialog → cascade deletes all related data (appointments, invoices, queue, notifications, leave requests, doctor_schedules) |
 | **View** | Profile dialog with tabs: Info, Appointments (last 20), Performance (total appts, completed, revenue) |
+
+**Doctor Weekly Availability (Compact Schedule Picker):**
+When adding/editing a Doctor, the employee dialog includes a **weekly availability** section:
+1. **Day Selection**: 7 toggle buttons (Mon–Sun) — click to enable/disable each day
+2. **Time Picker**: For each selected day, set start and end times
+3. The UI is compact: select days first, then a shared time picker applies to the current selection
+4. On save: DELETE existing schedules → INSERT new ones into `doctor_schedules` table
+5. UNIQUE constraint on (doctor_id, day_of_week) prevents duplicate entries
+
+```sql
+-- doctor_schedules table:
+-- schedule_id, doctor_id, day_of_week (ENUM Mon-Sun), start_time, end_time
+-- Used by: Receptionist's Doctor Availability tab, appointment creation doctor filtering
+```
 
 **Auto-create user account:**
 When you add a new employee with an email, the system:
@@ -668,7 +745,7 @@ JOIN (SELECT patient_id, MIN(appointment_date) AS first_date FROM appointments G
 | Feature | What It Does |
 |---------|-------------|
 | **Discount Management** | Add/Edit/Delete discount types (Senior 20%, PWD 20%, etc.) with legal basis |
-| **Database Overview** | Shows row counts for all 16 tables (auto-refreshes every 10 seconds) |
+| **Database Overview** | Shows row counts for all 19 tables (auto-refreshes every 10 seconds) |
 | **Cleanup: Completed Appointments** | Delete completed appointments before a chosen date (cascades to invoices, queue) |
 | **Cleanup: Cancelled Appointments** | Delete ALL cancelled appointments |
 | **Cleanup: Inactive Patients** | Delete ALL inactive patients and their linked data |
@@ -696,7 +773,8 @@ Every important action in the system is recorded with:
 ```
 2026-03-09 14:30:22 | admin@carecrud.com | Admin | Created | Patient | Maria Santos
 2026-03-09 15:00:00 | ana.reyes@carecrud.com | Doctor | Called | Queue | Called next patient: Juan Dela Cruz
-2026-03-09 15:30:00 | sofia.reyes@carecrud.com | Cashier | Created | Invoice | Payment received for Juan Dela Cruz
+2026-03-09 15:15:00 | nurse@carecrud.com | Nurse | Created | Queue | Recorded vitals for Juan Dela Cruz
+2026-03-09 15:30:00 | receptionist@carecrud.com | Receptionist | Created | Invoice | Payment received for Juan Dela Cruz
 ```
 
 **Role filtering:**
@@ -991,31 +1069,40 @@ All text fields have `setMaxLength()` to prevent excessively long input:
 ### What Makes Sense (and Why)
 
 #### 1. Role System — Well-Designed
-Each of the 5 roles (Admin, Doctor, Cashier, Receptionist, HR) has appropriate access. Admin controls everything, Doctor sees only their own data, Cashier handles billing, Receptionist handles front-desk intake, HR manages personnel. Roles are enforced at three levels: sidebar visibility, page-level button hiding, and SQL query filtering.
+Each of the 5 roles (Admin, Doctor, Nurse, Receptionist, HR) has appropriate access. Admin controls everything, Doctor sees only their own data, Nurse handles triage (vitals + notes), Receptionist handles front-desk intake and billing, HR manages personnel. Roles are enforced at three levels: sidebar visibility, page-level button hiding, and SQL query filtering.
 
-#### 2. Patient Workflow — Textbook Outpatient Flow
-Registration → Appointment → Queue → Clinical Visit → Invoice → Payment. This mirrors how a real outpatient clinic operates. The automated steps (appointment sync to queue, auto-invoice on completion) reduce manual work.
+#### 2. Walk-In Clinic Workflow — Realistic Outpatient Flow
+Patient arrives → Receptionist creates walk-in appointment (always today, auto-confirmed) → Auto-synced to queue as "Waiting" → Nurse triages (records vitals + notes → status auto-changes to **"Triaged"**) → Doctor calls next (prefers Triaged patients → status becomes "In Progress") → Doctor completes → Auto-invoice generated. This mirrors how a real walk-in outpatient clinic operates. The **Triaged status creates a clear Nurse → Doctor handoff** — the doctor always knows which patients the nurse has already screened. The automated steps (auto-confirm, auto-queue sync, auto-triage status, auto-invoice) eliminate manual handoffs.
 
-#### 3. Appointment Conflict Detection — Prevents Double-Booking
-Before saving an appointment, the system checks if the doctor already has a non-cancelled appointment at the same date and time. If a conflict exists, it warns the user but allows override (because real clinics sometimes intentionally double-book). Appointments are date-range limited to prevent scheduling too far in advance.
+#### 3. Nurse Triage — Proper Clinical Workflow with Status Handoff
+The Nurse role handles patient triage before doctor consultation: recording blood pressure, height, weight, temperature, and triage notes. **When the nurse saves vitals on a "Waiting" patient, the status automatically changes to "Triaged"** — this is the critical handoff. The doctor's "Call Next" then **prefers Triaged patients first**, creating a real Nurse → Doctor pipeline. Nurses can update vitals on already-triaged or in-progress patients without changing status. **The Nurse dashboard is triage-focused**: instead of generic appointment schedules, it shows a live Patient Queue card (Waiting/Triaged/In Progress patients with vitals status), a Today's Queue Summary with status breakdown and completion rate, plus triage-specific KPIs ("Awaiting Triage", "Triaged Today", "Total In Queue").
 
-#### 4. Clinical Queue — Correct State Machine
-The queue follows a logical flow: Waiting → In Progress → Completed/Cancelled. A doctor can only have one "In Progress" patient at a time (prevents serving two simultaneously). The "Call Next" button picks the earliest waiting patient (FIFO). Estimated wait time uses the average consultation duration from the last 30 days.
+#### 4. Doctor Weekly Availability — Schedule Management
+Doctors have configurable weekly schedules stored in `doctor_schedules`. The compact day-select-then-time picker makes schedule management efficient. Receptionists can view doctor availability when assigning patients, preventing appointments with unavailable doctors.
 
-#### 5. Discount Enforcement — Security-Conscious
-When an invoice is created, the system ignores any discount value from the UI and re-fetches the patient's discount from the database. This prevents cashiers from giving unauthorized discounts. The discount is based on Philippine laws (RA 9994 for Senior Citizens, RA 7277 for PWDs).
+#### 5. Appointment Conflict Detection — Prevents Double-Booking
+Before saving an appointment, the system checks if the doctor already has a non-cancelled appointment at the same date and time. If a conflict exists, it warns the user but allows override (because real clinics sometimes intentionally double-book). Walk-in appointments use today's date automatically.
 
-#### 6. Leave Request Auto-Cancellation — Real-World Awareness
+#### 6. Clinical Queue — Correct State Machine with Triage Step
+The queue follows a 5-state flow: **Waiting → Triaged → In Progress → Completed/Cancelled**. The "Triaged" status is the Nurse → Doctor handoff point. A doctor can only have one "In Progress" patient at a time. The Nurse's "Start Triage" picks the earliest Waiting patient; the Doctor's "Call Next" **prefers Triaged patients first** (FIFO among triaged, then falls back to Waiting). This ensures the doctor always sees patients the nurse has already screened. Estimated wait time uses the average consultation duration from the last 30 days.
+
+#### 7. Discount Enforcement — Security-Conscious
+When an invoice is created, the system ignores any discount value from the UI and re-fetches the patient's discount from the database. This prevents unauthorized discounts. The discount is based on Philippine laws (RA 9994 for Senior Citizens, RA 7277 for PWDs).
+
+#### 8. Leave Request Auto-Cancellation — Real-World Awareness
 When HR approves a leave request, all the doctor's appointments during the leave period are automatically cancelled with the reason "Employee on approved leave." This prevents patients from showing up when their doctor isn't available. The auto-expire mechanism restores the employee to "Active" after their leave ends.
 
-#### 7. Activity Logging — Full Audit Trail
+#### 9. Activity Logging — Full Audit Trail
 Every important action is logged with timestamp, user, role, action, and details. This is essential for accountability in healthcare and supports Philippine DOH record-keeping requirements.
 
-#### 8. Patient Merge — Practical Deduplication
+#### 10. Patient Merge — Practical Deduplication
 Receptionists and Admins can merge duplicate patient records. The "Remove" patient's data (appointments, invoices, queue, conditions) is transferred to the "Keep" patient, then the duplicate is deleted. This handles real-world data entry mistakes.
 
-#### 9. Billing System — Multi-Line Items with Partial Payments
+#### 11. Billing System — Multi-Line Items with Partial Payments
 Invoices support multiple service line items, quantity, per-item discounts, and partial payments. Status tracks correctly: Unpaid → Partial → Paid. Void preserves the record for audit trail rather than deleting it.
+
+#### 12. Dashboard Real-Time Refresh — Immediate Data Visibility
+The dashboard uses a `force` parameter on its refresh method to ensure data loads immediately when navigating to the page, bypassing the `isVisible()` guard that prevents unnecessary background refreshes. Combined with 10-second auto-refresh, administrators always see current data.
 
 ### What Could Be Improved (and Why)
 
@@ -1025,17 +1112,11 @@ Passwords are stored as plain strings in the database. If the database were comp
 #### 2. No Time-Slot Duration for Appointments
 The conflict check only matches exact time — if two appointments are at 10:00 and 10:05, no conflict is detected. Real clinics need duration-based slots (e.g., 30-minute blocks).
 
-#### 3. No Walk-In Patient Shortcut
-Currently, a patient **must** have an appointment to enter the queue (the queue syncs from confirmed appointments). A walk-in patient who arrives without an appointment has no streamlined entry path. A "Walk-In" button that creates an appointment + queue entry in one step would improve workflow.
-
-#### 4. No Leave Balance Tracking
+#### 3. No Leave Balance Tracking
 Employees can request unlimited leave — there's no concept of leave entitlement (e.g., 15 vacation days, 10 sick days per year). HR has no way to enforce leave quotas.
 
-#### 5. Minimum Password Length Is Only 4 Characters
+#### 4. Minimum Password Length Is Only 4 Characters
 Healthcare systems handling patient data should enforce stronger password policies (8+ characters with complexity requirements).
-
-#### 6. Cashier Sees Full Patient Medical Records
-Cashiers have access to the Patients page with full details including blood type, medical conditions, and emergency contacts. For privacy, cashiers should only see billing-relevant information (name, ID, discount status).
 
 ---
 
@@ -1053,14 +1134,14 @@ Cashiers have access to the Patients page with full details including blood type
 > A: We use the **Mixin pattern**. Each feature area (patients, appointments, billing, etc.) is a separate Python class. These are combined into one backend class through multiple inheritance. This keeps the code organized — each file handles one responsibility — while sharing the same database connection.
 
 **Q: How does your role-based access control work?**
-> A: Access control happens at three levels: (1) **Sidebar** — only shows pages the role is allowed to see, (2) **Page** — buttons and columns are hidden/shown based on `self._role`, (3) **Data** — SQL queries filter results (e.g., doctors only see their own patients via JOINs with their employee_id).
+> A: Access control happens at three levels: (1) **Sidebar** — only shows pages the role is allowed to see (e.g., Nurse sees Dashboard, Patients, Clinical & POS, Settings), (2) **Page** — buttons and columns are hidden/shown based on `self._role` (e.g., Nurse gets "Record Vitals" button but not "Complete"), (3) **Data** — SQL queries filter results (e.g., doctors only see their own patients via JOINs with their employee_id).
 
 ---
 
 ### Database
 
 **Q: How many tables does your database have and what are they for?**
-> A: 16 tables total. 6 lookup tables (departments, roles, services, payment_methods, standard_conditions, discount_types), 5 main tables (users, user_preferences, employees, patients, patient_conditions), and 5 transaction tables (appointments, queue_entries, invoices, invoice_items, activity_log), plus leave_requests and notifications.
+> A: 19 tables total. 6 lookup tables (departments, roles, services, payment_methods, standard_conditions, discount_types), 5 main tables (users, user_preferences, employees, patients, patient_conditions), and 8 transaction tables (appointments, doctor_schedules, queue_entries, invoices, invoice_items, activity_log, leave_requests, notifications).
 
 **Q: What are foreign keys and why do you use them?**
 > A: Foreign keys are columns that reference another table's primary key. For example, `appointments.patient_id` references `patients.patient_id`. This ensures you can't create an appointment for a patient that doesn't exist. It maintains data integrity.
@@ -1079,7 +1160,7 @@ Cashiers have access to the Patients page with full details including blood type
 > A: Before saving an appointment, we query: "Does this doctor already have a non-cancelled appointment at this date and time?" If yes, we warn the user. They can still force-save (for legitimate double-bookings), but they must acknowledge the conflict.
 
 **Q: How does the patient queue work?**
-> A: Each morning, confirmed appointments are synced to the queue. The doctor clicks "Call Next" → the first waiting patient becomes "In Progress". After the consultation, the doctor marks it "Complete" → the system auto-creates an unpaid invoice for the cashier. Queue is single-day only — it resets daily.
+> A: This is a walk-in clinic, so all appointments are for today. Confirmed appointments are automatically synced to the queue as "Waiting". The queue has 5 statuses: **Waiting → Triaged → In Progress → Completed/Cancelled**. The **Nurse** clicks "Start Triage" to call the next waiting patient — when vitals are saved, the status automatically changes to **"Triaged"**. The **Doctor** then clicks "Call Next" → the system **prefers Triaged patients first** (ones the nurse already screened), setting them to "In Progress". After the consultation, the doctor marks it "Complete" → the system auto-creates an unpaid invoice for the receptionist. Queue is single-day only — it resets daily.
 
 **Q: How are discounts calculated?**
 > A: Each patient can have a discount type (e.g., Senior Citizen 20%). When an invoice is created, the system reads the discount **from the database** — not from the UI. This prevents unauthorized discounts. The discount is applied: `total = subtotal × (1 - discount_percent/100)`.
@@ -1104,7 +1185,7 @@ Cashiers have access to the Patients page with full details including blood type
 > A: Philippine format (+63 followed by 10 digits). The UI shows a styled frame with "+63" as a fixed prefix label, and the user only types the 10 digits. On save, "+63" is prepended. On edit, "+63" is stripped for display. Validation uses regex: `^\d{10}$`.
 
 **Q: What happens when the system first connects to the database?**
-> A: The `DatabaseBase.__init__()` runs `_ensure_schema()` which checks if required tables and columns exist. If any are missing (e.g., the discount_types table), it creates them. This is a basic auto-migration so the app works even on older database versions.
+> A: The `DatabaseBase.__init__()` runs `_ensure_schema()` which checks if required tables and columns exist. If any are missing (e.g., the `discount_types` table, the `nurse_notes` column in `queue_entries`, or the `updated_at` column), it creates them. This is a basic auto-migration so the app works even on older database versions.
 
 ---
 
@@ -1164,6 +1245,593 @@ SELECT COALESCE(SUM(amount_paid), 0)
 FROM invoices 
 WHERE DATE(created_at) = CURDATE() AND status IN ('Paid', 'Partial')
 ```
+
+---
+
+## 15. REAL-LIFE SYSTEM FLOW SIMULATION
+
+> This section walks through a complete day at **Go-onCARE Clinic**, showing exactly what each role does in the system and what happens in the database at every step. Use this to demonstrate the system during your defense.
+
+---
+
+### SCENARIO: A Typical Morning at the Clinic
+
+**Date:** March 10, 2026 (Tuesday)  
+**Clinic opens at 8:00 AM**  
+**Staff on duty:** Carlo Santos (Admin), James Cruz (Receptionist), Sofia Reyes (Nurse), Dr. Ana Reyes (Doctor)
+
+---
+
+### 8:00 AM — Staff Arrive and Log In
+
+**Each staff member opens the app and logs in.**
+
+| Who | Email | What They See |
+|-----|-------|---------------|
+| Carlo (Admin) | admin@carecrud.com | Full dashboard — all KPI cards, today's schedule, recent activity, quick action buttons |
+| James (Receptionist) | james.cruz@carecrud.com | Dashboard — KPI cards, quick action buttons (New Patient, New Appointment), today's schedule |
+| Sofia (Nurse) | sofia.reyes@carecrud.com | **Triage-focused dashboard** — Awaiting Triage / Triaged / In Queue KPIs, Patient Queue card (empty), Queue Summary card, Start Triage + View Patients buttons |
+| Dr. Ana (Doctor) | ana.reyes@carecrud.com | Dashboard — her own KPI cards, her own schedule (empty so far) |
+
+**What happens in the database:**
+```sql
+-- Each login is recorded in the activity log:
+INSERT INTO activity_log (user_email, user_role, action, record_type, record_detail)
+VALUES ('admin@carecrud.com', 'Admin', 'Login', 'User', 'User logged in');
+
+INSERT INTO activity_log (user_email, user_role, action, record_type, record_detail)
+VALUES ('james.cruz@carecrud.com', 'Receptionist', 'Login', 'User', 'User logged in');
+
+-- ... same for Nurse and Doctor
+```
+
+**Dashboard auto-refreshes** every 10 seconds. The Admin's dashboard shows real-time KPI updates using `refresh(force=True)` on navigation.
+
+---
+
+### 8:15 AM — First Patient Arrives (New Patient)
+
+**Maria Santos, 45 years old, walks in with a cough. She has never been to this clinic before.**
+
+#### Step 1: Receptionist Registers the Patient
+
+James (Receptionist) clicks **"+ Add Patient"** on the Patients page.
+
+**He fills in the form:**
+| Field | Value |
+|-------|-------|
+| First Name | Maria |
+| Last Name | Santos |
+| Sex | Female |
+| Date of Birth | 1981-05-12 |
+| Civil Status | Married |
+| Address | 123 Rizal St, Quezon City |
+| Phone | +63 917 123 4567 |
+| Email | maria.santos@email.com |
+| Blood Type | O+ |
+| Conditions | ☑ Hypertension |
+| Discount | Senior Citizen (20%) — *No, she's 45, so no discount* |
+| Status | Active |
+
+**What happens in the database:**
+```sql
+-- 1. Patient record is created
+INSERT INTO patients (first_name, last_name, sex, date_of_birth, civil_status, address, 
+                      phone, email, blood_type, status)
+VALUES ('Maria', 'Santos', 'Female', '1981-05-12', 'Married', '123 Rizal St, Quezon City',
+        '+639171234567', 'maria.santos@email.com', 'O+', 'Active');
+-- Returns patient_id = 21 (auto-increment)
+
+-- 2. Medical condition is linked
+INSERT INTO patient_conditions (patient_id, condition_name) VALUES (21, 'Hypertension');
+
+-- 3. Activity is logged
+INSERT INTO activity_log (user_email, user_role, action, record_type, record_detail)
+VALUES ('james.cruz@carecrud.com', 'Receptionist', 'Created', 'Patient', 'Maria Santos');
+```
+
+**Validation that happened silently:**
+- `NameValidator` blocked any digits in the name field (real-time keystroke blocking)
+- Phone field only accepted 10 digits after the +63 prefix
+- Email matched the `name@domain.ext` pattern
+- All required fields were filled before the Save button worked
+
+---
+
+#### Step 2: Receptionist Creates a Walk-In Appointment
+
+James clicks **"+ New Appointment"** on the Appointments page.
+
+**He fills in the dialog:**
+| Field | Value |
+|-------|-------|
+| Patient | Maria Santos *(typed "Mar", autocomplete showed her)* |
+| Doctor | Dr. Ana Reyes *(only doctors available today — Tuesday — are shown)* |
+| Time | 08:30 AM |
+| Service | General Consultation (₱500) |
+| Notes | Walk-in, cough for 3 days |
+
+**What the system checks before saving:**
+1. Is Dr. Ana available on Tuesdays? → Checks `doctor_schedules`:
+   ```sql
+   SELECT * FROM doctor_schedules WHERE doctor_id = 1 AND day_of_week = 'Tuesday'
+   -- Result: start_time=08:00, end_time=17:00 → Yes, available
+   ```
+2. Does Dr. Ana already have an appointment at 08:30? → Conflict check:
+   ```sql
+   SELECT COUNT(*) FROM appointments 
+   WHERE doctor_id = 1 AND appointment_date = '2026-03-10' 
+   AND appointment_time = '08:30:00' AND status != 'Cancelled'
+   -- Result: 0 → No conflict
+   ```
+
+**What happens in the database:**
+```sql
+-- 1. Appointment is created (always today, always Confirmed for walk-ins)
+INSERT INTO appointments (patient_id, doctor_id, service_id, appointment_date, 
+                          appointment_time, status, notes)
+VALUES (21, 1, 1, '2026-03-10', '08:30:00', 'Confirmed', 'Walk-in, cough for 3 days');
+-- Returns appointment_id = 101
+
+-- 2. Activity logged
+INSERT INTO activity_log (...) VALUES (..., 'Created', 'Appointment', 'Maria Santos with Dr. Ana Reyes');
+```
+
+**Immediately after saving**, the system runs the queue sync:
+```sql
+-- Auto-sync: Confirmed appointment today not yet in queue → create queue entry
+INSERT INTO queue_entries (patient_id, doctor_id, appointment_id, queue_time, purpose, status)
+VALUES (21, 1, 101, '08:30:00', 'General Consultation', 'Waiting');
+-- Returns queue_id = 50
+```
+
+**Maria is now in the queue as "Waiting".** The Clinical & POS page updates automatically within 10 seconds.
+
+---
+
+### 8:20 AM — Second Patient Arrives (Returning Patient)
+
+**Juan Dela Cruz, 67 years old (Senior Citizen, 20% discount), comes in for a follow-up checkup.**
+
+James recognizes Juan is already in the system. He goes straight to **"+ New Appointment"**:
+- Types "Juan" → autocomplete finds "Juan Dela Cruz"
+- Selects Dr. Ana Reyes, 08:45 AM, General Consultation
+- Saves → auto-confirmed, auto-queued
+
+**Queue now shows:**
+| Queue # | Patient | Time | Doctor | Purpose | Vitals | Nurse Notes | Status |
+|---------|---------|------|--------|---------|--------|-------------|--------|
+| 50 | Maria Santos | 08:30 | Dr. Ana Reyes | General Consultation | — | — | Waiting |
+| 51 | Juan Dela Cruz | 08:45 | Dr. Ana Reyes | General Consultation | — | — | Waiting |
+
+---
+
+### 8:25 AM — Nurse Begins Triage
+
+**Sofia (Nurse) goes to the Clinical & POS page → Queue tab.**
+
+She sees both patients waiting. She clicks **"Start Triage"** (the Nurse version of "Call Next").
+
+**What happens:**
+```sql
+-- System finds the first "Waiting" entry (FIFO — oldest queue_time first)
+-- Nurse can ONLY pick "Waiting" patients (not Triaged or In Progress)
+SELECT queue_id FROM queue_entries 
+WHERE status = 'Waiting' ORDER BY queue_time ASC LIMIT 1;
+-- Result: queue_id = 50 (Maria Santos)
+```
+
+**The triage dialog opens automatically** — the Nurse doesn't need to separately click "Record Vitals."
+
+**Activity logged:**
+```sql
+INSERT INTO activity_log (...) VALUES (..., 'Called', 'Queue', 'Called next patient: Maria Santos');
+```
+
+**Queue updates to:**
+| Queue # | Patient | Time | Doctor | Purpose | Vitals | Nurse Notes | Status |
+|---------|---------|------|--------|---------|--------|-------------|--------|
+| 50 | Maria Santos | 08:30 | Dr. Ana Reyes | General Consultation | — | — | Waiting |
+| 51 | Juan Dela Cruz | 08:45 | Dr. Ana Reyes | General Consultation | — | — | Waiting |
+
+---
+
+#### Nurse Records Vitals for Maria
+
+The triage dialog is already open (it opened automatically after "Start Triage"):
+
+| Field | Value Sofia Enters |
+|-------|--------------------|
+| Blood Pressure | 140/90 |
+| Height (cm) | 162.5 |
+| Weight (kg) | 65.0 |
+| Temperature (°C) | 37.8 |
+| Nurse Notes | "Patient reports persistent dry cough for 3 days. Mild fever. BP slightly elevated — consistent with existing hypertension. Recommend doctor check for respiratory infection." |
+
+**What happens in the database:**
+```sql
+-- Vitals are saved AND status automatically changes to "Triaged"
+UPDATE queue_entries 
+SET blood_pressure = '140/90', height_cm = 162.5, weight_kg = 65.0, 
+    temperature = 37.8, nurse_notes = 'Patient reports persistent dry cough for 3 days...',
+    status = 'Triaged', updated_at = NOW()
+WHERE queue_id = 50;
+```
+
+**This is the critical handoff:** Maria's status is now **"Triaged"** — the doctor knows the nurse has already screened her.
+
+**Queue now shows:**
+| Queue # | Patient | Vitals | Nurse Notes | Status |
+|---------|---------|--------|-------------|--------|
+| 50 | Maria Santos | BP:140/90 H:162.5 W:65.0 T:37.8 | Patient reports persistent dry... | **Triaged** |
+| 51 | Juan Dela Cruz | — | — | Waiting |
+
+**Sofia can also click "View" on the Patients page** to see Maria's full profile (read-only) — checking her medical history and conditions before the doctor sees her.
+
+---
+
+#### Nurse Triages the Second Patient
+
+Sofia clicks **"Start Triage"** again → Juan Dela Cruz is called (he's the next "Waiting" patient).
+
+She records his vitals:
+| Field | Value |
+|-------|-------|
+| Blood Pressure | 130/85 |
+| Height (cm) | 170.0 |
+| Weight (kg) | 72.5 |
+| Temperature (°C) | 36.5 |
+| Nurse Notes | "Follow-up visit. Vitals stable. No complaints other than routine checkup. Senior citizen — verify discount on file." |
+
+**On save, Juan's status automatically changes to "Triaged"** too.
+
+**Queue now shows:**
+| Queue # | Patient | Status |
+|---------|---------|--------|
+| 50 | Maria Santos | **Triaged** |
+| 51 | Juan Dela Cruz | **Triaged** |
+
+Both patients have been triaged by the nurse and are **ready for the doctor**. The "Start Triage" button is now **disabled** (tooltip: "No patients waiting for triage") since there are no more "Waiting" patients.
+
+---
+
+### 8:40 AM — Doctor Begins Consultations
+
+**Dr. Ana (Doctor) navigates to Clinical & POS → Queue tab.**
+
+She sees both patients with vitals already recorded by the nurse — both marked as **"Triaged"**. She clicks **"Call Next"**.
+
+**What happens:**
+```sql
+-- Doctor's "Call Next" PREFERS "Triaged" patients first (nurse has already screened them)
+-- Falls back to "Waiting" only if no Triaged patients exist
+SELECT queue_id FROM queue_entries 
+WHERE doctor_id = 1 AND status IN ('Triaged', 'Waiting')
+ORDER BY FIELD(status, 'Triaged', 'Waiting'), queue_time ASC LIMIT 1;
+-- Result: queue_id = 50 (Maria Santos — Triaged, earliest queue_time)
+
+-- Sets status to "In Progress" (only the Doctor sets this status)
+UPDATE queue_entries SET status = 'In Progress', updated_at = NOW() WHERE queue_id = 50;
+```
+
+> **Key difference from Nurse:** The Nurse's "Start Triage" only picks "Waiting" patients and auto-opens the vitals dialog. The Doctor's "Call Next" prefers "Triaged" patients (creating a clear Nurse → Doctor pipeline) and sets status to "In Progress".
+
+Dr. Ana reviews Maria's vitals and nurse notes directly in the queue table:
+- **BP: 140/90** (elevated — matches her hypertension)
+- **Temp: 37.8°C** (mild fever)
+- **Nurse Notes:** "Persistent dry cough for 3 days. Mild fever..."
+
+She conducts the consultation, then clicks **"Complete"** on Maria's row.
+
+---
+
+#### What Happens When Doctor Clicks "Complete"
+
+This triggers a **chain of 4 database operations in one transaction:**
+
+```sql
+-- 1. Mark queue entry as Completed
+UPDATE queue_entries SET status = 'Completed', updated_at = NOW() WHERE queue_id = 50;
+
+-- 2. Mark the linked appointment as Completed
+UPDATE appointments SET status = 'Completed' WHERE appointment_id = 101;
+
+-- 3. Look up service price and patient discount
+SELECT s.price FROM services s 
+JOIN appointments a ON a.service_id = s.service_id 
+WHERE a.appointment_id = 101;
+-- Result: ₱500.00
+
+SELECT dt.discount_percent FROM discount_types dt
+JOIN patients p ON p.discount_type_id = dt.discount_id
+WHERE p.patient_id = 21;
+-- Result: NULL (Maria has no discount)
+
+-- 4. Auto-create invoice
+INSERT INTO invoices (patient_id, total_amount, discount_percent, amount_paid, status, payment_method_id)
+VALUES (21, 500.00, 0, 0, 'Unpaid', NULL);
+-- Returns invoice_id = 200
+
+INSERT INTO invoice_items (invoice_id, service_id, quantity, unit_price, subtotal)
+VALUES (200, 1, 1, 500.00, 500.00);
+```
+
+**Maria's visit is now complete.** An unpaid invoice for ₱500.00 appears in the Billing tab.
+
+---
+
+#### Doctor Completes Juan's Visit (WITH Discount)
+
+Dr. Ana completes Juan Dela Cruz's consultation. The same chain runs, but **this time there's a discount:**
+
+```sql
+-- Juan is a Senior Citizen → discount_type_id links to "Senior Citizen 20%"
+SELECT dt.discount_percent FROM discount_types dt
+JOIN patients p ON p.discount_type_id = dt.discount_id
+WHERE p.patient_id = 5;
+-- Result: 20.00
+
+-- Invoice is created with discount applied FROM THE DATABASE (not from UI)
+-- Subtotal: ₱500 × (1 - 20/100) = ₱400.00
+INSERT INTO invoices (patient_id, total_amount, discount_percent, amount_paid, status)
+VALUES (5, 400.00, 20.00, 0, 'Unpaid');
+```
+
+**Key security point:** The 20% discount was pulled from the database, NOT entered by any user. Even if someone tried to change the discount in the UI, the system ignores it and enforces the database value.
+
+---
+
+### 9:00 AM — Receptionist Handles Billing
+
+**James (Receptionist) goes to Clinical & POS → Billing tab.**
+
+He sees two unpaid invoices:
+| Invoice # | Patient | Services | Total | Paid | Status |
+|-----------|---------|----------|-------|------|--------|
+| 200 | Maria Santos | General Consultation | ₱500.00 | ₱0.00 | Unpaid |
+| 201 | Juan Dela Cruz | General Consultation | ₱400.00 | ₱0.00 | Unpaid |
+
+#### Processing Maria's Payment
+
+James clicks **"Pay"** on Invoice #200. A dialog opens:
+| Field | Value |
+|-------|-------|
+| Total | ₱500.00 |
+| Amount Paid So Far | ₱0.00 |
+| Remaining Balance | ₱500.00 |
+| Payment Amount | ₱500.00 |
+| Payment Method | Cash |
+
+**What happens:**
+```sql
+UPDATE invoices 
+SET amount_paid = 500.00, status = 'Paid', payment_method_id = 1
+WHERE invoice_id = 200;
+
+INSERT INTO activity_log (...) VALUES (..., 'Created', 'Invoice', 'Payment received for Maria Santos');
+```
+
+#### Juan Pays Partially (Real-World Scenario)
+
+Juan only has ₱200 right now. James enters ₱200:
+
+```sql
+UPDATE invoices SET amount_paid = 200.00, status = 'Partial' WHERE invoice_id = 201;
+```
+
+**Invoice #201 now shows:** Total: ₱400 | Paid: ₱200 | Status: **Partial**
+
+Juan can come back later to pay the remaining ₱200. The system tracks partial payments.
+
+---
+
+### 9:30 AM — Admin Checks the Dashboard
+
+**Carlo (Admin) clicks on Dashboard.** The page calls `refresh(force=True)` and immediately shows updated numbers:
+
+| KPI Card | Value | Change |
+|----------|-------|--------|
+| Today's Appointments | 2 | ↑ from 0 this morning |
+| Active Patients | 22 | ↑ 1 (Maria is new) |
+| Today's Revenue | ₱700.00 | ₱500 (Maria) + ₱200 (Juan partial) |
+| Active Staff | 8 | No change |
+
+**Today's Schedule shows:**
+| Time | Patient | Doctor | Status |
+|------|---------|--------|--------|
+| 08:30 | Maria Santos | Dr. Ana Reyes | ✅ Completed |
+| 08:45 | Juan Dela Cruz | Dr. Ana Reyes | ✅ Completed |
+
+**Recent Activity shows:**
+```
+09:01 | james.cruz@carecrud.com | Receptionist | Created | Invoice | Payment received for Juan Dela Cruz
+09:00 | james.cruz@carecrud.com | Receptionist | Created | Invoice | Payment received for Maria Santos
+08:55 | ana.reyes@carecrud.com  | Doctor       | Created | Queue   | Completed queue entry for Juan Dela Cruz
+08:40 | ana.reyes@carecrud.com  | Doctor       | Created | Queue   | Completed queue entry for Maria Santos
+08:25 | sofia.reyes@carecrud.com| Nurse        | Created | Queue   | Recorded vitals for Maria Santos
+08:15 | james.cruz@carecrud.com | Receptionist | Created | Patient | Maria Santos
+```
+
+The dashboard auto-refreshes every 10 seconds, so these numbers stay current throughout the day.
+
+---
+
+### 10:00 AM — HR Handles a Leave Request
+
+**Meanwhile, Dr. Mark Tan submitted a leave request yesterday from his Dashboard.**
+
+Elena (HR) logs in → goes to **HR Module → Leave Management tab**.
+
+She sees:
+| Employee | Type | From | To | Reason | Status |
+|----------|------|------|----|--------|--------|
+| Dr. Mark Tan | Vacation | Mar 15 | Mar 20 | Family event | Pending |
+
+Elena clicks **"Approve"**. This triggers:
+
+```sql
+-- 1. Approve the leave request
+UPDATE leave_requests SET status = 'Approved', hr_decided_by = 8, decided_at = NOW()
+WHERE request_id = 12;
+
+-- 2. Update employee status
+UPDATE employees SET status = 'On Leave', leave_from = '2026-03-15', leave_until = '2026-03-20'
+WHERE employee_id = 2;
+
+-- 3. Auto-cancel all of Dr. Mark's appointments during leave period
+UPDATE appointments SET status = 'Cancelled', cancellation_reason = 'Employee on approved leave'
+WHERE doctor_id = 2 AND appointment_date BETWEEN '2026-03-15' AND '2026-03-20'
+AND status IN ('Pending', 'Confirmed');
+
+-- 4. Notify Dr. Mark
+INSERT INTO notifications (employee_id, message) 
+VALUES (2, 'Your leave request has been approved');
+```
+
+**On March 21, 2026**, the auto-expire check runs (every 5 minutes):
+```sql
+-- Leave expired → restore to Active
+UPDATE employees SET status = 'Active', leave_from = NULL, leave_until = NULL
+WHERE employee_id = 2 AND status = 'On Leave' AND leave_until <= CURDATE();
+```
+
+Dr. Mark is automatically back to Active status. No manual action needed.
+
+---
+
+### 2:00 PM — Admin Does Housekeeping
+
+Carlo (Admin) goes to **Settings → Admin Tools**.
+
+**He checks the Database Overview:**
+| Table | Row Count |
+|-------|-----------|
+| patients | 22 |
+| appointments | 102 |
+| queue_entries | 51 |
+| invoices | 201 |
+| activity_log | 340 |
+| ... | ... |
+
+**He runs a cleanup:** Delete completed appointments older than January 1, 2026:
+```sql
+-- Cascading delete: invoice_items → invoices → queue_entries → appointments
+DELETE FROM invoice_items WHERE invoice_id IN 
+  (SELECT invoice_id FROM invoices WHERE patient_id IN 
+    (SELECT patient_id FROM appointments WHERE status='Completed' AND appointment_date < '2026-01-01'));
+-- ... cascading continues
+```
+
+---
+
+### 5:00 PM — End of Day Summary
+
+**Carlo checks Analytics** to see the day's performance:
+
+| Metric | Value |
+|--------|-------|
+| Total Appointments Today | 2 |
+| Completed | 2 (100% completion rate) |
+| Revenue Collected | ₱700.00 |
+| Outstanding Balance | ₱200.00 (Juan's remaining) |
+| New Patients | 1 (Maria Santos) |
+| Patients Seen by Dr. Ana | 2 |
+
+**Dr. Ana checks her own Analytics:**
+- My Appointments: 2
+- Completed: 2
+- My Revenue: ₱700.00
+- Completion Rate: 100%
+
+---
+
+### COMPLETE SYSTEM FLOW DIAGRAM
+
+```
+╔════════════════════════════════════════════════════════════════════════╗
+║                    GO-ONCARE WALK-IN CLINIC FLOW                     ║
+╠════════════════════════════════════════════════════════════════════════╣
+║                                                                      ║
+║  PATIENT ARRIVES                                                     ║
+║       │                                                              ║
+║       ▼                                                              ║
+║  ┌─────────────────────────────────────┐                             ║
+║  │  RECEPTIONIST                       │                             ║
+║  │  1. Register patient (if new)       │                             ║
+║  │  2. Create walk-in appointment      │──→ DB: patients,            ║
+║  │     (always today, auto-confirmed)  │       appointments          ║
+║  │  3. Auto-synced to queue            │──→ DB: queue_entries        ║
+║  └─────────────┬───────────────────────┘       (status: Waiting)     ║
+║                │                                                     ║
+║                ▼                                                     ║
+║  ┌─────────────────────────────────────┐                             ║
+║  │  NURSE (Triage)                     │                             ║
+║  │  1. "Start Triage" → next Waiting   │                             ║
+║  │  2. Record vitals (BP, H, W, Temp)  │──→ DB: queue_entries        ║
+║  │  3. Write triage notes              │       (vitals + nurse_notes)║
+║  │  4. On save → status = "Triaged"    │──→ status: Triaged          ║
+║  │     (auto handoff to doctor)        │    (ready for doctor)       ║
+║  └─────────────┬───────────────────────┘                             ║
+║                │                                                     ║
+║                ▼                                                     ║
+║  ┌─────────────────────────────────────┐                             ║
+║  │  DOCTOR (Consultation)              │                             ║
+║  │  1. "Call Next" → prefers Triaged   │──→ status: In Progress      ║
+║  │     (nurse-screened patients first) │                             ║
+║  │  2. Reviews vitals & nurse notes    │                             ║
+║  │  3. Conducts examination            │                             ║
+║  │  4. Clicks "Complete"               │──→ DB: queue_entries        ║
+║  │     • Queue entry → Completed       │       (status: Completed)   ║
+║  │     • Appointment → Completed       │──→ DB: appointments         ║
+║  │     • Auto-creates invoice          │──→ DB: invoices +           ║
+║  │       (discount from DB, not UI)    │       invoice_items         ║
+║  └─────────────┬───────────────────────┘                             ║
+║                │                                                     ║
+║                ▼                                                     ║
+║  ┌─────────────────────────────────────┐                             ║
+║  │  RECEPTIONIST (Billing)             │                             ║
+║  │  1. Sees unpaid invoice             │                             ║
+║  │  2. Collects payment                │──→ DB: invoices             ║
+║  │     (full or partial)               │       (status: Paid/Partial)║
+║  │  3. Can void if needed              │                             ║
+║  └─────────────┬───────────────────────┘                             ║
+║                │                                                     ║
+║                ▼                                                     ║
+║  PATIENT LEAVES  ✓                                                   ║
+║                                                                      ║
+║  ┌─────────────────────────────────────┐                             ║
+║  │  ADMIN (Oversight — anytime)        │                             ║
+║  │  • Dashboard: real-time KPIs        │                             ║
+║  │  • Analytics: revenue, performance  │                             ║
+║  │  • Activity Log: full audit trail   │                             ║
+║  │  • Settings: cleanup, discounts     │                             ║
+║  │  • Employee Management + Schedules  │                             ║
+║  └─────────────────────────────────────┘                             ║
+║                                                                      ║
+║  ┌─────────────────────────────────────┐                             ║
+║  │  HR (Personnel — independent)       │                             ║
+║  │  • Approve/Decline leave requests   │                             ║
+║  │  • Manage employee records + salary │                             ║
+║  │  • Payroll & staffing reports       │                             ║
+║  │  • Auto-cancel appointments on leave│                             ║
+║  └─────────────────────────────────────┘                             ║
+║                                                                      ║
+╚════════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+### KEY TAKEAWAYS FOR DEFENSE
+
+1. **Every action has a database trail** — from patient registration to payment, every step is an SQL operation that can be traced in the activity log.
+
+2. **The flow mirrors real walk-in clinics** — patients arrive, get registered, triaged by a nurse (vitals auto-set status to "Triaged"), seen by a doctor (who prefers triaged patients), and pay at the front desk. The Triaged status creates a real Nurse → Doctor handoff pipeline.
+
+3. **Each role does exactly one job well** — Receptionist handles intake and billing, Nurse handles triage (Waiting → Triaged), Doctor handles consultation (Triaged → In Progress → Completed), HR handles personnel, Admin oversees everything.
+
+4. **Automation reduces errors** — appointments auto-confirm, auto-sync to queue, auto-create invoices, auto-apply discounts from database, auto-cancel during leave, auto-expire leave status.
+
+5. **Security is layered** — role access at sidebar level, button level, and SQL level. Discounts enforced from database. Doctor data isolation. Full audit trail.
 
 ---
 

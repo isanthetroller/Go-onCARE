@@ -4,9 +4,10 @@ from PyQt6.QtWidgets import (
     QDialog, QFormLayout, QLineEdit, QTextEdit, QComboBox,
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QFrame,
-    QDateEdit, QTabWidget, QMessageBox,
+    QDateEdit, QTabWidget, QMessageBox, QCheckBox, QTimeEdit,
+    QGroupBox,
 )
-from PyQt6.QtCore import Qt, QDate, QEvent
+from PyQt6.QtCore import Qt, QDate, QEvent, QTime
 from PyQt6.QtGui import QColor
 from ui.styles import configure_table, make_table_btn, status_color
 from ui.validators import NameValidator, PhoneDigitsValidator, validate_name, validate_email, validate_phone_digits
@@ -50,7 +51,7 @@ class EmployeeDialog(QDialog):
         self.name_edit.setMaxLength(100)
 
         self.role_combo = QComboBox(); self.role_combo.setObjectName("formCombo")
-        self.role_combo.addItems(["Doctor", "Cashier", "Receptionist", "Admin", "HR"])
+        self.role_combo.addItems(["Doctor", "Nurse", "Receptionist", "Admin", "HR"])
         self.role_combo.setMinimumHeight(38)
 
         self.dept_combo = QComboBox(); self.dept_combo.setObjectName("formCombo")
@@ -119,6 +120,62 @@ class EmployeeDialog(QDialog):
         self.notes_edit.setStyleSheet(self._INPUT_STYLE)
         self.notes_edit.setMaximumHeight(70)
 
+        # Doctor schedule picker (shown only when role is Doctor)
+        self._schedule_group = QGroupBox("Weekly Availability")
+        self._schedule_group.setStyleSheet(
+            "QGroupBox { font-weight: bold; border: 2px solid #BADFE7;"
+            " border-radius: 10px; margin-top: 10px; padding-top: 18px; }"
+            "QGroupBox::title { subcontrol-origin: margin; left: 14px; padding: 0 6px; }"
+        )
+        sched_main = QVBoxLayout(self._schedule_group)
+        sched_main.setSpacing(10)
+
+        # Day selector row — compact checkboxes
+        day_row = QHBoxLayout(); day_row.setSpacing(6)
+        self._day_checks: list[QCheckBox] = []
+        self._DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        self._DAY_ABBR = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        for i, abbr in enumerate(self._DAY_ABBR):
+            cb = QCheckBox(abbr)
+            cb.setStyleSheet("font-size: 12px;")
+            cb.toggled.connect(self._refresh_schedule_times)
+            self._day_checks.append(cb)
+            day_row.addWidget(cb)
+        day_row.addStretch()
+        sched_main.addLayout(day_row)
+
+        # Time pickers container — only visible rows for checked days
+        self._time_container = QWidget()
+        self._time_layout = QVBoxLayout(self._time_container)
+        self._time_layout.setContentsMargins(0, 0, 0, 0)
+        self._time_layout.setSpacing(6)
+        self._day_time_rows: list[QWidget] = []
+        self._day_start: list[QTimeEdit] = []
+        self._day_end: list[QTimeEdit] = []
+        for i, day in enumerate(self._DAYS):
+            row_w = QWidget()
+            rl = QHBoxLayout(row_w); rl.setContentsMargins(0, 0, 0, 0); rl.setSpacing(8)
+            lbl = QLabel(day); lbl.setMinimumWidth(80)
+            lbl.setStyleSheet("font-size: 12px; color: #2C3E50;")
+            st = QTimeEdit(); st.setTime(QTime(8, 0)); st.setDisplayFormat("hh:mm AP")
+            st.setObjectName("formCombo"); st.setMinimumHeight(32)
+            en = QTimeEdit(); en.setTime(QTime(17, 0)); en.setDisplayFormat("hh:mm AP")
+            en.setObjectName("formCombo"); en.setMinimumHeight(32)
+            rl.addWidget(lbl)
+            rl.addWidget(QLabel("from")); rl.addWidget(st)
+            rl.addWidget(QLabel("to")); rl.addWidget(en)
+            rl.addStretch()
+            self._day_start.append(st)
+            self._day_end.append(en)
+            self._day_time_rows.append(row_w)
+            self._time_layout.addWidget(row_w)
+            row_w.setVisible(False)
+        sched_main.addWidget(self._time_container)
+
+        self._schedule_group.setVisible(self.role_combo.currentText() == "Doctor")
+        self.role_combo.currentTextChanged.connect(
+            lambda txt: self._schedule_group.setVisible(txt == "Doctor"))
+
         form.addRow("Full Name",   self.name_edit)
         form.addRow("Role",        self.role_combo)
         form.addRow("Department",  self.dept_combo)
@@ -127,6 +184,7 @@ class EmployeeDialog(QDialog):
         form.addRow("Email",       self.email_edit)
         form.addRow("Hire Date",   self.hire_date)
         form.addRow("Status",      self.status_combo)
+        form.addRow(self._schedule_group)
         form.addRow("Notes",       self.notes_edit)
 
     def _build_buttons(self, form, data):
@@ -166,6 +224,30 @@ class EmployeeDialog(QDialog):
             raw_phone = raw_phone[3:]
         self.phone_edit.setText(raw_phone)
         self.email_edit.setText(data.get("email", ""))
+        # Prefill doctor schedule if present
+        schedules = data.get("schedules", [])
+        if schedules:
+            days_map = {"Monday": 0, "Tuesday": 1, "Wednesday": 2, "Thursday": 3,
+                        "Friday": 4, "Saturday": 5, "Sunday": 6}
+            for s in schedules:
+                idx = days_map.get(s.get("day_of_week", ""), -1)
+                if idx >= 0:
+                    self._day_checks[idx].setChecked(True)
+                    st = s.get("start_time", "08:00")
+                    en = s.get("end_time", "17:00")
+                    if hasattr(st, "total_seconds"):
+                        ts = int(st.total_seconds()); h, m = divmod(ts // 60, 60)
+                        st = f"{h:02d}:{m:02d}"
+                    if hasattr(en, "total_seconds"):
+                        ts = int(en.total_seconds()); h, m = divmod(ts // 60, 60)
+                        en = f"{h:02d}:{m:02d}"
+                    self._day_start[idx].setTime(QTime.fromString(str(st)[:5], "HH:mm"))
+                    self._day_end[idx].setTime(QTime.fromString(str(en)[:5], "HH:mm"))
+
+    def _refresh_schedule_times(self):
+        """Show/hide time-picker rows based on which day checkboxes are ticked."""
+        for i, cb in enumerate(self._day_checks):
+            self._day_time_rows[i].setVisible(cb.isChecked())
 
     def _on_fire(self):
         self._fired = True; self.reject()
@@ -200,6 +282,15 @@ class EmployeeDialog(QDialog):
         super().accept()
 
     def get_data(self) -> dict:
+        days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        schedules = []
+        for i, day in enumerate(days):
+            if self._day_checks[i].isChecked():
+                schedules.append({
+                    "day_of_week": day,
+                    "start_time": self._day_start[i].time().toString("HH:mm:ss"),
+                    "end_time": self._day_end[i].time().toString("HH:mm:ss"),
+                })
         d = {
             "name":        self.name_edit.text(),
             "role":        self.role_combo.currentText(),
@@ -210,6 +301,7 @@ class EmployeeDialog(QDialog):
             "hire_date":   self.hire_date.date().toString("yyyy-MM-dd"),
             "status":      self.status_combo.currentText(),
             "notes":       self.notes_edit.toPlainText(),
+            "schedules":   schedules,
         }
         return d
 

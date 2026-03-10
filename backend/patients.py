@@ -6,7 +6,8 @@ class PatientMixin:
     def get_patients(self):
         return self.fetch("""
             SELECT p.patient_id, p.first_name, p.last_name, p.sex,
-                   p.date_of_birth, p.phone, p.email, p.status, p.notes,
+                   p.date_of_birth, p.phone, p.email, p.address, p.civil_status,
+                   p.status, p.notes,
                    p.emergency_contact, p.blood_type, p.discount_type_id,
                    COALESCE(dt.type_name, '') AS discount_type,
                    GROUP_CONCAT(pc.condition_name SEPARATOR ', ') AS conditions,
@@ -68,6 +69,20 @@ class PatientMixin:
             for c in [c.strip() for c in conditions_str.split(",") if c.strip()]:
                 cur.execute("INSERT INTO patient_conditions (patient_id, condition_name) VALUES (%s,%s)", (patient_id, c))
 
+    def check_duplicate_patient(self, first_name, last_name, phone="", email=""):
+        """Return list of possible duplicate patients matching name, phone, or email."""
+        clauses = ["(LOWER(first_name)=LOWER(%s) AND LOWER(last_name)=LOWER(%s))"]
+        params = [first_name, last_name]
+        if phone:
+            clauses.append("phone=%s")
+            params.append(phone)
+        if email:
+            clauses.append("email=%s")
+            params.append(email)
+        return self.fetch(
+            "SELECT patient_id, first_name, last_name, phone, email "
+            "FROM patients WHERE " + " OR ".join(clauses), params) or []
+
     def add_patient(self, data):
         try:
             conn = self._get_connection()
@@ -75,10 +90,12 @@ class PatientMixin:
                 discount_type_id = data.get("discount_type_id") or None
                 cur.execute("""
                     INSERT INTO patients (first_name, last_name, sex, date_of_birth,
-                        phone, email, emergency_contact, blood_type, discount_type_id, status, notes)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        phone, email, address, civil_status,
+                        emergency_contact, blood_type, discount_type_id, status, notes)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """, (data["first_name"], data["last_name"], data["sex"],
                       data.get("dob"), data.get("phone",""), data.get("email",""),
+                      data.get("address",""), data.get("civil_status","Single"),
                       data.get("emergency_contact",""), data.get("blood_type","Unknown"),
                       discount_type_id,
                       data.get("status","Active"), data.get("notes","")))
@@ -101,10 +118,12 @@ class PatientMixin:
                 discount_type_id = data.get("discount_type_id") or None
                 cur.execute("""
                     UPDATE patients SET first_name=%s, last_name=%s, sex=%s, date_of_birth=%s,
-                        phone=%s, email=%s, emergency_contact=%s, blood_type=%s, discount_type_id=%s, status=%s, notes=%s
+                        phone=%s, email=%s, address=%s, civil_status=%s,
+                        emergency_contact=%s, blood_type=%s, discount_type_id=%s, status=%s, notes=%s
                     WHERE patient_id=%s
                 """, (data["first_name"], data["last_name"], data["sex"],
                       data.get("dob"), data.get("phone",""), data.get("email",""),
+                      data.get("address",""), data.get("civil_status","Single"),
                       data.get("emergency_contact",""), data.get("blood_type","Unknown"),
                       discount_type_id,
                       data.get("status","Active"), data.get("notes",""), patient_id))
@@ -153,7 +172,8 @@ class PatientMixin:
         """Return only patients who have appointments with the doctor identified by *email*."""
         return self.fetch("""
             SELECT DISTINCT p.patient_id, p.first_name, p.last_name, p.sex,
-                   p.date_of_birth, p.phone, p.email, p.status, p.notes,
+                   p.date_of_birth, p.phone, p.email, p.address, p.civil_status,
+                   p.status, p.notes,
                    p.emergency_contact, p.blood_type,
                    GROUP_CONCAT(DISTINCT pc.condition_name SEPARATOR ', ') AS conditions,
                    (SELECT MAX(a2.appointment_date) FROM appointments a2

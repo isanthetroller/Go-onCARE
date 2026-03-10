@@ -108,6 +108,8 @@ CREATE TABLE patients (
     date_of_birth     DATE,
     phone             VARCHAR(20),
     email             VARCHAR(150),
+    address           VARCHAR(300) DEFAULT '',
+    civil_status      ENUM('Single', 'Married', 'Widowed', 'Separated') DEFAULT 'Single',
     emergency_contact VARCHAR(200) DEFAULT '',
     blood_type        ENUM('A+','A-','B+','B-','AB+','AB-','O+','O-','Unknown') DEFAULT 'Unknown',
     discount_type_id  INT DEFAULT NULL,
@@ -155,16 +157,33 @@ CREATE TABLE appointments (
     FOREIGN KEY (service_id) REFERENCES services(service_id)
 );
 
+-- Doctor availability schedules
+CREATE TABLE doctor_schedules (
+    schedule_id  INT AUTO_INCREMENT PRIMARY KEY,
+    doctor_id    INT NOT NULL,
+    day_of_week  ENUM('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday') NOT NULL,
+    start_time   TIME NOT NULL,
+    end_time     TIME NOT NULL,
+    FOREIGN KEY (doctor_id) REFERENCES employees(employee_id) ON DELETE CASCADE,
+    UNIQUE KEY uq_doctor_day (doctor_id, day_of_week)
+);
+
 -- Patient queue (for clinical workflow)
 CREATE TABLE queue_entries (
-    queue_id       INT AUTO_INCREMENT PRIMARY KEY,
-    patient_id     INT  NOT NULL,
-    doctor_id      INT  NOT NULL,
-    appointment_id INT,
-    queue_time     TIME NOT NULL,
-    purpose        VARCHAR(100),
-    status         ENUM('Waiting', 'In Progress', 'Completed', 'Cancelled') NOT NULL DEFAULT 'Waiting',
-    created_at     DATE NOT NULL DEFAULT (CURRENT_DATE),
+    queue_id        INT AUTO_INCREMENT PRIMARY KEY,
+    patient_id      INT  NOT NULL,
+    doctor_id       INT  NOT NULL,
+    appointment_id  INT,
+    queue_time      TIME NOT NULL,
+    purpose         VARCHAR(100),
+    blood_pressure  VARCHAR(20)  DEFAULT NULL,
+    height_cm       DECIMAL(5,1) DEFAULT NULL,
+    weight_kg       DECIMAL(5,1) DEFAULT NULL,
+    temperature     DECIMAL(4,1) DEFAULT NULL,
+    nurse_notes     TEXT DEFAULT NULL,
+    status          ENUM('Waiting', 'Triaged', 'In Progress', 'Completed', 'Cancelled') NOT NULL DEFAULT 'Waiting',
+    created_at      DATE NOT NULL DEFAULT (CURRENT_DATE),
+    updated_at      DATETIME DEFAULT NULL,
 
     FOREIGN KEY (patient_id)     REFERENCES patients(patient_id),
     FOREIGN KEY (doctor_id)      REFERENCES employees(employee_id),
@@ -254,6 +273,7 @@ CREATE INDEX idx_invoices_status       ON invoices(status);
 CREATE INDEX idx_invoices_appointment  ON invoices(appointment_id);
 CREATE INDEX idx_queue_date            ON queue_entries(created_at);
 CREATE UNIQUE INDEX idx_queue_appointment ON queue_entries(appointment_id, created_at);
+CREATE INDEX idx_doctor_schedules_doc  ON doctor_schedules(doctor_id);
 CREATE INDEX idx_patients_status       ON patients(status);
 CREATE INDEX idx_employees_role        ON employees(role_id);
 CREATE INDEX idx_employees_dept        ON employees(department_id);
@@ -283,7 +303,7 @@ INSERT INTO departments (department_name) VALUES
 
 INSERT INTO roles (role_name) VALUES
     ('Doctor'),
-    ('Cashier'),
+    ('Nurse'),
     ('Receptionist'),
     ('Admin'),
     ('HR');
@@ -328,7 +348,7 @@ INSERT INTO discount_types (type_name, discount_percent, legal_basis) VALUES
 INSERT INTO users (email, password, full_name, role_id) VALUES
     ('admin@carecrud.com',         'admin123',     'Carlo Santos',  4),
     ('ana.reyes@carecrud.com',     'doctor123',    'Ana Reyes',     1),
-    ('sofia.reyes@carecrud.com',   'cashier123',   'Sofia Reyes',   2),
+    ('sofia.reyes@carecrud.com',   'nurse123',     'Sofia Reyes',   2),
     ('james.cruz@carecrud.com',    'reception123', 'James Cruz',    3),
     ('hr@carecrud.com',            'hr123',        'Elena Ramos',   5);
 
@@ -343,74 +363,19 @@ INSERT INTO employees (first_name, last_name, role_id, department_id, employment
     ('Carlo',  'Santos',  4, 7, 'Full-time', '09176667788', 'carlo.santos@carecrud.com', '2019-01-05', 'Active',   70000.00),
     ('Elena',  'Ramos',   5, 9, 'Full-time', '09178889900', 'hr@carecrud.com',           '2020-01-15', 'Active',   45000.00);
 
--- Default patients (with V2 fields)
-INSERT INTO patients (first_name, last_name, sex, date_of_birth, phone, email, emergency_contact, blood_type, status) VALUES
-    ('Maria',  'Santos',      'Female', '1994-05-12', '09171234567', 'maria@email.com',   'Juan Santos – 09171234568',     'O+',      'Active'),
-    ('Juan',   'Dela Cruz',   'Male',   '1981-08-23', '09179876543', 'juan@email.com',    'Rosa Dela Cruz – 09179876544',  'A+',      'Active'),
-    ('Ana',    'Reyes',       'Female', '1998-02-14', '09171112233', 'ana@email.com',     '',                               'B+',      'Active'),
-    ('Carlos', 'Garcia',      'Male',   '1966-11-30', '09174445566', 'carlos@email.com',  'Elena Garcia – 09174445567',    'AB+',     'Inactive'),
-    ('Lea',    'Mendoza',     'Female', '1989-07-19', '09177778899', 'lea@email.com',     '',                               'O-',      'Active'),
-    ('Roberto','Cruz',        'Male',   '1974-03-08', '09173334455', 'roberto@email.com', 'Maria Cruz – 09173334456',      'A-',      'Active'),
-    ('Isabel', 'Tan',         'Female', '1985-12-25', '09176667788', 'isabel@email.com',  '',                               'Unknown', 'Active'),
-    ('Miguel', 'Lim',         'Male',   '1971-09-17', '09172223344', 'miguel@email.com',  '',                               'B-',      'Inactive'),
-    ('Rosa',   'Mendoza',     'Female', '1990-06-01', '09175551234', 'rosa@email.com',    '',                               'O+',      'Active'),
-    ('Pedro',  'Villanueva',  'Male',   '1988-10-10', '09175559876', 'pedro.v@email.com', '',                               'A+',      'Active'),
-    ('Luis',   'Garcia',      'Male',   '1975-04-22', '09175554321', 'luis@email.com',    '',                               'Unknown', 'Active'),
-    ('Sofia',  'Reyes',       'Female', '1992-01-30', '09175556789', 'sofia.r@email.com', '',                               'AB-',     'Active');
-
--- Patient conditions
-INSERT INTO patient_conditions (patient_id, condition_name) VALUES
-    (1, 'Hypertension'),
-    (2, 'Diabetes'),
-    (3, 'Asthma'),
-    (4, 'Heart Disease'),
-    (6, 'Hypertension'),
-    (7, 'Allergies'),
-    (8, 'Arthritis');
-
--- Sample appointments (today = Mar 2, 2026)
-INSERT INTO appointments (patient_id, doctor_id, service_id, appointment_date, appointment_time, status) VALUES
-    (1,  1, 1,  '2026-03-02', '09:00:00', 'Confirmed'),
-    (2,  2, 2,  '2026-03-02', '09:30:00', 'Confirmed'),
-    (3,  1, 11, '2026-03-02', '10:00:00', 'Pending'),
-    (4,  3, 5,  '2026-03-02', '10:30:00', 'Confirmed'),
-    (5,  2, 9,  '2026-03-02', '11:00:00', 'Pending'),
-    (6,  1, 10, '2026-03-03', '08:30:00', 'Confirmed'),
-    (7,  3, 12, '2026-03-03', '09:00:00', 'Pending'),
-    (12, 2, 9,  '2026-03-03', '10:00:00', 'Confirmed'),
-    (8,  2, 13, '2026-03-04', '10:00:00', 'Confirmed'),
-    (9,  1, 1,  '2026-02-23', '09:00:00', 'Completed'),
-    (10, 3, 5,  '2026-02-20', '14:00:00', 'Completed'),
-    (11, 2, 2,  '2026-02-10', '10:00:00', 'Completed'),
-    (1,  1, 11, '2026-02-05', '09:30:00', 'Completed'),
-    (3,  3, 12, '2026-01-28', '11:00:00', 'Completed'),
-    (4,  1, 10, '2026-01-20', '08:30:00', 'Completed'),
-    (2,  2, 13, '2026-01-08', '09:00:00', 'Completed'),
-    (5,  1, 1,  '2025-12-18', '10:30:00', 'Completed'),
-    (6,  3, 5,  '2025-12-10', '14:00:00', 'Completed'),
-    (7,  2, 9,  '2025-11-25', '09:30:00', 'Completed'),
-    (8,  1, 2,  '2025-11-15', '10:00:00', 'Completed');
-
--- Queue entries (today)
-INSERT INTO queue_entries (patient_id, doctor_id, appointment_id, queue_time, purpose, status, created_at) VALUES
-    (1, 1, 1, '09:00:00', 'General Checkup',    'Waiting',     '2026-03-02'),
-    (2, 2, 2, '09:30:00', 'Follow-up Visit',    'In Progress', '2026-03-02'),
-    (3, 1, 3, '10:00:00', 'Lab Results Review',  'Waiting',     '2026-03-02'),
-    (4, 3, 4, '10:30:00', 'Dental Cleaning',     'Waiting',     '2026-03-02');
-
--- Invoices
-INSERT INTO invoices (patient_id, appointment_id, method_id, discount_percent, total_amount, amount_paid, status) VALUES
-    (1, 1,  1, 0.00,  800.00,  800.00, 'Paid'),
-    (2, 2,  3, 0.00,  500.00,    0.00, 'Unpaid'),
-    (3, 3,  2, 0.00, 1200.00, 1200.00, 'Paid'),
-    (4, 4,  5, 0.00, 2500.00, 1000.00, 'Partial');
-
--- Invoice items
-INSERT INTO invoice_items (invoice_id, service_id, quantity, unit_price, subtotal) VALUES
-    (1, 1, 1,  800.00,  800.00),
-    (2, 2, 1,  500.00,  500.00),
-    (3, 3, 1, 1200.00, 1200.00),
-    (4, 5, 1, 2500.00, 2500.00);
+-- Default doctor schedules
+INSERT INTO doctor_schedules (doctor_id, day_of_week, start_time, end_time) VALUES
+    (1, 'Monday',    '08:00:00', '17:00:00'),
+    (1, 'Tuesday',   '08:00:00', '17:00:00'),
+    (1, 'Wednesday', '08:00:00', '17:00:00'),
+    (1, 'Thursday',  '08:00:00', '17:00:00'),
+    (1, 'Friday',    '08:00:00', '17:00:00'),
+    (2, 'Monday',    '09:00:00', '18:00:00'),
+    (2, 'Wednesday', '09:00:00', '18:00:00'),
+    (2, 'Friday',    '09:00:00', '18:00:00'),
+    (3, 'Tuesday',   '08:00:00', '12:00:00'),
+    (3, 'Thursday',  '08:00:00', '12:00:00'),
+    (3, 'Saturday',  '08:00:00', '12:00:00');
 
 
 -- ============================================================
@@ -448,6 +413,8 @@ SELECT
     TIMESTAMPDIFF(YEAR, p.date_of_birth, CURDATE()) AS age,
     p.phone,
     p.email,
+    p.address,
+    p.civil_status,
     p.emergency_contact,
     p.blood_type,
     COALESCE(GROUP_CONCAT(pc.condition_name SEPARATOR ', '), 'None') AS conditions,

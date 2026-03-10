@@ -37,6 +37,51 @@ class AppointmentMixin:
             WHERE r.role_name='Doctor' AND e.status='Active' ORDER BY e.first_name
         """)
 
+    def get_doctors_available_today(self):
+        """Return only doctors available today based on their schedule."""
+        return self.fetch("""
+            SELECT DISTINCT e.employee_id, CONCAT(e.first_name,' ',e.last_name) AS doctor_name,
+                   DATE_FORMAT(ds.start_time, '%%h:%%i %%p') AS sched_start,
+                   DATE_FORMAT(ds.end_time, '%%h:%%i %%p') AS sched_end
+            FROM employees e
+            INNER JOIN roles r ON e.role_id = r.role_id
+            INNER JOIN doctor_schedules ds ON e.employee_id = ds.doctor_id
+            WHERE r.role_name = 'Doctor'
+              AND e.status = 'Active'
+              AND ds.day_of_week = DAYNAME(CURDATE())
+            ORDER BY e.first_name
+        """)
+
+    def get_doctor_availability_overview(self):
+        """Return all active doctors with today's availability status and appointment count.
+
+        Sorted so available-today doctors appear first, then by name.
+        """
+        return self.fetch("""
+            SELECT e.employee_id,
+                   CONCAT(e.first_name,' ',e.last_name) AS doctor_name,
+                   COALESCE(d.department_name, '—') AS department,
+                   ds.day_of_week,
+                   DATE_FORMAT(ds.start_time, '%%h:%%i %%p') AS sched_start,
+                   DATE_FORMAT(ds.end_time, '%%h:%%i %%p')   AS sched_end,
+                   IF(ds.schedule_id IS NOT NULL, 'Available', 'Not Available') AS availability,
+                   COALESCE(ac.appt_count, 0) AS appt_count
+            FROM employees e
+            INNER JOIN roles r ON e.role_id = r.role_id
+            LEFT  JOIN departments d ON e.department_id = d.department_id
+            LEFT  JOIN doctor_schedules ds
+                       ON e.employee_id = ds.doctor_id
+                      AND ds.day_of_week = DAYNAME(CURDATE())
+            LEFT  JOIN (
+                SELECT doctor_id, COUNT(*) AS appt_count
+                FROM appointments
+                WHERE appointment_date = CURDATE()
+                GROUP BY doctor_id
+            ) ac ON e.employee_id = ac.doctor_id
+            WHERE r.role_name = 'Doctor' AND e.status = 'Active'
+            ORDER BY (ds.schedule_id IS NOT NULL) DESC, e.first_name
+        """)
+
     def get_services_list(self, active_only=True):
         q = "SELECT service_id, service_name, price, category, is_active FROM services"
         if active_only:
@@ -80,10 +125,9 @@ class AppointmentMixin:
         return True, ""
 
     def add_appointment(self, data):
-        # Validate date range
-        ok, err = self._validate_appointment_date(data["date"])
-        if not ok:
-            return False
+        # Walk-in: always today, auto-confirmed
+        from datetime import date as _date
+        appt_date = _date.today().strftime("%Y-%m-%d")
         pid = data.get("patient_id") or self._lookup_patient_id(data["patient_name"])
         if not pid:
             return False
@@ -96,7 +140,7 @@ class AppointmentMixin:
                         cancellation_reason, reschedule_reason)
                     VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """, (pid, data["doctor_id"], data["service_id"],
-                      data["date"], data["time"], data.get("status", "Pending"),
+                      appt_date, data["time"], "Confirmed",
                       data.get("notes", ""), data.get("cancellation_reason", ""),
                       data.get("reschedule_reason", "")))
                 appt_id = cur.lastrowid
@@ -105,7 +149,7 @@ class AppointmentMixin:
             if not doctor_name and data.get('doctor_id'):
                 doctor_name = self._get_employee_name(data['doctor_id'])
             self.log_activity("Created", "Appointment",
-                              f"Appt #{appt_id} for {data['patient_name']} with Dr. {doctor_name}")
+                              f"Walk-in #{appt_id} for {data['patient_name']} with Dr. {doctor_name}")
             return True
         except Exception:
             try:

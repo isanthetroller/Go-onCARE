@@ -125,7 +125,7 @@ class EmployeesPage(QWidget):
 
         self.role_filter = QComboBox()
         self.role_filter.setObjectName("formCombo")
-        self.role_filter.addItems(["All Roles", "Doctor", "Cashier", "Receptionist", "Admin", "HR"])
+        self.role_filter.addItems(["All Roles", "Doctor", "Nurse", "Receptionist", "Admin", "HR"])
         self.role_filter.setMinimumHeight(42); self.role_filter.setMinimumWidth(140)
         self.role_filter.currentTextChanged.connect(lambda _: self._apply_filters())
         bar.addWidget(self.role_filter)
@@ -208,6 +208,11 @@ class EmployeesPage(QWidget):
                 return
             ok = self._backend.add_employee(d)
             if ok is True:
+                # Save doctor schedules if applicable
+                if d.get("role") == "Doctor" and d.get("schedules"):
+                    emp_id = self._backend.get_employee_id_by_email(d.get("email", ""))
+                    if emp_id:
+                        self._backend.save_doctor_schedules(emp_id, d["schedules"])
                 self._load_from_db()
                 QMessageBox.information(self, "Success", f"Employee '{d['name']}' added.")
             else:
@@ -221,6 +226,13 @@ class EmployeesPage(QWidget):
         for c, key in enumerate(keys):
             item = self.table.item(row, c)
             data[key] = item.text() if item else ""
+        # Load doctor schedules for prefill
+        if data.get("role") == "Doctor" and self._backend:
+            try:
+                emp_id = int(data["id"])
+                data["schedules"] = self._backend.get_doctor_schedules(emp_id) or []
+            except (ValueError, KeyError):
+                data["schedules"] = []
 
         dlg = EmployeeDialog(self, title="Edit Employee", data=data)
         result = dlg.exec()
@@ -242,6 +254,9 @@ class EmployeesPage(QWidget):
                 err = ok if isinstance(ok, str) else ''
                 QMessageBox.warning(self, "Error", f"Failed to update employee.\n{err}")
                 return
+            # Save doctor schedules if applicable
+            if d.get("role") == "Doctor" and "schedules" in d:
+                self._backend.save_doctor_schedules(emp_id, d["schedules"])
             self._load_from_db()
             QMessageBox.information(self, "Success", f"Employee '{d['name']}' updated.")
 

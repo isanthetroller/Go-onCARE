@@ -48,7 +48,7 @@ class PatientsPage(QWidget):
         scroll, lay = make_page_layout()
 
         # ── Banner ─────────────────────────────────────────────────
-        btn_text = "+  Add Patient" if self._role not in ("Cashier", "Doctor") else ""
+        btn_text = "+  Add Patient" if self._role not in ("Nurse", "Doctor") else ""
         lay.addWidget(make_banner(
             "Patient Records", "Manage and view all patient information",
             btn_text=btn_text, btn_slot=self._on_add,
@@ -101,9 +101,8 @@ class PatientsPage(QWidget):
         # ── Table ──────────────────────────────────────────────────
         cols = ["ID", "Name", "Sex", "Age", "Phone", "Blood Type",
                 "Conditions", "Last Visit", "Status", "Actions"]
-        if self._role == "Cashier":
-            cols = cols[:-1]  # no actions
-            self.table = make_read_only_table(cols)
+        if self._role == "Nurse":
+            self.table = make_action_table(cols, action_col_width=100)
         else:
             self.table = make_action_table(cols, action_col_width=210)
         self.table.setSortingEnabled(True)
@@ -168,7 +167,7 @@ class PatientsPage(QWidget):
             for c, val in enumerate(values):
                 self.table.setItem(r, c, QTableWidgetItem(val))
 
-            if self._role != "Cashier":
+            if self._role != "Nurse":
                 view_btn = make_table_btn("View")
                 view_btn.clicked.connect(lambda checked, ri=r: self._on_view(ri))
                 if self._role == "Doctor":
@@ -179,6 +178,11 @@ class PatientsPage(QWidget):
                     del_btn = make_table_btn_danger("Del")
                     del_btn.clicked.connect(lambda checked, ri=r: self._on_delete(ri))
                     self.table.setCellWidget(r, len(values), make_action_cell(view_btn, edit_btn, del_btn))
+            else:
+                # Nurse: read-only view of patient profile
+                view_btn = make_table_btn("View")
+                view_btn.clicked.connect(lambda checked, ri=r: self._on_view(ri))
+                self.table.setCellWidget(r, len(values), make_action_cell(view_btn))
         self.table.setSortingEnabled(True)
 
     # ── Filters ────────────────────────────────────────────────────
@@ -219,12 +223,34 @@ class PatientsPage(QWidget):
                 "first_name": parts[0], "last_name": parts[1] if len(parts)>1 else "",
                 "sex": d["sex"], "dob": dlg.dob_edit.date().toString("yyyy-MM-dd"),
                 "phone": d["phone"], "email": d["email"],
+                "address": d.get("address", ""),
+                "civil_status": d.get("civil_status", "Single"),
                 "emergency_contact": d["emergency_contact"],
                 "blood_type": d["blood_type"],
                 "discount_type_id": d.get("discount_type_id"),
                 "conditions": d["conditions"], "status": d["status"],
                 "notes": d["notes"],
             }
+            # Check for possible duplicate patients
+            if self._backend:
+                dupes = self._backend.check_duplicate_patient(
+                    db_data["first_name"], db_data["last_name"],
+                    db_data.get("phone", ""), db_data.get("email", ""))
+                if dupes:
+                    names = "\n".join(
+                        f"  \u2022 PT-{dp['patient_id']:04d}  "
+                        f"{dp['first_name']} {dp['last_name']}"
+                        f"  ({dp.get('phone','') or 'no phone'})"
+                        for dp in dupes[:5])
+                    reply = QMessageBox.question(
+                        self, "Possible Duplicate",
+                        f"A patient with a similar name, phone, or email already exists:\n\n"
+                        f"{names}\n\n"
+                        f"Do you still want to create a new record?\n"
+                        f"(Tip: Use the Merge button if this is a duplicate.)",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                    if reply != QMessageBox.StandardButton.Yes:
+                        return
             if self._backend and self._backend.add_patient(db_data):
                 QMessageBox.information(self, "Success", f"Patient '{d['name']}' added.")
                 self._load_from_db(); self.patients_changed.emit(self.get_patient_names())
@@ -237,6 +263,8 @@ class PatientsPage(QWidget):
             "name": f"{p.get('first_name','')} {p.get('last_name','')}",
             "sex": p.get("sex",""), "phone": p.get("phone","") or "",
             "email": p.get("email","") or "",
+            "address": p.get("address","") or "",
+            "civil_status": p.get("civil_status","Single") or "Single",
             "emergency_contact": p.get("emergency_contact","") or "",
             "blood_type": p.get("blood_type","") or "Unknown",
             "discount_type_id": p.get("discount_type_id"),
@@ -255,6 +283,8 @@ class PatientsPage(QWidget):
                 "first_name": parts[0], "last_name": parts[1] if len(parts)>1 else "",
                 "sex": d["sex"], "dob": dlg.dob_edit.date().toString("yyyy-MM-dd"),
                 "phone": d["phone"], "email": d["email"],
+                "address": d.get("address", ""),
+                "civil_status": d.get("civil_status", "Single"),
                 "emergency_contact": d["emergency_contact"],
                 "blood_type": d["blood_type"],
                 "discount_type_id": d.get("discount_type_id"),

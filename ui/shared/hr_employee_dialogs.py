@@ -249,7 +249,7 @@ class UserAccountDialog(QDialog):
                 self.role_combo.addItem(rn)
         else:
             self.role_combo.addItems(
-                ["Admin", "HR", "Doctor", "Cashier", "Receptionist"])
+                ["Admin", "HR", "Doctor", "Nurse", "Receptionist"])
 
         note = QLabel(
             "⚠️  The user will be required to change their password on first login.")

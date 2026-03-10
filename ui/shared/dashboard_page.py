@@ -45,12 +45,20 @@ class DashboardPage(QWidget):
         lay.addWidget(self._build_banner())
 
         kpi_row = QHBoxLayout(); kpi_row.setSpacing(16)
-        self._kpi_cards_data = [
-            ("today_appts",     "Today's Appointments", "#388087"),
-            ("active_patients", "Active Patients",      "#5CB85C"),
-            ("today_revenue",   "Today's Revenue",      "#6FB3B8"),
-            ("active_staff",    "Active Staff",         "#C2EDCE"),
-        ]
+        if self._role == "Nurse":
+            self._kpi_cards_data = [
+                ("nurse_awaiting",  "Awaiting Triage",   "#E8B931"),
+                ("nurse_triaged",   "Triaged Today",     "#3498DB"),
+                ("nurse_in_queue",  "Total In Queue",    "#388087"),
+                ("active_staff",    "Active Staff",      "#C2EDCE"),
+            ]
+        else:
+            self._kpi_cards_data = [
+                ("today_appts",     "Today's Appointments", "#388087"),
+                ("active_patients", "Active Patients",      "#5CB85C"),
+                ("today_revenue",   "Today's Revenue",      "#6FB3B8"),
+                ("active_staff",    "Active Staff",         "#C2EDCE"),
+            ]
         for key, title, color in self._kpi_cards_data:
             if self._role == "HR" and key in ("today_appts", "active_patients"):
                 continue
@@ -62,12 +70,18 @@ class DashboardPage(QWidget):
             ("New Patient", "new_patient", 1), ("New Appointment", "calendar_plus", 2),
             ("Clinical Queue", "nav_clinical", 3), ("Analytics", "nav_analytics", 4),
         ]
+        if self._role == "Nurse":
+            quick_actions = [
+                ("Start Triage", "nav_clinical", 3), ("View Patients", "new_patient", 1),
+            ]
+        elif self._role == "HR":
+            quick_actions = [
+                ("Manage Staff", "emp_active", 5), ("Activity Log", "nav_analytics", 6),
+            ]
         for text, icon_key, pi in quick_actions:
             if self._role == "Doctor" and pi in (1, 2):
                 continue
             if self._role == "HR" and pi in (1, 2, 3, 4):
-                continue
-            if self._role == "Cashier" and pi in (1, 4):
                 continue
             if self._role == "Receptionist" and pi == 4:
                 continue
@@ -108,8 +122,12 @@ class DashboardPage(QWidget):
             lay.addWidget(leave_card)
 
         cols = QHBoxLayout(); cols.setSpacing(16)
-        cols.addWidget(self._schedule_card(), 3)
-        cols.addWidget(self._chart_card(), 2)
+        if self._role == "Nurse":
+            cols.addWidget(self._nurse_queue_card(), 3)
+            cols.addWidget(self._nurse_summary_card(), 2)
+        else:
+            cols.addWidget(self._schedule_card(), 3)
+            cols.addWidget(self._chart_card(), 2)
         lay.addLayout(cols)
 
         if self._role in ("Admin",):
@@ -117,7 +135,8 @@ class DashboardPage(QWidget):
 
         lay.addStretch()
         finish_page(self, scroll)
-        self.refresh()
+        # Defer initial data load so widget is visible first
+        QTimer.singleShot(0, lambda: self.refresh(force=True))
 
     def _build_banner(self):
         # Outer wrapper holds the drop-shadow so it doesn't affect text rendering
@@ -152,7 +171,15 @@ class DashboardPage(QWidget):
         sep.setStyleSheet("background: rgba(255,255,255,0.25); border: none;")
         vl.addWidget(sep)
 
-        desc = QLabel("Here's what's happening at the hospital today.")
+        _banner_subtitles = {
+            "Admin": "Full system overview \u2014 appointments, revenue, staff, and activity.",
+            "Doctor": "Your patients and consultations for today.",
+            "Nurse": "Your triage queue \u2014 call patients and record their vitals.",
+            "Receptionist": "Today's appointments and billing at a glance.",
+            "HR": "Staff management, leave requests, and team overview.",
+        }
+        desc = QLabel(_banner_subtitles.get(self._role,
+                       "Here's what's happening at the hospital today."))
         desc.setObjectName("bannerSubtitle")
         vl.addWidget(desc)
 
@@ -263,6 +290,80 @@ class DashboardPage(QWidget):
         vbox.addWidget(self._activity_table)
         return card
 
+    def _nurse_queue_card(self):
+        card = make_card()
+        vbox = QVBoxLayout(card)
+        vbox.setContentsMargins(20, 18, 20, 14); vbox.setSpacing(12)
+
+        hdr = QHBoxLayout()
+        title = QLabel("Patient Queue"); title.setObjectName("cardTitle")
+        hdr.addWidget(title); hdr.addStretch()
+        self._nurse_queue_badge = QLabel("0 active")
+        self._nurse_queue_badge.setObjectName("pillBadge")
+        hdr.addWidget(self._nurse_queue_badge)
+        vbox.addLayout(hdr)
+
+        self._nurse_queue_table = make_read_only_table(
+            ["Patient", "Time", "Doctor", "Vitals", "Status"],
+            min_h=240, max_h=300, row_h=44)
+        vbox.addWidget(self._nurse_queue_table)
+
+        go_btn = QPushButton("Go to Clinical Queue \u2192")
+        go_btn.setObjectName("linkBtn")
+        go_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        go_btn.clicked.connect(lambda: self.navigate_to.emit(3))
+        vbox.addWidget(go_btn)
+        return card
+
+    def _nurse_summary_card(self):
+        card = make_card()
+        vbox = QVBoxLayout(card)
+        vbox.setContentsMargins(20, 18, 20, 14); vbox.setSpacing(12)
+
+        hdr = QHBoxLayout()
+        title = QLabel("Today's Queue Summary"); title.setObjectName("cardTitle")
+        hdr.addWidget(title); hdr.addStretch()
+        vbox.addLayout(hdr)
+
+        self._nurse_stats = {}
+        for key, label, color in [
+            ("waiting",     "Waiting",     "#E8B931"),
+            ("triaged",     "Triaged",     "#3498DB"),
+            ("in_progress", "In Progress", "#6FB3B8"),
+            ("completed",   "Completed",   "#5CB85C"),
+        ]:
+            row_lay = QHBoxLayout(); row_lay.setSpacing(12)
+            dot = QFrame(); dot.setFixedSize(12, 12)
+            dot.setStyleSheet(f"background-color: {color}; border-radius: 6px;")
+            row_lay.addWidget(dot)
+            lbl = QLabel(label)
+            lbl.setStyleSheet("font-size: 13px; color: #2C3E50;")
+            row_lay.addWidget(lbl); row_lay.addStretch()
+            val = QLabel("0")
+            val.setStyleSheet(f"font-size: 20px; font-weight: bold; color: {color};")
+            self._nurse_stats[key] = val
+            row_lay.addWidget(val)
+            vbox.addLayout(row_lay)
+
+        vbox.addSpacing(8)
+        ns_sep = QFrame(); ns_sep.setFixedHeight(1)
+        ns_sep.setStyleSheet("background: #E8E8E8; border: none;")
+        vbox.addWidget(ns_sep)
+        vbox.addSpacing(4)
+
+        rate_row = QHBoxLayout()
+        rate_lbl = QLabel("Completion Rate")
+        rate_lbl.setStyleSheet("font-size: 12px; color: #7F8C8D;")
+        rate_row.addWidget(rate_lbl); rate_row.addStretch()
+        self._nurse_completion_rate = QLabel("\u2014")
+        self._nurse_completion_rate.setStyleSheet(
+            "font-size: 16px; font-weight: bold; color: #5CB85C;")
+        rate_row.addWidget(self._nurse_completion_rate)
+        vbox.addLayout(rate_row)
+
+        vbox.addStretch()
+        return card
+
     # ── Helpers ───────────────────────────────────────────────────
     def _update_time(self):
         now = datetime.now()
@@ -286,6 +387,30 @@ class DashboardPage(QWidget):
         doc_email = self._user_email if self._role == "Doctor" else None
         s = self._backend.get_dashboard_summary(doctor_email=doc_email) if self._backend else {}
         cmp = self._backend.get_period_comparison(doctor_email=doc_email) if self._backend else {}
+
+        # Nurse-specific KPIs: pull from queue stats
+        if self._role == "Nurse":
+            qstats = self._backend.get_queue_stats() if self._backend else {}
+            awaiting = int(qstats.get("waiting", 0) or 0)
+            triaged = int(qstats.get("triaged", 0) or 0)
+            in_queue = awaiting + triaged + int(qstats.get("in_progress", 0) or 0)
+            if "nurse_awaiting" in self._kpi_labels:
+                self._kpi_labels["nurse_awaiting"].setText(str(awaiting))
+                self._kpi_labels["nurse_awaiting_sub"].setText(
+                    "patients need triage" if awaiting else "all caught up!")
+                self._kpi_labels["nurse_awaiting_sub"].setStyleSheet(
+                    f"color: {'#D9534F' if awaiting else '#5CB85C'}; font-size: 11px; font-weight: bold;")
+            if "nurse_triaged" in self._kpi_labels:
+                self._kpi_labels["nurse_triaged"].setText(str(triaged))
+                self._kpi_labels["nurse_triaged_sub"].setText("ready for doctor")
+                self._kpi_labels["nurse_triaged_sub"].setStyleSheet(
+                    "color: #3498DB; font-size: 11px; font-weight: bold;")
+            if "nurse_in_queue" in self._kpi_labels:
+                self._kpi_labels["nurse_in_queue"].setText(str(in_queue))
+                self._kpi_labels["nurse_in_queue_sub"].setText("")
+            self._kpi_labels["active_staff"].setText(str(s.get("active_staff", 0)))
+            self._kpi_labels["active_staff_sub"].setText("")
+            return
 
         if "today_appts" in self._kpi_labels:
             today_appts = s.get("today_appts", 0)
@@ -388,12 +513,60 @@ class DashboardPage(QWidget):
                     item.setForeground(QColor(clr))
                 self._activity_table.setItem(r, c, item)
 
-    def refresh(self):
-        if not self.isVisible():
+    def _refresh_nurse_queue(self):
+        if not self._backend or not hasattr(self, "_nurse_queue_table"):
+            return
+        entries = self._backend.get_queue_entries() or []
+        active = [e for e in entries
+                  if e.get("status") in ("Waiting", "Triaged", "In Progress")]
+        self._nurse_queue_badge.setText(f"{len(active)} active")
+        self._nurse_queue_table.setRowCount(len(active))
+        for r, row in enumerate(active):
+            has_vitals = any(row.get(k) for k in
+                            ("blood_pressure", "height_cm", "weight_kg", "temperature"))
+            cells = [
+                row.get("patient_name", ""),
+                self._fmt_time(row.get("queue_time", "")),
+                (f"Dr. {row['doctor_name'].split()[-1]}"
+                 if row.get("doctor_name") else ""),
+                "\u2713" if has_vitals else "\u2014",
+                row.get("status", ""),
+            ]
+            for c, cell in enumerate(cells):
+                item = QTableWidgetItem(cell)
+                if c == 3:
+                    item.setForeground(QColor("#5CB85C" if has_vitals else "#BDC3C7"))
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                if c == 4:
+                    item.setForeground(QColor(status_color(cell)))
+                self._nurse_queue_table.setItem(r, c, item)
+
+    def _refresh_nurse_summary(self):
+        if not self._backend or not hasattr(self, "_nurse_stats"):
+            return
+        qstats = self._backend.get_queue_stats() or {}
+        for key in ("waiting", "triaged", "in_progress", "completed"):
+            val = int(qstats.get(key, 0) or 0)
+            if key in self._nurse_stats:
+                self._nurse_stats[key].setText(str(val))
+        total = sum(int(qstats.get(k, 0) or 0)
+                    for k in ("waiting", "triaged", "in_progress", "completed"))
+        completed = int(qstats.get("completed", 0) or 0)
+        if total > 0:
+            self._nurse_completion_rate.setText(f"{(completed / total) * 100:.0f}%")
+        else:
+            self._nurse_completion_rate.setText("\u2014")
+
+    def refresh(self, force: bool = False):
+        if not force and not self.isVisible():
             return
         self._refresh_kpis()
-        self._refresh_schedule()
-        self._refresh_chart()
+        if self._role == "Nurse":
+            self._refresh_nurse_queue()
+            self._refresh_nurse_summary()
+        else:
+            self._refresh_schedule()
+            self._refresh_chart()
         if self._role in ("Admin",):
             self._refresh_recent_activity()
         if self._role not in ("HR",):

@@ -213,6 +213,7 @@ class EmployeeMixin:
             ("DELETE i FROM invoices i INNER JOIN appointments a ON i.appointment_id=a.appointment_id "
              "WHERE a.doctor_id=%s", (employee_id,)),
             ("DELETE FROM queue_entries WHERE doctor_id=%s", (employee_id,)),
+            ("DELETE FROM doctor_schedules WHERE doctor_id=%s", (employee_id,)),
             ("DELETE FROM appointments WHERE doctor_id=%s", (employee_id,)),
             ("DELETE FROM notifications WHERE employee_id=%s", (employee_id,)),
             ("UPDATE leave_requests SET hr_decided_by=NULL WHERE hr_decided_by=%s", (employee_id,)),
@@ -432,3 +433,50 @@ class EmployeeMixin:
         if ok:
             self.log_activity("Edited", "Employee", "Auto-expired past-due leave(s), restored to Active")
         return ok
+
+    # ── Doctor Schedule Management ────────────────────────────────
+
+    def get_doctor_schedules(self, doctor_id):
+        """Return schedule rows for a doctor."""
+        return self.fetch(
+            "SELECT schedule_id, day_of_week, start_time, end_time "
+            "FROM doctor_schedules WHERE doctor_id=%s ORDER BY FIELD(day_of_week, "
+            "'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')",
+            (doctor_id,))
+
+    def save_doctor_schedules(self, doctor_id, schedules):
+        """Replace all schedules for a doctor.
+        schedules = [{'day': 'Monday', 'start': '08:00', 'end': '17:00'}, ...]"""
+        try:
+            conn = self._get_connection()
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM doctor_schedules WHERE doctor_id=%s", (doctor_id,))
+                for s in schedules:
+                    cur.execute(
+                        "INSERT INTO doctor_schedules (doctor_id, day_of_week, start_time, end_time) "
+                        "VALUES (%s,%s,%s,%s)",
+                        (doctor_id, s['day_of_week'], s['start_time'], s['end_time']))
+                conn.commit()
+            name = self._get_employee_name(doctor_id) or str(doctor_id)
+            self.log_activity("Edited", "Schedule", f"Updated schedule for Dr. {name}")
+            return True
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            return False
+
+    def get_available_doctors_today(self):
+        """Return doctors who are available today based on their schedules."""
+        return self.fetch("""
+            SELECT DISTINCT e.employee_id, CONCAT(e.first_name,' ',e.last_name) AS doctor_name,
+                   ds.start_time, ds.end_time
+            FROM employees e
+            INNER JOIN roles r ON e.role_id = r.role_id
+            INNER JOIN doctor_schedules ds ON e.employee_id = ds.doctor_id
+            WHERE r.role_name = 'Doctor'
+              AND e.status = 'Active'
+              AND ds.day_of_week = DAYNAME(CURDATE())
+            ORDER BY e.first_name
+        """)

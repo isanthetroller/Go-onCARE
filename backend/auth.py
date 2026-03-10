@@ -5,9 +5,9 @@ class AuthMixin:
 
     def login(self, email, password):
         if not email:
-            return False, "", "", "Please enter your email address."
+            return False, "", "", "Please enter your email address.", False
         if not password:
-            return False, "", "", "Please enter your password."
+            return False, "", "", "Please enter your password.", False
         try:
             user = self.fetch("""
                 SELECT u.user_id, u.full_name, u.password, r.role_name,

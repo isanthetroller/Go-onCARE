@@ -46,9 +46,9 @@ _ROLE_ACCESS = {
     "Admin":        {"Dashboard", "Patients", "Appointments", "Clinical && POS",
                      "Data Analytics", "Employees", "Activity Log", "Settings"},
     "HR":           {"Dashboard", "Employees", "Activity Log", "Settings"},
-    "Doctor":       {"Dashboard", "Patients", "Appointments", "Clinical && POS", "Data Analytics", "Settings"},
-    "Cashier":      {"Dashboard", "Patients", "Appointments", "Clinical && POS", "Settings"},
     "Receptionist": {"Dashboard", "Patients", "Appointments", "Clinical && POS", "Settings"},
+    "Nurse":        {"Dashboard", "Patients", "Clinical && POS", "Settings"},
+    "Doctor":       {"Dashboard", "Patients", "Appointments", "Clinical && POS", "Data Analytics", "Settings"},
 }
 
 
@@ -429,7 +429,11 @@ class MainWindow(QMainWindow):
             page, method = self._page_refresh_map[stack_idx]
             if hasattr(page, method):
                 try:
-                    getattr(page, method)()
+                    fn = getattr(page, method)
+                    if method == "refresh" and stack_idx == 0:
+                        fn(force=True)
+                    else:
+                        fn()
                 except Exception:
                     pass
 

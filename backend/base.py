@@ -59,6 +59,53 @@ class DatabaseBase:
                         "ALTER TABLE patients ADD CONSTRAINT fk_patient_discount "
                         "FOREIGN KEY (discount_type_id) REFERENCES discount_types(discount_id)"
                     )
+                # address column on patients
+                cur.execute("SHOW COLUMNS FROM patients LIKE 'address'")
+                if not cur.fetchone():
+                    cur.execute("ALTER TABLE patients ADD COLUMN address VARCHAR(300) DEFAULT ''")
+                # civil_status column on patients
+                cur.execute("SHOW COLUMNS FROM patients LIKE 'civil_status'")
+                if not cur.fetchone():
+                    cur.execute("ALTER TABLE patients ADD COLUMN civil_status ENUM('Single','Married','Widowed','Separated') DEFAULT 'Single'")
+                # doctor_schedules table
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS doctor_schedules (
+                        schedule_id  INT AUTO_INCREMENT PRIMARY KEY,
+                        doctor_id    INT NOT NULL,
+                        day_of_week  ENUM('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday') NOT NULL,
+                        start_time   TIME NOT NULL,
+                        end_time     TIME NOT NULL,
+                        FOREIGN KEY (doctor_id) REFERENCES employees(employee_id) ON DELETE CASCADE,
+                        UNIQUE KEY uq_doctor_day (doctor_id, day_of_week)
+                    )
+                """)
+                # vitals columns on queue_entries
+                for col, typedef in [
+                    ('blood_pressure', 'VARCHAR(20) DEFAULT NULL'),
+                    ('height_cm', 'DECIMAL(5,1) DEFAULT NULL'),
+                    ('weight_kg', 'DECIMAL(5,1) DEFAULT NULL'),
+                    ('temperature', 'DECIMAL(4,1) DEFAULT NULL'),
+                ]:
+                    cur.execute(f"SHOW COLUMNS FROM queue_entries LIKE '{col}'")
+                    if not cur.fetchone():
+                        cur.execute(f"ALTER TABLE queue_entries ADD COLUMN {col} {typedef}")
+                # updated_at column on queue_entries (for consultation duration tracking)
+                cur.execute("SHOW COLUMNS FROM queue_entries LIKE 'updated_at'")
+                if not cur.fetchone():
+                    cur.execute("ALTER TABLE queue_entries ADD COLUMN updated_at DATETIME DEFAULT NULL")
+                # nurse_notes column on queue_entries (triage observations)
+                cur.execute("SHOW COLUMNS FROM queue_entries LIKE 'nurse_notes'")
+                if not cur.fetchone():
+                    cur.execute("ALTER TABLE queue_entries ADD COLUMN nurse_notes TEXT DEFAULT NULL")
+                # Add 'Triaged' to queue_entries status ENUM (nurse triage workflow)
+                cur.execute("SHOW COLUMNS FROM queue_entries LIKE 'status'")
+                col_info = cur.fetchone()
+                if col_info and 'Triaged' not in str(col_info.get('Type', '')):
+                    cur.execute("ALTER TABLE queue_entries MODIFY COLUMN status ENUM('Waiting','Triaged','In Progress','Completed','Cancelled') NOT NULL DEFAULT 'Waiting'")
+                # Ensure Nurse role exists
+                cur.execute("SELECT role_id FROM roles WHERE role_name='Nurse'")
+                if not cur.fetchone():
+                    cur.execute("INSERT INTO roles (role_name) VALUES ('Nurse')")
                 conn.commit()
         except Exception:
             pass

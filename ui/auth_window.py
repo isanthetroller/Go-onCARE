@@ -206,7 +206,8 @@ class AuthWindow(QMainWindow):
     # ── Right form panel ───────────────────────────────────────────────
     def _build_form_panel(self) -> QWidget:
         panel = QWidget()
-        panel.setStyleSheet("background-color: #FFFFFF;")
+        panel.setObjectName("formPanel")
+        panel.setStyleSheet("QWidget#formPanel { background-color: #FFFFFF; }")
         outer = QVBoxLayout(panel)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -273,7 +274,7 @@ class AuthWindow(QMainWindow):
         _quick_accounts = [
             ("Admin",        "admin@carecrud.com",       "admin123",     "#388087"),
             ("Doctor",       "ana.reyes@carecrud.com",   "doctor123",    "#5CB85C"),
-            ("Cashier",      "sofia.reyes@carecrud.com", "cashier123",   "#6FB3B8"),
+            ("Nurse",        "sofia.reyes@carecrud.com", "nurse123",     "#6FB3B8"),
             ("Receptionist", "james.cruz@carecrud.com",  "reception123", "#E8B931"),
             ("HR",           "hr@carecrud.com",          "hr123",        "#C2EDCE"),
         ]

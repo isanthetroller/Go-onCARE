@@ -82,6 +82,11 @@ class PatientDialog(QDialog):
 
         self.email_edit = self._input("Email")
         self.email_edit.setMaxLength(150)
+        self.address_edit = self._input("Full address")
+        self.address_edit.setMaxLength(300)
+        self.civil_combo = QComboBox(); self.civil_combo.setObjectName("formCombo")
+        self.civil_combo.addItems(["Single", "Married", "Widowed", "Separated"])
+        self.civil_combo.setMinimumHeight(38)
         self.emergency_edit = self._input("Emergency contact (name / phone)")
         self.emergency_edit.setMaxLength(150)
         self.blood_combo = QComboBox(); self.blood_combo.setObjectName("formCombo")
@@ -128,6 +133,8 @@ class PatientDialog(QDialog):
         form.addRow("Date of Birth", self.dob_edit)
         form.addRow("Phone", self._phone_frame)
         form.addRow("Email", self.email_edit)
+        form.addRow("Address", self.address_edit)
+        form.addRow("Civil Status", self.civil_combo)
         form.addRow("Emergency Contact", self.emergency_edit)
         form.addRow("Blood Type", self.blood_combo)
         form.addRow("Discount Category", self.discount_combo)
@@ -151,6 +158,9 @@ class PatientDialog(QDialog):
                 raw_phone = raw_phone[3:]
             self.phone_edit.setText(raw_phone)
             self.email_edit.setText(data.get("email", ""))
+            self.address_edit.setText(data.get("address", ""))
+            cidx = self.civil_combo.findText(data.get("civil_status", "Single"))
+            if cidx >= 0: self.civil_combo.setCurrentIndex(cidx)
             self.emergency_edit.setText(data.get("emergency_contact", ""))
             bidx = self.blood_combo.findText(data.get("blood_type", "Unknown"))
             if bidx >= 0: self.blood_combo.setCurrentIndex(bidx)
@@ -203,6 +213,8 @@ class PatientDialog(QDialog):
             "sex": self.sex_combo.currentText(),
             "phone": "+63" + self.phone_edit.text().strip(),
             "email": self.email_edit.text(),
+            "address": self.address_edit.text(),
+            "civil_status": self.civil_combo.currentText(),
             "emergency_contact": self.emergency_edit.text(),
             "blood_type": self.blood_combo.currentText(),
             "discount_type_id": self.discount_combo.currentData(),
@@ -296,6 +308,8 @@ class PatientProfileDialog(QDialog):
             ("Date of Birth", str(info.get("date_of_birth", ""))),
             ("Phone", info.get("phone", "") or "—"),
             ("Email", info.get("email", "") or "—"),
+            ("Address", info.get("address", "") or "—"),
+            ("Civil Status", info.get("civil_status", "") or "—"),
             ("Emergency Contact", info.get("emergency_contact", "") or "—"),
             ("Blood Type", info.get("blood_type", "") or "Unknown"),
             ("Conditions", info.get("conditions", "") or "None"),
