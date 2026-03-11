@@ -198,9 +198,9 @@ class ClinicalMixin:
                     if entry:
                         break
                 if entry:
-                    new_status = "In Progress" if role != "Nurse" else "Waiting"
-                    cur.execute("UPDATE queue_entries SET status=%s, updated_at=NOW() WHERE queue_id=%s",
-                                (new_status, entry["queue_id"]))
+                    if role != "Nurse":
+                        cur.execute("UPDATE queue_entries SET status='In Progress', updated_at=NOW() WHERE queue_id=%s",
+                                    (entry["queue_id"],))
                     conn.commit()
             if entry:
                 self.log_activity("Edited", "Queue", f"Called next: {entry['patient_name']} (queue #{entry['queue_id']})")

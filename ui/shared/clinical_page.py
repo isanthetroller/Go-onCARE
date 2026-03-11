@@ -159,7 +159,7 @@ class ClinicalPage(QWidget):
         toolbar = QHBoxLayout(); toolbar.setSpacing(10)
 
         self._call_btn = QPushButton("Start Triage" if self._role == "Nurse" else "Call Next")
-        self._call_btn.setIcon(get_icon("megaphone"))
+        self._call_btn.setIcon(get_icon("stethoscope" if self._role == "Nurse" else "megaphone", color=QColor("#FFFFFF")))
         self._call_btn.setIconSize(QSize(18, 18))
         self._call_btn.setObjectName("actionBtn"); self._call_btn.setMinimumHeight(40)
         self._call_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -212,7 +212,7 @@ class ClinicalPage(QWidget):
         self._queue_doctor_ids = []
         if not self._backend:
             return
-        doc_id = self._my_doctor_id if self._role == "Doctor" else self._queue_doc_filter.currentData()
+        doc_id = self._my_doctor_id if self._role == "Doctor" else None
         rows = self._backend.get_queue_entries(doctor_id=doc_id) or []
         for entry in rows:
             r = self._queue_table.rowCount()
@@ -289,7 +289,7 @@ class ClinicalPage(QWidget):
                 self._queue_table.setCellWidget(r, 8, make_action_cell(edit_btn))
 
         # Update stat cards
-        doc_id_for_stats = self._my_doctor_id if self._role == "Doctor" else doc_id
+        doc_id_for_stats = self._my_doctor_id if self._role == "Doctor" else self._queue_doc_filter.currentData()
         stats = self._backend.get_queue_stats(doctor_id=doc_id_for_stats)
         for key, lbl in self._queue_stat_labels.items():
             lbl.setText(str(stats.get(key, 0) or 0))
@@ -395,34 +395,44 @@ class ClinicalPage(QWidget):
             return
         qid = self._queue_ids[row]
         patient = self._queue_table.item(row, 1).text() if self._queue_table.item(row, 1) else ""
-        from PyQt6.QtWidgets import QDoubleSpinBox
         dlg = QDialog(self)
-        dlg.setWindowTitle(f"Record Vitals – {patient}")
+        dlg.setWindowTitle(f"Record Vitals \u2013 {patient}")
         dlg.setMinimumWidth(440)
         fl = QFormLayout(dlg)
         fl.setSpacing(12); fl.setContentsMargins(24, 24, 24, 24)
 
+        _INPUT_SS = (
+            "QLineEdit { padding: 8px 12px; border: 2px solid #BADFE7;"
+            " border-radius: 10px; font-size: 13px; background: #FFF; }"
+            "QLineEdit:focus { border: 2px solid #388087; }")
+
         bp_edit = QLineEdit()
-        bp_edit.setPlaceholderText("e.g. 120/80")
+        bp_edit.setPlaceholderText("e.g. 120/80  (optional)")
         bp_edit.setMinimumHeight(36)
         bp_edit.setMaxLength(20)
+        bp_edit.setStyleSheet(_INPUT_SS)
 
-        height_spin = QDoubleSpinBox()
-        height_spin.setRange(0, 300); height_spin.setDecimals(1)
-        height_spin.setSuffix(" cm"); height_spin.setMinimumHeight(36)
+        height_edit = QLineEdit()
+        height_edit.setPlaceholderText("cm  (optional)")
+        height_edit.setMinimumHeight(36)
+        height_edit.setMaxLength(10)
+        height_edit.setStyleSheet(_INPUT_SS)
 
-        weight_spin = QDoubleSpinBox()
-        weight_spin.setRange(0, 500); weight_spin.setDecimals(1)
-        weight_spin.setSuffix(" kg"); weight_spin.setMinimumHeight(36)
+        weight_edit = QLineEdit()
+        weight_edit.setPlaceholderText("kg  (optional)")
+        weight_edit.setMinimumHeight(36)
+        weight_edit.setMaxLength(10)
+        weight_edit.setStyleSheet(_INPUT_SS)
 
-        temp_spin = QDoubleSpinBox()
-        temp_spin.setRange(30, 45); temp_spin.setDecimals(1)
-        temp_spin.setValue(36.5); temp_spin.setSuffix(" °C")
-        temp_spin.setMinimumHeight(36)
+        temp_edit = QLineEdit()
+        temp_edit.setPlaceholderText("\u00b0C  (optional, e.g. 36.5)")
+        temp_edit.setMinimumHeight(36)
+        temp_edit.setMaxLength(10)
+        temp_edit.setStyleSheet(_INPUT_SS)
 
         from PyQt6.QtWidgets import QTextEdit
         notes_edit = QTextEdit()
-        notes_edit.setPlaceholderText("Triage observations, chief complaint, symptoms…")
+        notes_edit.setPlaceholderText("Triage observations, chief complaint, symptoms\u2026")
         notes_edit.setMaximumHeight(100)
         notes_edit.setStyleSheet(
             "QTextEdit { padding: 8px; border: 2px solid #BADFE7;"
@@ -435,22 +445,26 @@ class ClinicalPage(QWidget):
                 bp_edit.setText(bp_val)
             ht_val = entry.get("height_cm")
             if ht_val:
-                height_spin.setValue(float(ht_val))
+                height_edit.setText(str(float(ht_val)))
             wt_val = entry.get("weight_kg")
             if wt_val:
-                weight_spin.setValue(float(wt_val))
+                weight_edit.setText(str(float(wt_val)))
             temp_val = entry.get("temperature")
             if temp_val:
-                temp_spin.setValue(float(temp_val))
+                temp_edit.setText(str(float(temp_val)))
             nn = entry.get("nurse_notes", "") or ""
             if nn:
                 notes_edit.setPlainText(nn)
 
         fl.addRow("Blood Pressure", bp_edit)
-        fl.addRow("Height", height_spin)
-        fl.addRow("Weight", weight_spin)
-        fl.addRow("Temperature", temp_spin)
+        fl.addRow("Height (cm)", height_edit)
+        fl.addRow("Weight (kg)", weight_edit)
+        fl.addRow("Temperature (\u00b0C)", temp_edit)
         fl.addRow("Nurse Notes", notes_edit)
+
+        hint = QLabel("All vitals are optional. Fill in what\u2019s available.")
+        hint.setStyleSheet("font-size: 11px; color: #7F8C8D; font-style: italic;")
+        fl.addRow(hint)
 
         btn_row = QHBoxLayout(); btn_row.setSpacing(10); btn_row.addStretch()
         cancel_btn = QPushButton("Cancel"); cancel_btn.setMinimumHeight(34)
@@ -458,6 +472,8 @@ class ClinicalPage(QWidget):
         cancel_btn.setObjectName("dialogCancelBtn")
         cancel_btn.clicked.connect(dlg.reject)
         save_btn = QPushButton("Save Vitals"); save_btn.setMinimumHeight(34)
+        save_btn.setIcon(get_icon("save_vitals"))
+        save_btn.setIconSize(QSize(18, 18))
         save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         save_btn.setObjectName("dialogSaveBtn")
         save_btn.clicked.connect(dlg.accept)
@@ -466,13 +482,56 @@ class ClinicalPage(QWidget):
 
         if dlg.exec() == QDialog.DialogCode.Accepted:
             bp = bp_edit.text().strip()
-            ht = height_spin.value() if height_spin.value() > 0 else None
-            wt = weight_spin.value() if weight_spin.value() > 0 else None
-            temp = temp_spin.value()
+            ht_text = height_edit.text().strip()
+            wt_text = weight_edit.text().strip()
+            temp_text = temp_edit.text().strip()
             notes = notes_edit.toPlainText().strip()
-            if not bp and not ht and not wt:
-                QMessageBox.warning(self, "Validation", "Please enter at least blood pressure.")
+
+            # Validate numeric fields
+            ht = None
+            if ht_text:
+                try:
+                    ht = float(ht_text)
+                    if ht <= 0 or ht > 300:
+                        QMessageBox.warning(self, "Validation",
+                            "Height must be between 0 and 300 cm.")
+                        return
+                except ValueError:
+                    QMessageBox.warning(self, "Validation",
+                        "Height must be a number (e.g. 165.5).")
+                    return
+
+            wt = None
+            if wt_text:
+                try:
+                    wt = float(wt_text)
+                    if wt <= 0 or wt > 500:
+                        QMessageBox.warning(self, "Validation",
+                            "Weight must be between 0 and 500 kg.")
+                        return
+                except ValueError:
+                    QMessageBox.warning(self, "Validation",
+                        "Weight must be a number (e.g. 70.5).")
+                    return
+
+            temp = None
+            if temp_text:
+                try:
+                    temp = float(temp_text)
+                    if temp < 25 or temp > 45:
+                        QMessageBox.warning(self, "Validation",
+                            "Temperature must be between 25 and 45 \u00b0C.")
+                        return
+                except ValueError:
+                    QMessageBox.warning(self, "Validation",
+                        "Temperature must be a number (e.g. 36.5).")
+                    return
+
+            if not bp and ht is None and wt is None and temp is None and not notes:
+                QMessageBox.warning(self, "Validation",
+                    "Please enter at least one vital sign or a note.")
                 return
+
             ok = self._backend.record_vitals(qid, bp, ht, wt, temp, notes)
             if ok:
                 self._load_queue()
@@ -527,7 +586,7 @@ class ClinicalPage(QWidget):
         bar.addWidget(self._billing_search)
 
         new_btn = QPushButton("New Invoice")
-        new_btn.setIcon(get_icon("plus"))
+        new_btn.setIcon(get_icon("receipt", color=QColor("#FFFFFF")))
         new_btn.setIconSize(QSize(18, 18))
         new_btn.setObjectName("actionBtn"); new_btn.setMinimumHeight(42)
         new_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -731,58 +790,80 @@ class ClinicalPage(QWidget):
             for it in items
         )
         discount_amount = raw_subtotal - total_amount
-
         balance = total_amount - amount_paid
 
-        w = 48  # receipt width
+        w = 44
+
         lines = [
-            "=" * w,
+            "",
             "C A R E C R U D".center(w),
-            "HEALTHCARE MANAGEMENT SYSTEM".center(w),
-            "=" * w,
-            f"  Invoice #:     {info.get('invoice_id', '')}",
-            f"  Date:          {info.get('created_at', '')}",
-            f"  Patient:       {info.get('patient_name', '')}",
-            f"  Phone:         {info.get('phone', '') or '—'}",
-            f"  Payment Mode:  {info.get('payment_method', '—')}",
-            "-" * w,
-            f"  {'Service':<20} {'Qty':>4} {'Unit':>9} {'Sub':>9}",
-            "-" * w,
+            "Healthcare Management System".center(w),
+            "\u2500" * w,
+            "",
+            f"  Invoice #  :  {info.get('invoice_id', '')}",
+            f"  Date       :  {str(info.get('created_at', ''))[:19]}",
+            f"  Patient    :  {info.get('patient_name', '')}",
+            f"  Phone      :  {info.get('phone', '') or '\u2014'}",
+            f"  Payment    :  {info.get('payment_method', '\u2014')}",
+            "",
+            "\u2500" * w,
         ]
+
+        # Item lines
         for it in items:
             sname = it.get("service_name", "")
             qty = int(it.get("quantity", 1))
             unit = float(it.get("unit_price", 0))
             sub = float(it.get("subtotal", 0))
-            # Truncate long service names
-            if len(sname) > 20:
-                sname = sname[:18] + ".."
-            lines.append(
-                f"  {sname:<20} {qty:>4} ₱{unit:>8,.2f} ₱{sub:>8,.2f}"
-            )
+            lines.append(f"  {sname}")
+            lines.append(f"    {qty} x \u20b1{unit:,.2f}          \u20b1{sub:,.2f}")
 
-        lines.append("-" * w)
+        lines.append("\u2500" * w)
 
         if discount_amount > 0:
-            lines.append(f"  {'Subtotal':<28} ₱{raw_subtotal:>12,.2f}")
-            lines.append(f"  {'Discount':<28} -₱{discount_amount:>11,.2f}")
+            lines.append(f"  Subtotal           \u20b1{raw_subtotal:>10,.2f}")
+            lines.append(f"  Discount          -\u20b1{discount_amount:>10,.2f}")
+            lines.append("")
 
-        lines += [
-            f"  {'TOTAL':<28} ₱{total_amount:>12,.2f}",
-            f"  {'AMOUNT PAID':<28} ₱{amount_paid:>12,.2f}",
-        ]
+        lines.append(f"  TOTAL              \u20b1{total_amount:>10,.2f}")
+        lines.append(f"  AMOUNT PAID        \u20b1{amount_paid:>10,.2f}")
 
         if balance > 0:
-            lines.append(f"  {'BALANCE DUE':<28} ₱{balance:>12,.2f}")
+            lines.append(f"  BALANCE DUE        \u20b1{balance:>10,.2f}")
 
-        lines += [
-            f"  Status: {info.get('status', '')}",
-            "=" * w,
-            "Thank you for choosing us!".center(w),
-            "=" * w,
-        ]
+        status = info.get("status", "")
+        lines.append(f"  Status: {status}")
+        lines.append("")
+        lines.append("\u2500" * w)
+        lines.append("Thank you for choosing us!".center(w))
+        lines.append("\u2500" * w)
+
         text = "\n".join(lines)
-        QMessageBox.information(self, f"Receipt – Invoice #{invoice_id}", text)
+
+        # Show in a proper dialog with monospace font
+        from PyQt6.QtWidgets import QTextEdit as _QTE
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Receipt \u2013 Invoice #{invoice_id}")
+        dlg.setMinimumWidth(420)
+        dl = QVBoxLayout(dlg)
+        dl.setContentsMargins(20, 16, 20, 16)
+        dl.setSpacing(12)
+        receipt_box = _QTE()
+        receipt_box.setReadOnly(True)
+        receipt_box.setPlainText(text)
+        receipt_box.setStyleSheet(
+            "QTextEdit { font-family: 'Consolas', 'Courier New', monospace;"
+            " font-size: 13px; background: #FFFFFF; color: #2C3E50;"
+            " border: 1px solid #BADFE7; border-radius: 8px; padding: 16px; }")
+        receipt_box.setMinimumHeight(380)
+        dl.addWidget(receipt_box)
+        ok_btn = QPushButton("Close")
+        ok_btn.setObjectName("actionBtn")
+        ok_btn.setMinimumHeight(38)
+        ok_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        ok_btn.clicked.connect(dlg.accept)
+        dl.addWidget(ok_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+        dlg.exec()
 
     # ══════════════════════════════════════════════════════════════
     #  SERVICES TAB
@@ -810,7 +891,7 @@ class ClinicalPage(QWidget):
         bar.addWidget(self._svc_cat_filter)
 
         add_btn = QPushButton("Add Service")
-        add_btn.setIcon(get_icon("plus"))
+        add_btn.setIcon(get_icon("plus", color=QColor("#FFFFFF")))
         add_btn.setIconSize(QSize(18, 18))
         add_btn.setObjectName("actionBtn"); add_btn.setMinimumHeight(42)
         add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -818,7 +899,7 @@ class ClinicalPage(QWidget):
         bar.addWidget(add_btn)
 
         bulk_btn = QPushButton("Bulk Price Update")
-        bulk_btn.setIcon(get_icon("dollar"))
+        bulk_btn.setIcon(get_icon("dollar", color=QColor("#FFFFFF")))
         bulk_btn.setIconSize(QSize(18, 18))
         bulk_btn.setObjectName("actionBtn"); bulk_btn.setMinimumHeight(42)
         bulk_btn.setCursor(Qt.CursorShape.PointingHandCursor)

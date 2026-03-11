@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QLineEdit,
     QTableWidget, QTableWidgetItem, QHeaderView,
     QPushButton, QDialog, QDateEdit, QTextEdit, QFormLayout,
     QMessageBox,
@@ -72,12 +72,13 @@ class DashboardPage(QWidget):
         ]
         if self._role == "Nurse":
             quick_actions = [
-                ("Start Triage", "nav_clinical", 3), ("View Patients", "new_patient", 1),
+                ("Start Triage", "stethoscope", 3), ("View Patients", "new_patient", 1),
             ]
         elif self._role == "HR":
             quick_actions = [
-                ("Manage Staff", "emp_active", 5), ("Activity Log", "nav_analytics", 6),
+                ("Manage Staff", "emp_active", 5), ("Activity Log", "nav_activity_log", 6),
             ]
+        _W = QColor("#FFFFFF")
         for text, icon_key, pi in quick_actions:
             if self._role == "Doctor" and pi in (1, 2):
                 continue
@@ -86,7 +87,7 @@ class DashboardPage(QWidget):
             if self._role == "Receptionist" and pi == 4:
                 continue
             btn = QPushButton(text)
-            btn.setIcon(get_icon(icon_key))
+            btn.setIcon(get_icon(icon_key, color=_W))
             btn.setIconSize(QSize(18, 18))
             btn.setObjectName("actionBtn")
             btn.setMinimumHeight(44)
@@ -106,7 +107,7 @@ class DashboardPage(QWidget):
             lv_title.setObjectName("cardTitle")
             lv_hdr.addWidget(lv_title); lv_hdr.addStretch()
             req_btn = QPushButton("Request Leave")
-            req_btn.setIcon(get_icon("edit"))
+            req_btn.setIcon(get_icon("edit", color=QColor("#FFFFFF")))
             req_btn.setIconSize(QSize(18, 18))
             req_btn.setCursor(Qt.CursorShape.PointingHandCursor)
             req_btn.setObjectName("actionBtn")
@@ -129,6 +130,9 @@ class DashboardPage(QWidget):
             cols.addWidget(self._schedule_card(), 3)
             cols.addWidget(self._chart_card(), 2)
         lay.addLayout(cols)
+
+        if self._role in ("Receptionist", "Admin"):
+            lay.addWidget(self._doctor_schedule_card())
 
         if self._role in ("Admin",):
             lay.addWidget(self._recent_activity_card())
@@ -364,6 +368,69 @@ class DashboardPage(QWidget):
         vbox.addStretch()
         return card
 
+    def _doctor_schedule_card(self):
+        """Card showing all doctors' weekly schedules with search."""
+        card = make_card()
+        vbox = QVBoxLayout(card)
+        vbox.setContentsMargins(20, 18, 20, 14); vbox.setSpacing(12)
+
+        hdr = QHBoxLayout()
+        title = QLabel("Doctor Schedules"); title.setObjectName("cardTitle")
+        hdr.addWidget(title); hdr.addStretch()
+        self._doc_sched_badge = QLabel("")
+        self._doc_sched_badge.setObjectName("pillBadge")
+        hdr.addWidget(self._doc_sched_badge)
+        vbox.addLayout(hdr)
+
+        self._doc_sched_search = QLineEdit()
+        self._doc_sched_search.setObjectName("searchBar")
+        self._doc_sched_search.setPlaceholderText("Search doctor name\u2026")
+        self._doc_sched_search.setMinimumHeight(38)
+        self._doc_sched_search.textChanged.connect(self._filter_doctor_schedules)
+        vbox.addWidget(self._doc_sched_search)
+
+        self._doc_sched_table = make_read_only_table(
+            ["Doctor", "Day", "Start", "End"],
+            min_h=200, max_h=340, row_h=36)
+        vbox.addWidget(self._doc_sched_table)
+        return card
+
+    def _refresh_doctor_schedules(self):
+        if not self._backend or not hasattr(self, "_doc_sched_table"):
+            return
+        rows = self._backend.get_all_doctor_schedules() or []
+        self._doc_sched_all_rows = rows
+        doctors = set(r["doctor_name"] for r in rows)
+        self._doc_sched_badge.setText(f"{len(doctors)} doctors")
+        self._populate_doc_sched_table(rows)
+
+    def _populate_doc_sched_table(self, rows):
+        self._doc_sched_table.setRowCount(len(rows))
+        today_day = datetime.now().strftime("%A")
+        for r, row in enumerate(rows):
+            cells = [
+                row.get("doctor_name", ""),
+                row.get("day_of_week", ""),
+                row.get("start_display", ""),
+                row.get("end_display", ""),
+            ]
+            for c, val in enumerate(cells):
+                item = QTableWidgetItem(val)
+                if row.get("day_of_week") == today_day:
+                    item.setBackground(QColor("#E8F6F3"))
+                self._doc_sched_table.setItem(r, c, item)
+
+    def _filter_doctor_schedules(self, text):
+        if not hasattr(self, "_doc_sched_all_rows"):
+            return
+        needle = text.strip().lower()
+        if not needle:
+            filtered = self._doc_sched_all_rows
+        else:
+            filtered = [r for r in self._doc_sched_all_rows
+                        if needle in r.get("doctor_name", "").lower()]
+        self._populate_doc_sched_table(filtered)
+
     # ── Helpers ───────────────────────────────────────────────────
     def _update_time(self):
         now = datetime.now()
@@ -567,6 +634,8 @@ class DashboardPage(QWidget):
         else:
             self._refresh_schedule()
             self._refresh_chart()
+        if self._role in ("Receptionist", "Admin"):
+            self._refresh_doctor_schedules()
         if self._role in ("Admin",):
             self._refresh_recent_activity()
         if self._role not in ("HR",):

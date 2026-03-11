@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (
     QComboBox, QDialog, QMessageBox,
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize
+from PyQt6.QtGui import QColor
 from ui.styles import (
     make_page_layout, finish_page, make_banner, make_read_only_table,
     make_action_table, make_table_btn, make_table_btn_danger, status_color,
@@ -88,7 +89,7 @@ class PatientsPage(QWidget):
         # Merge button (Admin / Receptionist only)
         if self._role in ("Admin", "Receptionist"):
             merge_btn = QPushButton("Merge")
-            merge_btn.setIcon(get_icon("link"))
+            merge_btn.setIcon(get_icon("link", color=QColor("#FFFFFF")))
             merge_btn.setIconSize(QSize(18, 18))
             merge_btn.setObjectName("actionBtn"); merge_btn.setMinimumHeight(42)
             merge_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -123,6 +124,7 @@ class PatientsPage(QWidget):
             rows = self._backend.get_patients() if self._backend else []
         self._all_patients = rows
         self._patient_ids.clear()
+        self._patient_map = {}  # patient_id -> row data
         self.table.setRowCount(len(rows))
 
         # Collect unique conditions for filter
@@ -146,6 +148,7 @@ class PatientsPage(QWidget):
         self.cond_filter.blockSignals(False)
         for r, p in enumerate(rows):
             self._patient_ids.append(p["patient_id"])
+            self._patient_map[p["patient_id"]] = p
             pid_str = f"PT-{p['patient_id']:04d}"
             name = f"{p['first_name']} {p['last_name']}"
             dob = p.get("date_of_birth")
@@ -162,10 +165,13 @@ class PatientsPage(QWidget):
             values = [pid_str, name, p.get("sex",""), str(age),
                       p.get("phone","") or "", p.get("blood_type","") or "Unknown",
                       p.get("conditions","") or "",
-                      str(last_visit) if last_visit else "—",
+                      str(last_visit) if last_visit else "\u2014",
                       p.get("status","")]
             for c, val in enumerate(values):
-                self.table.setItem(r, c, QTableWidgetItem(val))
+                item = QTableWidgetItem(val)
+                if c == 0:
+                    item.setData(Qt.ItemDataRole.UserRole, p["patient_id"])
+                self.table.setItem(r, c, item)
 
             if self._role != "Nurse":
                 view_btn = make_table_btn("View")
@@ -212,6 +218,16 @@ class PatientsPage(QWidget):
             self.table.setRowHidden(r, not (ok_text and ok_status and ok_sex and ok_blood and ok_cond))
 
     # ── CRUD ───────────────────────────────────────────────────────
+    def _get_patient_id_for_row(self, row: int):
+        """Get patient_id from the table item's UserRole data (sort-safe)."""
+        item = self.table.item(row, 0)
+        return item.data(Qt.ItemDataRole.UserRole) if item else None
+
+    def _get_patient_data_for_row(self, row: int):
+        """Get patient dict from _patient_map using the row's stored patient_id."""
+        pid = self._get_patient_id_for_row(row)
+        return self._patient_map.get(pid, {}) if pid else {}
+
     def _on_add(self):
         dlg = PatientDialog(self, title="Add New Patient", backend=self._backend)
         if dlg.exec() == QDialog.DialogCode.Accepted:
@@ -258,7 +274,10 @@ class PatientsPage(QWidget):
                 QMessageBox.critical(self, "Error", "Failed to add patient.")
 
     def _on_edit(self, row: int):
-        p = self._all_patients[row] if row < len(self._all_patients) else {}
+        p = self._get_patient_data_for_row(row)
+        if not p:
+            return
+        patient_id = self._get_patient_id_for_row(row)
         data = {
             "name": f"{p.get('first_name','')} {p.get('last_name','')}",
             "sex": p.get("sex",""), "phone": p.get("phone","") or "",
@@ -278,7 +297,6 @@ class PatientsPage(QWidget):
             if not d["name"].strip():
                 QMessageBox.warning(self, "Validation", "Patient name is required."); return
             parts = d["name"].strip().rsplit(" ", 1)
-            patient_id = self._patient_ids[row] if row < len(self._patient_ids) else None
             db_data = {
                 "first_name": parts[0], "last_name": parts[1] if len(parts)>1 else "",
                 "sex": d["sex"], "dob": dlg.dob_edit.date().toString("yyyy-MM-dd"),
@@ -303,7 +321,7 @@ class PatientsPage(QWidget):
             f"Delete {name}? All linked appointments, invoices, and conditions will be removed.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
-            pid = self._patient_ids[row] if row < len(self._patient_ids) else None
+            pid = self._get_patient_id_for_row(row)
             if pid and self._backend and self._backend.delete_patient(pid):
                 QMessageBox.information(self, "Deleted", f"Patient '{name}' deleted.")
                 self._load_from_db(); self.patients_changed.emit(self.get_patient_names())
@@ -311,7 +329,7 @@ class PatientsPage(QWidget):
                 QMessageBox.critical(self, "Error", "Failed to delete patient.")
 
     def _on_view(self, row: int):
-        pid = self._patient_ids[row] if row < len(self._patient_ids) else None
+        pid = self._get_patient_id_for_row(row)
         if not pid or not self._backend: return
         doc_email = self._user_email if self._role == "Doctor" else None
         profile = self._backend.get_patient_full_profile(pid, doctor_email=doc_email)

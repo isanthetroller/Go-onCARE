@@ -48,7 +48,7 @@ QLabel#switchLabel {
 /* ── Text inputs ────────────────────────────────────────────────────
    Email and password fields inside the auth card.                  */
 QLineEdit {
-    padding: 14px 18px;
+    padding: 14px 18px 16px 18px;
     border: 2px solid #BADFE7;
     border-radius: 12px;
     font-size: 14px;
@@ -56,6 +56,7 @@ QLineEdit {
     background-color: #F6F6F2;
     color: #2C3E50;
     selection-background-color: #388087;
+    min-height: 22px;
 }
 
 /* Focused state – darker border, white background */

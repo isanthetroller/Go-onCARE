@@ -336,7 +336,7 @@ class HREmployeesPage(QWidget):
         ua_header.addStretch()
 
         create_btn = QPushButton("Create Account")
-        create_btn.setIcon(get_icon("plus"))
+        create_btn.setIcon(get_icon("plus", color=QColor("#FFFFFF")))
         create_btn.setIconSize(QSize(18, 18))
         create_btn.setObjectName("actionBtn"); create_btn.setMinimumHeight(38)
         create_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -345,7 +345,7 @@ class HREmployeesPage(QWidget):
         ua_header.addWidget(create_btn)
 
         reset_btn = QPushButton("Reset Password")
-        reset_btn.setIcon(get_icon("key"))
+        reset_btn.setIcon(get_icon("key", color=QColor("#FFFFFF")))
         reset_btn.setIconSize(QSize(18, 18))
         reset_btn.setObjectName("actionBtn"); reset_btn.setMinimumHeight(38)
         reset_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -354,7 +354,7 @@ class HREmployeesPage(QWidget):
         ua_header.addWidget(reset_btn)
 
         del_btn = QPushButton("Delete Account")
-        del_btn.setIcon(get_icon("trash"))
+        del_btn.setIcon(get_icon("trash", color=QColor("#D9534F")))
         del_btn.setIconSize(QSize(18, 18))
         del_btn.setObjectName("dangerBtn"); del_btn.setMinimumHeight(38)
         del_btn.setCursor(Qt.CursorShape.PointingHandCursor)

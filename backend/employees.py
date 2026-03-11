@@ -480,3 +480,18 @@ class EmployeeMixin:
               AND ds.day_of_week = DAYNAME(CURDATE())
             ORDER BY e.first_name
         """)
+
+    def get_all_doctor_schedules(self):
+        """Return all active doctors' weekly schedules for dashboard display."""
+        return self.fetch("""
+            SELECT e.employee_id, CONCAT(e.first_name,' ',e.last_name) AS doctor_name,
+                   ds.day_of_week,
+                   DATE_FORMAT(ds.start_time, '%%h:%%i %%p') AS start_display,
+                   DATE_FORMAT(ds.end_time, '%%h:%%i %%p') AS end_display
+            FROM employees e
+            INNER JOIN roles r ON e.role_id = r.role_id
+            INNER JOIN doctor_schedules ds ON e.employee_id = ds.doctor_id
+            WHERE r.role_name = 'Doctor' AND e.status = 'Active'
+            ORDER BY e.first_name,
+                     FIELD(ds.day_of_week,'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')
+        """)

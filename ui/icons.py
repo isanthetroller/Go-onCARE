@@ -386,6 +386,143 @@ def _icon_shield(color=_TEAL, sz=20) -> QIcon:
     return QIcon(pm)
 
 
+def _icon_stethoscope(color=_TEAL, sz=20) -> QIcon:
+    """Stethoscope icon — bold and clear for small sizes."""
+    pm, p = _make_pixmap(sz)
+    pen = QPen(color, 2.0)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    p.setPen(pen)
+    # Earpiece dots
+    p.setBrush(QBrush(color))
+    p.drawEllipse(QRectF(4, 1, 3, 3))
+    p.drawEllipse(QRectF(13, 1, 3, 3))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    # Tubes going down then curving inward
+    tube = QPainterPath()
+    tube.moveTo(5.5, 3.5)
+    tube.cubicTo(5.5, 10, 5.5, 12, 10, 12)
+    tube.cubicTo(14.5, 12, 14.5, 10, 14.5, 3.5)
+    p.drawPath(tube)
+    # Stem down from tube junction
+    p.drawLine(QPointF(10, 12), QPointF(10, 14.5))
+    # Chest piece — filled circle
+    p.setBrush(QBrush(color))
+    p.drawEllipse(QRectF(6.5, 14, 7, 5.5))
+    p.end()
+    return QIcon(pm)
+
+
+def _icon_heartbeat(color=_DANGER, sz=20) -> QIcon:
+    """Heartbeat / vitals icon — EKG line."""
+    pm, p = _make_pixmap(sz)
+    pen = QPen(color, 1.8)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    p.setPen(pen)
+    # EKG heartbeat line
+    path = QPainterPath()
+    path.moveTo(1, 10)
+    path.lineTo(4, 10)
+    path.lineTo(6, 10)
+    path.lineTo(7.5, 4)
+    path.lineTo(9, 16)
+    path.lineTo(10.5, 6)
+    path.lineTo(12, 10)
+    path.lineTo(14, 10)
+    path.lineTo(15, 8)
+    path.lineTo(16, 10)
+    path.lineTo(19, 10)
+    p.drawPath(path)
+    p.end()
+    return QIcon(pm)
+
+
+def _icon_emp_active(color=_TEAL, sz=20) -> QIcon:
+    """Person with checkmark — active employee / manage staff."""
+    pm, p = _make_pixmap(sz)
+    pen = QPen(color, 1.6)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    p.setPen(pen)
+    # Person head
+    p.drawEllipse(QRectF(3, 2, 7, 7))
+    # Person body
+    path = QPainterPath()
+    path.moveTo(0, 18)
+    path.cubicTo(0, 13, 3, 11, 6.5, 11)
+    path.cubicTo(9, 11, 11, 12, 12, 14)
+    p.drawPath(path)
+    # Checkmark
+    ck_pen = QPen(_GREEN, 2.2)
+    ck_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    ck_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    p.setPen(ck_pen)
+    p.drawLine(QPointF(13, 12), QPointF(15.5, 15))
+    p.drawLine(QPointF(15.5, 15), QPointF(19, 9))
+    p.end()
+    return QIcon(pm)
+
+
+def _icon_receipt(color=_TEAL, sz=20) -> QIcon:
+    """Receipt / invoice icon."""
+    pm, p = _make_pixmap(sz)
+    pen = QPen(color, 1.4)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    p.setPen(pen)
+    # Receipt body with zigzag bottom
+    path = QPainterPath()
+    path.moveTo(4, 1)
+    path.lineTo(4, 16)
+    path.lineTo(6, 14.5)
+    path.lineTo(8, 16)
+    path.lineTo(10, 14.5)
+    path.lineTo(12, 16)
+    path.lineTo(14, 14.5)
+    path.lineTo(16, 16)
+    path.lineTo(16, 1)
+    path.closeSubpath()
+    p.drawPath(path)
+    # Lines on receipt
+    p.drawLine(QPointF(7, 5), QPointF(13, 5))
+    p.drawLine(QPointF(7, 8), QPointF(13, 8))
+    p.drawLine(QPointF(7, 11), QPointF(11, 11))
+    p.end()
+    return QIcon(pm)
+
+
+def _icon_save_vitals(color=_GREEN, sz=20) -> QIcon:
+    """Heart with pulse — save vitals."""
+    pm, p = _make_pixmap(sz)
+    pen = QPen(color, 1.6)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    p.setPen(pen)
+    # Heart shape
+    heart = QPainterPath()
+    heart.moveTo(10, 17)
+    heart.cubicTo(2, 12, 1, 7, 4, 4)
+    heart.cubicTo(6, 2, 10, 4, 10, 7)
+    heart.cubicTo(10, 4, 14, 2, 16, 4)
+    heart.cubicTo(19, 7, 18, 12, 10, 17)
+    p.drawPath(heart)
+    # Small pulse inside
+    pulse_pen = QPen(_WHITE, 1.4)
+    pulse_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pulse_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    p.setPen(pulse_pen)
+    pp = QPainterPath()
+    pp.moveTo(5, 9)
+    pp.lineTo(8, 9)
+    pp.lineTo(9, 6)
+    pp.lineTo(11, 12)
+    pp.lineTo(12, 9)
+    pp.lineTo(15, 9)
+    p.drawPath(pp)
+    p.end()
+    return QIcon(pm)
+
+
 def _icon_new_patient(color=_TEAL, sz=20) -> QIcon:
     pm, p = _make_pixmap(sz)
     pen = QPen(color, 1.6)
@@ -455,6 +592,11 @@ _ICON_MAP = {
     "shield":       _icon_shield,
     "new_patient":  _icon_new_patient,
     "calendar_plus": _icon_calendar_plus,
+    "stethoscope":  _icon_stethoscope,
+    "heartbeat":    _icon_heartbeat,
+    "emp_active":   _icon_emp_active,
+    "receipt":      _icon_receipt,
+    "save_vitals":  _icon_save_vitals,
 }
 
 # Map sidebar label → icon key
@@ -470,12 +612,13 @@ NAV_ICON_MAP = {
 }
 
 
-def get_icon(name: str) -> QIcon:
-    """Retrieve a named icon. Returns empty QIcon if not found."""
-    if name not in _ICON_CACHE:
+def get_icon(name: str, color: QColor | None = None) -> QIcon:
+    """Retrieve a named icon, optionally recolored. Returns empty QIcon if not found."""
+    cache_key = name if color is None else f"{name}#{color.name()}"
+    if cache_key not in _ICON_CACHE:
         factory = _ICON_MAP.get(name)
         if factory:
-            _ICON_CACHE[name] = factory()
+            _ICON_CACHE[cache_key] = factory(color=color) if color else factory()
         else:
-            _ICON_CACHE[name] = QIcon()
-    return _ICON_CACHE[name]
+            _ICON_CACHE[cache_key] = QIcon()
+    return _ICON_CACHE[cache_key]
