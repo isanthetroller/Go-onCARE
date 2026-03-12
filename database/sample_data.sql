@@ -26,6 +26,7 @@ DELETE FROM standard_conditions;
 DELETE FROM payment_methods;
 DELETE FROM services;
 DELETE FROM discount_types;
+DELETE FROM tax_settings;
 DELETE FROM roles;
 DELETE FROM departments;
 
@@ -451,3 +452,12 @@ INSERT INTO activity_log (user_email, user_role, action, record_type, record_det
     ('ana.reyes@carecrud.com', 'Doctor', 'Login',   'User',        'Ana Reyes logged in',                  '2026-02-25 08:30:00'),
     ('ana.reyes@carecrud.com', 'Doctor', 'Edited',  'Appointment', 'Updated appointment #69 status',       '2026-02-25 09:05:00'),
     ('james.cruz@carecrud.com','Receptionist','Created','Appointment','Created appointment #79 for Diana Castro','2026-02-24 14:00:00');
+
+-- ────────────────────────────────────────────────────────────
+-- TAX SETTINGS (Philippine 2025 statutory defaults)
+-- ────────────────────────────────────────────────────────────
+
+INSERT INTO tax_settings (setting_key, value, description) VALUES
+    ('sss_rate',            4.500, 'SSS Employee Share (%) – RA 11199, 2025 schedule: 14% total, 4.5% employee'),
+    ('philhealth_rate',     2.500, 'PhilHealth Employee Share (%) – 5% premium split 50/50 (PhilHealth Circular 2024-0009)'),
+    ('hospital_share_rate', 10.000, 'Hospital/Company Share (%) – portion retained by the hospital');

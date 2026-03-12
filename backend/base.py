@@ -125,6 +125,42 @@ class DatabaseBase:
                         FOREIGN KEY (finance_decided_by) REFERENCES employees(employee_id)
                     )
                 """)
+                # tax_settings table (admin-configurable deduction rates)
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS tax_settings (
+                        setting_id  INT AUTO_INCREMENT PRIMARY KEY,
+                        setting_key VARCHAR(50) UNIQUE NOT NULL,
+                        value       DECIMAL(6,3) NOT NULL,
+                        description VARCHAR(200) DEFAULT NULL,
+                        updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                    ON UPDATE CURRENT_TIMESTAMP
+                    )
+                """)
+                # Seed default Philippine rates if table is empty
+                cur.execute("SELECT COUNT(*) AS cnt FROM tax_settings")
+                cnt_row = cur.fetchone()
+                cnt = cnt_row.get("cnt", 0) if isinstance(cnt_row, dict) else cnt_row[0]
+                if cnt == 0:
+                    cur.execute("""
+                        INSERT INTO tax_settings (setting_key, value, description) VALUES
+                        ('sss_rate', 4.500,
+                         'SSS Employee Share (%%) – RA 11199, 2025 schedule: 14%% total, 4.5%% employee'),
+                        ('philhealth_rate', 2.500,
+                         'PhilHealth Employee Share (%%) – 5%% premium split 50/50 (PhilHealth Circular 2024-0009)'),
+                        ('hospital_share_rate', 10.000,
+                         'Hospital/Company Share (%%) – portion retained by the hospital')
+                    """)
+                # Add deduction columns to paycheck_requests
+                for col, typedef in [
+                    ('sss_deduction',        'DECIMAL(10,2) NOT NULL DEFAULT 0.00'),
+                    ('philhealth_deduction',  'DECIMAL(10,2) NOT NULL DEFAULT 0.00'),
+                    ('hospital_share',        'DECIMAL(10,2) NOT NULL DEFAULT 0.00'),
+                    ('net_amount',            'DECIMAL(10,2) NOT NULL DEFAULT 0.00'),
+                ]:
+                    cur.execute(f"SHOW COLUMNS FROM paycheck_requests LIKE '{col}'")
+                    if not cur.fetchone():
+                        cur.execute(f"ALTER TABLE paycheck_requests ADD COLUMN {col} {typedef}")
+
                 # Ensure default Finance employee + user account exists
                 cur.execute("SELECT role_id FROM roles WHERE role_name='Finance'")
                 fin_role_row = cur.fetchone()

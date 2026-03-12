@@ -481,15 +481,22 @@ class EmployeeMixin:
     # ── Paycheck Request System (HR→Finance workflow) ────────────
 
     def submit_paycheck_request(self, employee_id, amount, period_from, period_until, requested_by_id):
-        """HR submits a paycheck request for an employee."""
+        """HR submits a paycheck request for an employee. Auto-calculates deductions."""
         try:
+            deductions = self.calculate_deductions(amount)
             self.exec(
-                "INSERT INTO paycheck_requests (employee_id, amount, period_from, period_until, requested_by) "
-                "VALUES (%s, %s, %s, %s, %s)",
-                (employee_id, amount, period_from, period_until, requested_by_id))
+                "INSERT INTO paycheck_requests "
+                "(employee_id, amount, sss_deduction, philhealth_deduction, "
+                "hospital_share, net_amount, period_from, period_until, requested_by) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (employee_id, amount,
+                 deductions["sss_deduction"], deductions["philhealth_deduction"],
+                 deductions["hospital_share"], deductions["net_amount"],
+                 period_from, period_until, requested_by_id))
             name = self._get_employee_name(employee_id) or str(employee_id)
             self.log_activity("Created", "Paycheck",
-                              f"Paycheck request for {name}: ₱{float(amount):,.2f} ({period_from} to {period_until})")
+                              f"Paycheck request for {name}: Gross ₱{float(amount):,.2f} → "
+                              f"Net ₱{deductions['net_amount']:,.2f} ({period_from} to {period_until})")
             return True
         except Exception as e:
             traceback.print_exc()
@@ -502,7 +509,9 @@ class EmployeeMixin:
                    CONCAT(e.first_name,' ',e.last_name) AS employee_name,
                    r.role_name, d.department_name,
                    e.salary,
-                   pr.amount, pr.period_from, pr.period_until,
+                   pr.amount, pr.sss_deduction, pr.philhealth_deduction,
+                   pr.hospital_share, pr.net_amount,
+                   pr.period_from, pr.period_until,
                    pr.status, pr.created_at,
                    CONCAT(h.first_name,' ',h.last_name) AS requested_by_name
             FROM paycheck_requests pr
@@ -521,7 +530,9 @@ class EmployeeMixin:
                    CONCAT(e.first_name,' ',e.last_name) AS employee_name,
                    r.role_name, d.department_name,
                    e.salary,
-                   pr.amount, pr.period_from, pr.period_until,
+                   pr.amount, pr.sss_deduction, pr.philhealth_deduction,
+                   pr.hospital_share, pr.net_amount,
+                   pr.period_from, pr.period_until,
                    pr.status, pr.finance_note, pr.decided_at,
                    pr.disbursed_at, pr.created_at,
                    CONCAT(h.first_name,' ',h.last_name) AS requested_by_name,

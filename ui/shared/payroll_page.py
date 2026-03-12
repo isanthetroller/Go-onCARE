@@ -106,21 +106,27 @@ class PayrollPage(QWidget):
         lay.addWidget(self._summary)
 
         # Table
-        cols = ["Employee", "Role", "Department", "Amount", "Period",
-                "Requested By", "Status", "Actions"]
+        cols = ["Employee", "Role", "Department", "Gross", "SSS", "PhilHealth",
+                "Hospital", "Net Amount", "Period", "Requested By", "Status", "Actions"]
         self._table = make_action_table(cols, min_h=400, row_h=48, action_col_width=220)
+        self._table.setSortingEnabled(True)
         lay.addWidget(self._table)
 
         lay.addStretch()
         finish_page(self, scroll)
 
     def _populate_table(self):
+        self._table.setSortingEnabled(False)
         self._table.setRowCount(0)
         for req in self._requests:
             r = self._table.rowCount()
             self._table.insertRow(r)
 
-            amount = float(req.get("amount", 0) or 0)
+            gross = float(req.get("amount", 0) or 0)
+            sss = float(req.get("sss_deduction", 0) or 0)
+            phil = float(req.get("philhealth_deduction", 0) or 0)
+            hosp = float(req.get("hospital_share", 0) or 0)
+            net = float(req.get("net_amount", 0) or 0)
             period = f"{req.get('period_from', '')} to {req.get('period_until', '')}"
             status = req.get("status", "")
 
@@ -128,17 +134,21 @@ class PayrollPage(QWidget):
                 req.get("employee_name", ""),
                 req.get("role_name", ""),
                 req.get("department_name", ""),
-                f"₱{amount:,.2f}",
+                f"₱{gross:,.2f}",
+                f"₱{sss:,.2f}",
+                f"₱{phil:,.2f}",
+                f"₱{hosp:,.2f}",
+                f"₱{net:,.2f}",
                 period,
                 req.get("requested_by_name", ""),
                 status,
             ]
             for c, val in enumerate(values):
                 item = QTableWidgetItem(str(val))
-                if c == 6:
+                if c == 10:  # Status column
                     item.setForeground(QColor(status_color(val)))
                     item.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
-                if c == 3:
+                if c in (3, 7):  # Gross and Net bold
                     item.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
                 self._table.setItem(r, c, item)
 
@@ -171,10 +181,11 @@ class PayrollPage(QWidget):
                 parts.append(view_btn)
 
             if parts:
-                self._table.setCellWidget(r, 7, make_action_cell(*parts))
+                self._table.setCellWidget(r, 11, make_action_cell(*parts))
 
         total = len(self._requests)
         self._summary.setText(f"Showing {total} request{'s' if total != 1 else ''}")
+        self._table.setSortingEnabled(True)
 
     def _apply_search(self, _=None):
         text = self._search.text().strip().lower()
@@ -233,10 +244,24 @@ class PayrollPage(QWidget):
 
         amount = float(req.get("amount", 0) or 0)
         salary = float(req.get("salary", 0) or 0)
+        sss = float(req.get("sss_deduction", 0) or 0)
+        phil = float(req.get("philhealth_deduction", 0) or 0)
+        hosp = float(req.get("hospital_share", 0) or 0)
+        net = float(req.get("net_amount", 0) or 0)
         info = QLabel(f"Period: <b>{period_from}</b> to <b>{period_until}</b> | "
-                      f"Amount: <b>₱{amount:,.2f}</b> | "
+                      f"Gross: <b>₱{amount:,.2f}</b> | "
                       f"Base Salary: ₱{salary:,.2f}")
         info.setStyleSheet("font-size: 13px; color: #555;")
+        d_lay.addWidget(info)
+
+        # Deduction breakdown
+        ded_text = (
+            f"<b>Deductions:</b>  SSS: ₱{sss:,.2f}  |  PhilHealth: ₱{phil:,.2f}  |  "
+            f"Hospital Share: ₱{hosp:,.2f}  →  <b style='color:#388087;'>Net: ₱{net:,.2f}</b>"
+        )
+        ded_lbl = QLabel(ded_text)
+        ded_lbl.setStyleSheet("font-size: 13px; color: #2C3E50; padding: 4px 0;")
+        d_lay.addWidget(ded_lbl)
         d_lay.addWidget(info)
 
         sep = QFrame()
@@ -306,10 +331,20 @@ class PayrollPage(QWidget):
         req = self._requests[row]
         emp_name = req.get("employee_name", "")
         amount = float(req.get("amount", 0) or 0)
+        sss = float(req.get("sss_deduction", 0) or 0)
+        phil = float(req.get("philhealth_deduction", 0) or 0)
+        hosp = float(req.get("hospital_share", 0) or 0)
+        net = float(req.get("net_amount", 0) or 0)
 
         reply = QMessageBox.question(
             self, "Approve Paycheck",
-            f"Approve paycheck of ₱{amount:,.2f} for {emp_name}?",
+            f"Approve paycheck for {emp_name}?\n\n"
+            f"  Gross Amount:    ₱{amount:,.2f}\n"
+            f"  SSS Deduction:   ₱{sss:,.2f}\n"
+            f"  PhilHealth:      ₱{phil:,.2f}\n"
+            f"  Hospital Share:  ₱{hosp:,.2f}\n"
+            f"  ─────────────\n"
+            f"  Net Payout:      ₱{net:,.2f}",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply != QMessageBox.StandardButton.Yes:
             return
@@ -425,12 +460,22 @@ class PayrollPage(QWidget):
         if row >= len(self._requests):
             return
         req = self._requests[row]
-        amount = float(req.get("amount", 0) or 0)
+        gross = float(req.get("amount", 0) or 0)
+        sss = float(req.get("sss_deduction", 0) or 0)
+        phil = float(req.get("philhealth_deduction", 0) or 0)
+        hosp = float(req.get("hospital_share", 0) or 0)
+        net = float(req.get("net_amount", 0) or 0)
         lines = [
             f"Employee: {req.get('employee_name', '')}",
             f"Role: {req.get('role_name', '')}",
             f"Department: {req.get('department_name', '')}",
-            f"Amount: ₱{amount:,.2f}",
+            f"",
+            f"Gross Amount:    ₱{gross:,.2f}",
+            f"SSS Deduction:   ₱{sss:,.2f}",
+            f"PhilHealth:      ₱{phil:,.2f}",
+            f"Hospital Share:  ₱{hosp:,.2f}",
+            f"Net Payout:      ₱{net:,.2f}",
+            f"",
             f"Period: {req.get('period_from', '')} to {req.get('period_until', '')}",
             f"Requested By: {req.get('requested_by_name', '')}",
             f"Status: {req.get('status', '')}",

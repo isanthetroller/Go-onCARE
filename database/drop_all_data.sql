@@ -21,6 +21,7 @@ DELETE FROM patients;
 DELETE FROM employees;
 DELETE FROM activity_log;
 DELETE FROM user_preferences;
+DELETE FROM tax_settings;
 
 -- Keep the admin account (role_id = 5), delete everyone else
 DELETE FROM users WHERE role_id != 5;

@@ -10,6 +10,7 @@ class SettingsMixin:
             "employees", "users", "services",
             "departments", "roles", "payment_methods",
             "activity_log", "standard_conditions", "discount_types",
+            "paycheck_requests", "tax_settings",
         ]
         results = []
         try:
@@ -165,3 +166,51 @@ class SettingsMixin:
             WHERE p.patient_id = %s
         """, (pid,), one=True)
         return row if row else {"discount_percent": 0, "discount_type": ""}
+
+    # ── Tax / Deduction Settings ───────────────────────────────────────
+    def get_tax_settings(self):
+        """Return all tax settings as a list of dicts."""
+        return self.fetch(
+            "SELECT setting_id, setting_key, value, description, updated_at "
+            "FROM tax_settings ORDER BY setting_id")
+
+    def get_tax_rates(self):
+        """Return a convenient dict: {'sss_rate': 4.5, 'philhealth_rate': 2.5, ...}."""
+        rows = self.get_tax_settings() or []
+        return {r["setting_key"]: float(r["value"]) for r in rows}
+
+    def update_tax_setting(self, setting_key, value):
+        """Update a single tax setting by key."""
+        ok = self.exec(
+            "UPDATE tax_settings SET value=%s WHERE setting_key=%s",
+            (value, setting_key))
+        if ok:
+            self.log_activity("Edited", "Tax Setting",
+                              f"{setting_key} → {value}%")
+        return ok
+
+    def calculate_deductions(self, gross_amount):
+        """Calculate SSS, PhilHealth, Hospital deductions from gross amount.
+        Returns dict with sss, philhealth, hospital_share, total_deductions, net."""
+        rates = self.get_tax_rates()
+        sss_rate = rates.get("sss_rate", 4.5)
+        phil_rate = rates.get("philhealth_rate", 2.5)
+        hosp_rate = rates.get("hospital_share_rate", 10.0)
+
+        gross = float(gross_amount)
+        sss = round(gross * sss_rate / 100, 2)
+        philhealth = round(gross * phil_rate / 100, 2)
+        hospital = round(gross * hosp_rate / 100, 2)
+        total = sss + philhealth + hospital
+        net = round(gross - total, 2)
+
+        return {
+            "sss_deduction": sss,
+            "philhealth_deduction": philhealth,
+            "hospital_share": hospital,
+            "total_deductions": total,
+            "net_amount": net,
+            "sss_rate": sss_rate,
+            "philhealth_rate": phil_rate,
+            "hospital_share_rate": hosp_rate,
+        }

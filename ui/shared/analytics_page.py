@@ -461,17 +461,7 @@ class AnalyticsPage(QWidget):
             ("Top Service", top_svc_text),
         ]
         cols = ["Metric", "Value"]
-        tbl = QTableWidget(len(summary), len(cols))
-        tbl.setHorizontalHeaderLabels(cols)
-        tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        tbl.verticalHeader().setVisible(False)
-        tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        tbl.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        tbl.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        tbl.setAlternatingRowColors(True)
-        tbl.setMinimumHeight(len(summary) * 48 + 48)
-        tbl.verticalHeader().setDefaultSectionSize(48)
-        configure_table(tbl)
+        tbl = make_read_only_table(cols)
         for r, (metric, value) in enumerate(summary):
             tbl.setItem(r, 0, QTableWidgetItem(metric))
             vi = QTableWidgetItem(value); vi.setForeground(QColor("#2C3E50"))

@@ -261,22 +261,36 @@ CREATE TABLE notifications (
 
 -- Paycheck requests (HR→Finance payroll workflow)
 CREATE TABLE paycheck_requests (
-    request_id         INT AUTO_INCREMENT PRIMARY KEY,
-    employee_id        INT NOT NULL,
-    amount             DECIMAL(10,2) NOT NULL,
-    period_from        DATE NOT NULL,
-    period_until       DATE NOT NULL,
-    requested_by       INT NOT NULL,
-    status             ENUM('Pending','Approved','Rejected','Disbursed')
-                       NOT NULL DEFAULT 'Pending',
-    finance_decided_by INT DEFAULT NULL,
-    finance_note       TEXT DEFAULT NULL,
-    decided_at         DATETIME DEFAULT NULL,
-    disbursed_at       DATETIME DEFAULT NULL,
-    created_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    request_id           INT AUTO_INCREMENT PRIMARY KEY,
+    employee_id          INT NOT NULL,
+    amount               DECIMAL(10,2) NOT NULL,
+    sss_deduction        DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    philhealth_deduction DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    hospital_share       DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    net_amount           DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    period_from          DATE NOT NULL,
+    period_until         DATE NOT NULL,
+    requested_by         INT NOT NULL,
+    status               ENUM('Pending','Approved','Rejected','Disbursed')
+                         NOT NULL DEFAULT 'Pending',
+    finance_decided_by   INT DEFAULT NULL,
+    finance_note         TEXT DEFAULT NULL,
+    decided_at           DATETIME DEFAULT NULL,
+    disbursed_at         DATETIME DEFAULT NULL,
+    created_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (employee_id) REFERENCES employees(employee_id),
     FOREIGN KEY (requested_by) REFERENCES employees(employee_id),
     FOREIGN KEY (finance_decided_by) REFERENCES employees(employee_id)
+);
+
+-- Tax / deduction settings (admin-configurable rates)
+CREATE TABLE tax_settings (
+    setting_id  INT AUTO_INCREMENT PRIMARY KEY,
+    setting_key VARCHAR(50) UNIQUE NOT NULL,
+    value       DECIMAL(6,3) NOT NULL,
+    description VARCHAR(200) DEFAULT NULL,
+    updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                ON UPDATE CURRENT_TIMESTAMP
 );
 
 
@@ -401,6 +415,12 @@ INSERT INTO doctor_schedules (doctor_id, day_of_week, start_time, end_time) VALU
     (3, 'Tuesday',   '08:00:00', '12:00:00'),
     (3, 'Thursday',  '08:00:00', '12:00:00'),
     (3, 'Saturday',  '08:00:00', '12:00:00');
+
+-- Default tax / deduction rates (Philippine 2025 statutory rates)
+INSERT INTO tax_settings (setting_key, value, description) VALUES
+    ('sss_rate',            4.500, 'SSS Employee Share (%) – RA 11199, 2025 schedule: 14% total, 4.5% employee'),
+    ('philhealth_rate',     2.500, 'PhilHealth Employee Share (%) – 5% premium split 50/50 (PhilHealth Circular 2024-0009)'),
+    ('hospital_share_rate', 10.000, 'Hospital/Company Share (%) – portion retained by the hospital');
 
 
 -- ============================================================

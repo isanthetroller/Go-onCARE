@@ -110,6 +110,75 @@ class SettingsPage(QWidget):
         self._discount_ids: list[int] = []
         self._load_discount_types()
 
+        # ── Tax & Deduction Settings ───────────────────────────────
+        lay.addWidget(self._section("Tax && Deduction Rates"))
+        tax_card = self._card()
+        tl = QVBoxLayout(tax_card); tl.setContentsMargins(20, 16, 20, 16); tl.setSpacing(12)
+
+        tax_info = QLabel(
+            "Configure automatic payroll deductions applied to every paycheck request.\n"
+            "Philippine statutory rates (2025):\n"
+            "• SSS Employee Share: 4.5% of salary (RA 11199, 2025 contribution schedule)\n"
+            "• PhilHealth Employee Share: 2.5% of salary (5% premium split 50/50 – "
+            "PhilHealth Circular 2024-0009)\n"
+            "• Hospital Share: custom percentage retained by the hospital for operations"
+        )
+        tax_info.setStyleSheet("font-size: 12px; color: #7F8C8D;")
+        tax_info.setWordWrap(True)
+        tl.addWidget(tax_info)
+
+        # SSS
+        sss_row = QHBoxLayout(); sss_row.setSpacing(10)
+        sss_lbl = QLabel("SSS Employee Rate (%):"); sss_lbl.setMinimumWidth(200)
+        sss_lbl.setStyleSheet("font-weight: bold; font-size: 13px;")
+        sss_row.addWidget(sss_lbl)
+        self._sss_spin = QDoubleSpinBox()
+        self._sss_spin.setRange(0.0, 50.0); self._sss_spin.setDecimals(3)
+        self._sss_spin.setSingleStep(0.5); self._sss_spin.setSuffix(" %")
+        self._sss_spin.setObjectName("formCombo"); self._sss_spin.setMinimumHeight(38)
+        sss_row.addWidget(self._sss_spin)
+        sss_row.addStretch()
+        tl.addLayout(sss_row)
+
+        # PhilHealth
+        phil_row = QHBoxLayout(); phil_row.setSpacing(10)
+        phil_lbl = QLabel("PhilHealth Employee Rate (%):"); phil_lbl.setMinimumWidth(200)
+        phil_lbl.setStyleSheet("font-weight: bold; font-size: 13px;")
+        phil_row.addWidget(phil_lbl)
+        self._phil_spin = QDoubleSpinBox()
+        self._phil_spin.setRange(0.0, 50.0); self._phil_spin.setDecimals(3)
+        self._phil_spin.setSingleStep(0.5); self._phil_spin.setSuffix(" %")
+        self._phil_spin.setObjectName("formCombo"); self._phil_spin.setMinimumHeight(38)
+        phil_row.addWidget(self._phil_spin)
+        phil_row.addStretch()
+        tl.addLayout(phil_row)
+
+        # Hospital Share
+        hosp_row = QHBoxLayout(); hosp_row.setSpacing(10)
+        hosp_lbl = QLabel("Hospital Share Rate (%):"); hosp_lbl.setMinimumWidth(200)
+        hosp_lbl.setStyleSheet("font-weight: bold; font-size: 13px;")
+        hosp_row.addWidget(hosp_lbl)
+        self._hosp_spin = QDoubleSpinBox()
+        self._hosp_spin.setRange(0.0, 50.0); self._hosp_spin.setDecimals(3)
+        self._hosp_spin.setSingleStep(1.0); self._hosp_spin.setSuffix(" %")
+        self._hosp_spin.setObjectName("formCombo"); self._hosp_spin.setMinimumHeight(38)
+        hosp_row.addWidget(self._hosp_spin)
+        hosp_row.addStretch()
+        tl.addLayout(hosp_row)
+
+        tax_btn_row = QHBoxLayout(); tax_btn_row.setSpacing(8)
+        save_tax_btn = self._action_btn("Save Tax Rates")
+        save_tax_btn.clicked.connect(self._save_tax_settings)
+        tax_btn_row.addWidget(save_tax_btn)
+        reset_tax_btn = self._action_btn("Reset to Defaults")
+        reset_tax_btn.clicked.connect(self._reset_tax_defaults)
+        tax_btn_row.addWidget(reset_tax_btn)
+        tax_btn_row.addStretch()
+        tl.addLayout(tax_btn_row)
+
+        lay.addWidget(tax_card)
+        self._load_tax_settings()
+
         # ── Database Overview ──────────────────────────────────────
         lay.addWidget(self._section("Database Overview"))
         self.counts_table = make_read_only_table(
@@ -356,6 +425,59 @@ class SettingsPage(QWidget):
                     QMessageBox.information(self, "Done", f"Discount type '{name}' deleted.")
                 else:
                     QMessageBox.warning(self, "Error", f"Failed to delete '{name}'.")
+
+    # ── Tax & Deduction Settings ───────────────────────────────────────
+    def _load_tax_settings(self):
+        if not self._backend or not hasattr(self, "_sss_spin"):
+            return
+        rates = self._backend.get_tax_rates() or {}
+        self._sss_spin.setValue(rates.get("sss_rate", 4.5))
+        self._phil_spin.setValue(rates.get("philhealth_rate", 2.5))
+        self._hosp_spin.setValue(rates.get("hospital_share_rate", 10.0))
+
+    def _save_tax_settings(self):
+        if not self._backend:
+            return
+        sss = self._sss_spin.value()
+        phil = self._phil_spin.value()
+        hosp = self._hosp_spin.value()
+        total = sss + phil + hosp
+        if total > 80:
+            QMessageBox.warning(self, "Validation",
+                                f"Total deduction is {total:.1f}% — this is unreasonably high.\n"
+                                "Please check your rates.")
+            return
+        reply = QMessageBox.question(
+            self, "Confirm Tax Rate Update",
+            f"Save these deduction rates?\n\n"
+            f"  SSS Employee Share:  {sss:.3f}%\n"
+            f"  PhilHealth Share:    {phil:.3f}%\n"
+            f"  Hospital Share:      {hosp:.3f}%\n"
+            f"  ─────────────────\n"
+            f"  Total Deduction:     {total:.3f}%\n\n"
+            "This will apply to all future paycheck requests.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        self._backend.update_tax_setting("sss_rate", sss)
+        self._backend.update_tax_setting("philhealth_rate", phil)
+        self._backend.update_tax_setting("hospital_share_rate", hosp)
+        QMessageBox.information(self, "Saved", "Tax deduction rates updated successfully.")
+
+    def _reset_tax_defaults(self):
+        """Reset to Philippine statutory defaults (2025)."""
+        reply = QMessageBox.question(
+            self, "Reset to Defaults",
+            "Reset to Philippine statutory defaults?\n\n"
+            "  SSS:        4.500%   (RA 11199)\n"
+            "  PhilHealth: 2.500%   (Circular 2024-0009)\n"
+            "  Hospital:  10.000%",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply == QMessageBox.StandardButton.Yes:
+            self._sss_spin.setValue(4.5)
+            self._phil_spin.setValue(2.5)
+            self._hosp_spin.setValue(10.0)
+            self._save_tax_settings()
 
 # ══════════════════════════════════════════════════════════════════════
 #  Discount Type Add/Edit Dialog

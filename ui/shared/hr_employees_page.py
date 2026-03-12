@@ -311,6 +311,15 @@ class HREmployeesPage(QWidget):
         pr_header.addWidget(pr_title)
         pr_header.addStretch()
 
+        # Search
+        self._pr_search = QLineEdit()
+        self._pr_search.setObjectName("formInput")
+        self._pr_search.setPlaceholderText("Search by employee name...")
+        self._pr_search.setMinimumHeight(36)
+        self._pr_search.setMaximumWidth(220)
+        self._pr_search.textChanged.connect(self._apply_pr_search)
+        pr_header.addWidget(self._pr_search)
+
         req_btn = QPushButton("+ Request Paycheck")
         req_btn.setObjectName("actionBtn"); req_btn.setMinimumHeight(36)
         req_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -327,14 +336,16 @@ class HREmployeesPage(QWidget):
         pr_header.addWidget(self._pr_status_filter)
         pr_lay.addLayout(pr_header)
 
-        self._pr_table = make_read_only_table(
-            ["Employee", "Role", "Amount", "Period", "Status", "Actions"],
-            min_h=200, row_h=44)
-        self._pr_table.horizontalHeader().setSectionResizeMode(
-            5, QHeaderView.ResizeMode.Fixed)
-        self._pr_table.setColumnWidth(5, 180)
-        self._pr_table.horizontalHeader().setStretchLastSection(False)
+        self._pr_table = make_action_table(
+            ["Employee", "Role", "Gross", "SSS", "PhilHealth", "Hospital",
+             "Net Amount", "Period", "Status", "Actions"],
+            min_h=260, row_h=44, action_col_width=180)
+        self._pr_table.setSortingEnabled(True)
         pr_lay.addWidget(self._pr_table)
+
+        self._pr_summary = QLabel()
+        self._pr_summary.setObjectName("mutedSummary")
+        pr_lay.addWidget(self._pr_summary)
         lay.addWidget(pr_card)
 
         # ── Department Payroll ────────────────────────────────────
@@ -742,6 +753,7 @@ class HREmployeesPage(QWidget):
         """Load paycheck requests into the payroll tab table."""
         if not hasattr(self, "_pr_table"):
             return
+        self._pr_table.setSortingEnabled(False)
         filt = self._pr_status_filter.currentText()
         all_reqs = self._backend.get_all_paycheck_requests() or []
         if filt == "All":
@@ -753,15 +765,28 @@ class HREmployeesPage(QWidget):
         for req in reqs:
             r = self._pr_table.rowCount()
             self._pr_table.insertRow(r)
-            amount = float(req.get("amount", 0) or 0)
+            gross = float(req.get("amount", 0) or 0)
+            sss = float(req.get("sss_deduction", 0) or 0)
+            phil = float(req.get("philhealth_deduction", 0) or 0)
+            hosp = float(req.get("hospital_share", 0) or 0)
+            net = float(req.get("net_amount", 0) or 0)
             period = f"{req.get('period_from', '')} to {req.get('period_until', '')}"
-            self._pr_table.setItem(r, 0, QTableWidgetItem(req.get("employee_name", "")))
-            self._pr_table.setItem(r, 1, QTableWidgetItem(req.get("role_name", "")))
-            self._pr_table.setItem(r, 2, QTableWidgetItem(f"₱{amount:,.2f}"))
-            self._pr_table.setItem(r, 3, QTableWidgetItem(period))
-            status_item = QTableWidgetItem(req.get("status", ""))
-            status_item.setForeground(QColor(status_color(req.get("status", ""))))
-            self._pr_table.setItem(r, 4, status_item)
+            values = [
+                req.get("employee_name", ""),
+                req.get("role_name", ""),
+                f"₱{gross:,.2f}",
+                f"₱{sss:,.2f}",
+                f"₱{phil:,.2f}",
+                f"₱{hosp:,.2f}",
+                f"₱{net:,.2f}",
+                period,
+                req.get("status", ""),
+            ]
+            for c, val in enumerate(values):
+                item = QTableWidgetItem(str(val))
+                if c == 8:  # Status
+                    item.setForeground(QColor(status_color(val)))
+                self._pr_table.setItem(r, c, item)
 
             parts = []
             status = req.get("status", "")
@@ -782,7 +807,22 @@ class HREmployeesPage(QWidget):
                 lbl.setStyleSheet("font-size: 11px; color: #E8B931; font-weight: bold;")
                 parts.append(lbl)
             if parts:
-                self._pr_table.setCellWidget(r, 5, make_action_cell(*parts))
+                self._pr_table.setCellWidget(r, 9, make_action_cell(*parts))
+
+        total = len(reqs)
+        pending = sum(1 for r in reqs if r.get("status") == "Pending")
+        self._pr_summary.setText(
+            f"Showing {total} request{'s' if total != 1 else ''}"
+            f" · {pending} pending")
+        self._pr_table.setSortingEnabled(True)
+
+    def _apply_pr_search(self, _=None):
+        """Filter paycheck table by employee name search."""
+        text = self._pr_search.text().strip().lower()
+        for r in range(self._pr_table.rowCount()):
+            name = self._pr_table.item(r, 0)
+            show = not text or (name and text in name.text().lower())
+            self._pr_table.setRowHidden(r, not show)
 
     def _on_request_paycheck(self):
         """HR submits a paycheck request for an employee."""
