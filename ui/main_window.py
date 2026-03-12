@@ -51,7 +51,7 @@ _ROLE_ACCESS = {
     "Receptionist": {"Dashboard", "Patients", "Appointments", "Clinical && POS", "Settings"},
     "Nurse":        {"Dashboard", "Patients", "Clinical && POS", "Settings"},
     "Doctor":       {"Dashboard", "Patients", "Appointments", "Clinical && POS", "Data Analytics", "Settings"},
-    "Finance":      {"Dashboard", "Payroll", "Activity Log", "Settings"},
+    "Finance":      {"Dashboard", "Payroll", "Employees", "Settings"},
 }
 
 

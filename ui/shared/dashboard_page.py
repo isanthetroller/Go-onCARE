@@ -52,6 +52,11 @@ class DashboardPage(QWidget):
                 ("nurse_in_queue",  "Total In Queue",    "#388087"),
                 ("active_staff",    "Active Staff",      "#C2EDCE"),
             ]
+        elif self._role == "Finance":
+            self._kpi_cards_data = [
+                ("today_revenue",   "Today's Revenue",      "#388087"),
+                ("active_staff",    "Active Staff",         "#5CB85C"),
+            ]
         else:
             self._kpi_cards_data = [
                 ("today_appts",     "Today's Appointments", "#388087"),
@@ -77,6 +82,10 @@ class DashboardPage(QWidget):
         elif self._role == "HR":
             quick_actions = [
                 ("Manage Staff", "emp_active", 5), ("Activity Log", "nav_activity_log", 6),
+            ]
+        elif self._role == "Finance":
+            quick_actions = [
+                ("Payroll", "money", 8), ("View Employees", "emp_active", 5),
             ]
         _W = QColor("#FFFFFF")
         for text, icon_key, pi in quick_actions:
@@ -126,6 +135,8 @@ class DashboardPage(QWidget):
         if self._role == "Nurse":
             cols.addWidget(self._nurse_queue_card(), 3)
             cols.addWidget(self._nurse_summary_card(), 2)
+        elif self._role == "Finance":
+            pass  # Finance doesn't need schedule/chart cards
         else:
             cols.addWidget(self._schedule_card(), 3)
             cols.addWidget(self._chart_card(), 2)
@@ -181,6 +192,7 @@ class DashboardPage(QWidget):
             "Nurse": "Your triage queue \u2014 call patients and record their vitals.",
             "Receptionist": "Today's appointments and billing at a glance.",
             "HR": "Staff management, leave requests, and team overview.",
+            "Finance": "Payroll approvals, revenue tracking, and financial overview.",
         }
         desc = QLabel(_banner_subtitles.get(self._role,
                        "Here's what's happening at the hospital today."))
@@ -631,6 +643,8 @@ class DashboardPage(QWidget):
         if self._role == "Nurse":
             self._refresh_nurse_queue()
             self._refresh_nurse_summary()
+        elif self._role == "Finance":
+            pass  # Finance KPIs handled by _refresh_kpis
         else:
             self._refresh_schedule()
             self._refresh_chart()

@@ -86,17 +86,30 @@ class PayrollPage(QWidget):
         self._search.setPlaceholderText("Search by employee name...")
         self._search.setMinimumHeight(36)
         self._search.setMaximumWidth(250)
-        self._search.textChanged.connect(self._apply_search)
+        self._search.textChanged.connect(self._apply_filters)
         bar.addWidget(self._search)
 
-        bar.addStretch()
+        bar.addWidget(QLabel("Role:"))
+        self._role_filter = QComboBox()
+        self._role_filter.setObjectName("formCombo")
+        self._role_filter.setMinimumHeight(36)
+        self._role_filter.addItems(["All Roles", "Doctor", "Nurse", "Receptionist", "Admin", "HR", "Finance"])
+        self._role_filter.currentTextChanged.connect(lambda _: self._apply_filters())
+        bar.addWidget(self._role_filter)
 
-        refresh_btn = QPushButton("Refresh")
-        refresh_btn.setObjectName("cleanupBtn")
-        refresh_btn.setMinimumHeight(36)
-        refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        refresh_btn.clicked.connect(self._load_data)
-        bar.addWidget(refresh_btn)
+        bar.addWidget(QLabel("Department:"))
+        self._dept_filter = QComboBox()
+        self._dept_filter.setObjectName("formCombo")
+        self._dept_filter.setMinimumHeight(36)
+        self._dept_filter.addItems([
+            "All Departments", "General Medicine", "Cardiology", "Dentistry",
+            "Pediatrics", "Laboratory", "Front Desk", "Management", "Pharmacy",
+            "Human Resources",
+        ])
+        self._dept_filter.currentTextChanged.connect(lambda _: self._apply_filters())
+        bar.addWidget(self._dept_filter)
+
+        bar.addStretch()
 
         lay.addWidget(bar_card)
 
@@ -109,7 +122,6 @@ class PayrollPage(QWidget):
         cols = ["Employee", "Role", "Department", "Gross", "SSS", "PhilHealth",
                 "Hospital", "Net Amount", "Period", "Requested By", "Status", "Actions"]
         self._table = make_action_table(cols, min_h=400, row_h=48, action_col_width=220)
-        self._table.setSortingEnabled(True)
         lay.addWidget(self._table)
 
         lay.addStretch()
@@ -185,14 +197,20 @@ class PayrollPage(QWidget):
 
         total = len(self._requests)
         self._summary.setText(f"Showing {total} request{'s' if total != 1 else ''}")
-        self._table.setSortingEnabled(True)
+        self._apply_filters()
 
-    def _apply_search(self, _=None):
+    def _apply_filters(self, _=None):
         text = self._search.text().strip().lower()
+        role = self._role_filter.currentText()
+        dept = self._dept_filter.currentText()
         for r in range(self._table.rowCount()):
-            name = self._table.item(r, 0)
-            show = not text or (name and text in name.text().lower())
-            self._table.setRowHidden(r, not show)
+            text_match = True
+            if text:
+                name = self._table.item(r, 0)
+                text_match = name and text in name.text().lower()
+            role_match = role == "All Roles" or (self._table.item(r, 1) and self._table.item(r, 1).text() == role)
+            dept_match = dept == "All Departments" or (self._table.item(r, 2) and self._table.item(r, 2).text() == dept)
+            self._table.setRowHidden(r, not (text_match and role_match and dept_match))
 
     # ── Actions ──────────────────────────────────────────────────
 

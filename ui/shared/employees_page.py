@@ -57,12 +57,15 @@ class EmployeesPage(QWidget):
                     item.setForeground(QColor(status_color(val)))
                 self.table.setItem(r, c, item)
 
-            # Actions: View | Edit
+            # Actions: View | Edit (View only for Finance)
             view_btn = make_table_btn("View")
             view_btn.clicked.connect(lambda checked, ri=r: self._on_view(ri))
-            edit_btn = make_table_btn("Edit")
-            edit_btn.clicked.connect(lambda checked, ri=r: self._on_edit(ri))
-            self.table.setCellWidget(r, 8, make_action_cell(view_btn, edit_btn))
+            if self._role == "Finance":
+                self.table.setCellWidget(r, 8, make_action_cell(view_btn))
+            else:
+                edit_btn = make_table_btn("Edit")
+                edit_btn.clicked.connect(lambda checked, ri=r: self._on_edit(ri))
+                self.table.setCellWidget(r, 8, make_action_cell(view_btn, edit_btn))
 
         # Stat cards
         stats = self._backend.get_hr_stats()
@@ -86,11 +89,12 @@ class EmployeesPage(QWidget):
         )
         banner_lay = banner.layout()
 
-        add_btn = QPushButton("＋  Add Employee")
-        add_btn.setObjectName("bannerBtn"); add_btn.setMinimumHeight(42)
-        add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        add_btn.clicked.connect(self._on_add)
-        banner_lay.addWidget(add_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
+        if self._role != "Finance":
+            add_btn = QPushButton("＋  Add Employee")
+            add_btn.setObjectName("bannerBtn"); add_btn.setMinimumHeight(42)
+            add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            add_btn.clicked.connect(self._on_add)
+            banner_lay.addWidget(add_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
         lay.addWidget(banner)
 
         # ── Stat cards ────────────────────────────────────────────
