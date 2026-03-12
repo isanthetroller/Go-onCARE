@@ -495,3 +495,171 @@ class EmployeeMixin:
             ORDER BY e.first_name,
                      FIELD(ds.day_of_week,'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')
         """)
+
+    # ── Paycheck Request System (HR→Finance workflow) ────────────
+
+    def submit_paycheck_request(self, employee_id, amount, period_from, period_until, requested_by_id):
+        """HR submits a paycheck request for an employee."""
+        try:
+            self.exec(
+                "INSERT INTO paycheck_requests (employee_id, amount, period_from, period_until, requested_by) "
+                "VALUES (%s, %s, %s, %s, %s)",
+                (employee_id, amount, period_from, period_until, requested_by_id))
+            name = self._get_employee_name(employee_id) or str(employee_id)
+            self.log_activity("Created", "Paycheck",
+                              f"Paycheck request for {name}: ₱{float(amount):,.2f} ({period_from} to {period_until})")
+            return True
+        except Exception as e:
+            traceback.print_exc()
+            return str(e)
+
+    def get_pending_paycheck_requests(self):
+        """Finance: get all pending paycheck requests."""
+        return self.fetch("""
+            SELECT pr.request_id, pr.employee_id,
+                   CONCAT(e.first_name,' ',e.last_name) AS employee_name,
+                   r.role_name, d.department_name,
+                   e.salary,
+                   pr.amount, pr.period_from, pr.period_until,
+                   pr.status, pr.created_at,
+                   CONCAT(h.first_name,' ',h.last_name) AS requested_by_name
+            FROM paycheck_requests pr
+            INNER JOIN employees e ON pr.employee_id = e.employee_id
+            INNER JOIN roles r ON e.role_id = r.role_id
+            INNER JOIN departments d ON e.department_id = d.department_id
+            INNER JOIN employees h ON pr.requested_by = h.employee_id
+            WHERE pr.status = 'Pending'
+            ORDER BY pr.created_at ASC
+        """)
+
+    def get_all_paycheck_requests(self):
+        """Get all paycheck requests (all statuses)."""
+        return self.fetch("""
+            SELECT pr.request_id, pr.employee_id,
+                   CONCAT(e.first_name,' ',e.last_name) AS employee_name,
+                   r.role_name, d.department_name,
+                   e.salary,
+                   pr.amount, pr.period_from, pr.period_until,
+                   pr.status, pr.finance_note, pr.decided_at,
+                   pr.disbursed_at, pr.created_at,
+                   CONCAT(h.first_name,' ',h.last_name) AS requested_by_name,
+                   CASE WHEN pr.finance_decided_by IS NOT NULL
+                        THEN (SELECT CONCAT(f.first_name,' ',f.last_name)
+                              FROM employees f WHERE f.employee_id = pr.finance_decided_by)
+                        ELSE NULL END AS decided_by_name
+            FROM paycheck_requests pr
+            INNER JOIN employees e ON pr.employee_id = e.employee_id
+            INNER JOIN roles r ON e.role_id = r.role_id
+            INNER JOIN departments d ON e.department_id = d.department_id
+            INNER JOIN employees h ON pr.requested_by = h.employee_id
+            ORDER BY pr.created_at DESC
+        """)
+
+    def get_employee_activity_for_period(self, employee_id, from_date, to_date):
+        """Return appointments and services for an employee during a period."""
+        return self.fetch("""
+            SELECT a.appointment_id, a.appointment_date, a.appointment_time,
+                   CONCAT(p.first_name,' ',p.last_name) AS patient_name,
+                   s.service_name, s.price, a.status
+            FROM appointments a
+            INNER JOIN patients p ON a.patient_id = p.patient_id
+            INNER JOIN services s ON a.service_id = s.service_id
+            WHERE a.doctor_id = %s
+              AND a.appointment_date BETWEEN %s AND %s
+            ORDER BY a.appointment_date DESC, a.appointment_time DESC
+        """, (employee_id, from_date, to_date))
+
+    def approve_paycheck_request(self, request_id, finance_employee_id, note=""):
+        """Finance approves a paycheck request."""
+        try:
+            conn = self._get_connection()
+            with conn.cursor(dictionary=True) as cur:
+                cur.execute("SELECT * FROM paycheck_requests WHERE request_id=%s AND status='Pending'",
+                            (request_id,))
+                req = cur.fetchone()
+                if not req:
+                    return "Request not found or already decided."
+                cur.execute(
+                    "UPDATE paycheck_requests SET status='Approved', finance_decided_by=%s, "
+                    "finance_note=%s, decided_at=NOW() WHERE request_id=%s",
+                    (finance_employee_id, note, request_id))
+                emp_name = self._get_employee_name(req["employee_id"]) or str(req["employee_id"])
+                # Notify the HR who requested
+                msg = f"Paycheck request for {emp_name} (₱{float(req['amount']):,.2f}) has been approved."
+                cur.execute(
+                    "INSERT INTO notifications (employee_id, message) VALUES (%s, %s)",
+                    (req["requested_by"], msg))
+                conn.commit()
+            self.log_activity("Approved", "Paycheck",
+                              f"Approved paycheck for {emp_name}: ₱{float(req['amount']):,.2f}")
+            return True
+        except Exception as e:
+            traceback.print_exc()
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            return str(e)
+
+    def reject_paycheck_request(self, request_id, finance_employee_id, note):
+        """Finance rejects a paycheck request with a reason."""
+        try:
+            conn = self._get_connection()
+            with conn.cursor(dictionary=True) as cur:
+                cur.execute("SELECT * FROM paycheck_requests WHERE request_id=%s AND status='Pending'",
+                            (request_id,))
+                req = cur.fetchone()
+                if not req:
+                    return "Request not found or already decided."
+                cur.execute(
+                    "UPDATE paycheck_requests SET status='Rejected', finance_decided_by=%s, "
+                    "finance_note=%s, decided_at=NOW() WHERE request_id=%s",
+                    (finance_employee_id, note, request_id))
+                emp_name = self._get_employee_name(req["employee_id"]) or str(req["employee_id"])
+                msg = f"Paycheck request for {emp_name} has been rejected. Reason: {note}"
+                cur.execute(
+                    "INSERT INTO notifications (employee_id, message) VALUES (%s, %s)",
+                    (req["requested_by"], msg))
+                conn.commit()
+            self.log_activity("Rejected", "Paycheck",
+                              f"Rejected paycheck for {emp_name}: {note}")
+            return True
+        except Exception as e:
+            traceback.print_exc()
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            return str(e)
+
+    def disburse_paycheck(self, request_id):
+        """HR marks an approved paycheck as disbursed."""
+        try:
+            conn = self._get_connection()
+            with conn.cursor(dictionary=True) as cur:
+                cur.execute("SELECT * FROM paycheck_requests WHERE request_id=%s AND status='Approved'",
+                            (request_id,))
+                req = cur.fetchone()
+                if not req:
+                    return "Request not found or not yet approved."
+                cur.execute(
+                    "UPDATE paycheck_requests SET status='Disbursed', disbursed_at=NOW() "
+                    "WHERE request_id=%s",
+                    (request_id,))
+                emp_name = self._get_employee_name(req["employee_id"]) or str(req["employee_id"])
+                # Notify the employee
+                msg = f"Your paycheck of ₱{float(req['amount']):,.2f} for period {req['period_from']} to {req['period_until']} has been disbursed."
+                cur.execute(
+                    "INSERT INTO notifications (employee_id, message) VALUES (%s, %s)",
+                    (req["employee_id"], msg))
+                conn.commit()
+            self.log_activity("Edited", "Paycheck",
+                              f"Disbursed paycheck for {emp_name}: ₱{float(req['amount']):,.2f}")
+            return True
+        except Exception as e:
+            traceback.print_exc()
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            return str(e)

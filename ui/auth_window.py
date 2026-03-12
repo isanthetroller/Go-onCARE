@@ -277,6 +277,7 @@ class AuthWindow(QMainWindow):
             ("Nurse",        "sofia.reyes@carecrud.com", "nurse123",     "#6FB3B8"),
             ("Receptionist", "james.cruz@carecrud.com",  "reception123", "#E8B931"),
             ("HR",           "hr@carecrud.com",          "hr123",        "#C2EDCE"),
+            ("Finance",      "finance@carecrud.com",     "finance123",   "#9B59B6"),
         ]
         ql_row1 = QHBoxLayout(); ql_row1.setSpacing(6)
         ql_row2 = QHBoxLayout(); ql_row2.setSpacing(6)

@@ -283,7 +283,15 @@ class AppointmentDialog(QDialog):
         schedules = self._backend.get_doctor_schedules(doc_id) or []
 
         self._sched_table.setRowCount(len(schedules))
-        today_day = _DAY_NAMES[date.today().weekday()]
+        # Use appointment date for edit mode, today for new walk-ins
+        if self._is_edit and self._original_date:
+            try:
+                appt_d = datetime.strptime(self._original_date, "%Y-%m-%d").date()
+            except Exception:
+                appt_d = date.today()
+        else:
+            appt_d = date.today()
+        target_day = _DAY_NAMES[appt_d.weekday()]
         today_start = None
         today_end = None
 
@@ -294,7 +302,7 @@ class AppointmentDialog(QDialog):
             day_item = QTableWidgetItem(day)
             start_item = QTableWidgetItem(_format_time_display(start))
             end_item = QTableWidgetItem(_format_time_display(end))
-            if day == today_day:
+            if day == target_day:
                 today_start = start
                 today_end = end
                 for item in (day_item, start_item, end_item):
@@ -304,14 +312,15 @@ class AppointmentDialog(QDialog):
             self._sched_table.setItem(r, 1, start_item)
             self._sched_table.setItem(r, 2, end_item)
 
+        day_label = "today" if appt_d == date.today() else f"on {target_day}"
         if today_start and today_end:
             self._today_sched_label.setText(
-                f"Today ({today_day}):  {_format_time_display(today_start)}"
+                f"Available {day_label} ({target_day}):  {_format_time_display(today_start)}"
                 f" \u2013 {_format_time_display(today_end)}")
             self._today_sched_label.setStyleSheet(
                 "font-size: 13px; font-weight: bold; color: #27AE60;"
                 " padding: 8px; background: #E8F6F3; border-radius: 6px;")
-            self._sched_info.setText("Available today \u2014 time restricted to schedule hours")
+            self._sched_info.setText(f"Available {day_label} \u2014 time restricted to schedule hours")
             t_start = QTime.fromString(today_start, "HH:mm")
             t_end = QTime.fromString(today_end, "HH:mm")
             if t_start.isValid() and t_end.isValid():
@@ -321,12 +330,12 @@ class AppointmentDialog(QDialog):
                 elif self.time_edit.time() > t_end:
                     self.time_edit.setTime(t_start)
         else:
-            self._today_sched_label.setText(f"Not available today ({today_day})")
+            self._today_sched_label.setText(f"Not available {day_label} ({target_day})")
             self._today_sched_label.setStyleSheet(
                 "font-size: 13px; font-weight: bold; color: #D9534F;"
                 " padding: 8px; background: #FDECEA; border-radius: 6px;")
             self._sched_info.setText(
-                "This doctor has no schedule for today.\n"
+                f"This doctor has no schedule for {target_day}.\n"
                 "You can still create the appointment.")
             self.time_edit.setTimeRange(QTime(0, 0), QTime(23, 59))
 

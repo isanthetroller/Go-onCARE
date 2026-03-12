@@ -23,6 +23,7 @@
    - [Settings & Administration](#78-settings--administration)
    - [Activity Log](#79-activity-log)
    - [Global Search](#710-global-search)
+   - [Payroll & Finance Module](#711-payroll--finance-module)
 8. [How the Backend Works](#8-how-the-backend-works)
 9. [How the UI Works](#9-how-the-ui-works)
 10. [Database Relationships Explained](#10-database-relationships-explained)
@@ -46,7 +47,7 @@
 - Analytics and reporting
 - Activity logging (audit trail)
 
-It uses **5 user roles** — Admin, HR, Receptionist, Nurse, Doctor — each seeing only the pages and buttons relevant to their job.
+It uses **6 user roles** — Admin, HR, Receptionist, Nurse, Doctor, Finance — each seeing only the pages and buttons relevant to their job.
 
 **Walk-In Clinic Flow:** Patient arrives → Receptionist creates appointment (always today) → Auto-synced to queue as "Waiting" → Nurse calls next patient, records vitals & triage notes → Doctor calls next patient, conducts consultation → Doctor completes visit → Auto-invoice generated.
 
@@ -184,6 +185,7 @@ ui/
     employee_dialogs.py
     hr_employees_page.py
     hr_employee_dialogs.py
+    payroll_page.py          ← Finance payroll approval page
     analytics_page.py
     settings_page.py
     activity_log_page.py
@@ -198,13 +200,13 @@ database/
 
 ## 4. DATABASE DESIGN
 
-### All Tables (19 total)
+### All Tables (20 total)
 
 #### Lookup Tables (store fixed reference data)
 | Table | Purpose | Key Columns |
 |-------|---------|-------------|
 | `departments` | Hospital departments | department_id, department_name |
-| `roles` | User roles (Admin, Doctor, Nurse, Receptionist, HR) | role_id, role_name |
+| `roles` | User roles (Admin, Doctor, Nurse, Receptionist, HR, Finance) | role_id, role_name |
 | `services` | Medical services with prices | service_id, service_name, price, category, is_active |
 | `payment_methods` | How patients pay (Cash, GCash, etc.) | method_id, method_name |
 | `standard_conditions` | Common medical conditions list | condition_id, condition_name |
@@ -230,6 +232,7 @@ database/
 | `activity_log` | Audit trail | log_id, user_email, action, record_type, record_detail |
 | `leave_requests` | Employee leave applications | request_id, employee_id, leave_from, leave_until, status |
 | `notifications` | Messages to employees | notification_id, employee_id, message, is_read |
+| `paycheck_requests` | HR→Finance paycheck workflow | paycheck_id, employee_id, requested_by, approved_by, amount, period_start, period_end, status |
 
 ### How Tables Connect (Foreign Keys)
 
@@ -237,7 +240,7 @@ database/
 departments ←── employees ──→ roles
                     ↑
                     │ (doctor_id)
-                    ├── doctor_schedules (weekly availability per doctor)
+                    ├── doctwor_schedules (weekly availability per doctor)
 patients ──→ appointments ──→ services
    ↑              ↑
    │              │
@@ -250,6 +253,7 @@ patients ──→ appointments ──→ services
 users ──→ roles
 employees ──→ leave_requests
 employees ──→ notifications
+employees ──→ paycheck_requests (requested_by, approved_by, employee_id)
 queue_entries ──→ patients, employees, appointments (+ vitals + nurse_notes)
 activity_log (standalone, tracks everything)
 ```
@@ -307,19 +311,20 @@ This query **joins** the appointments table with patients and employees to get h
 
 ### What Each Role Can See:
 
-| Page | Admin | Doctor | Nurse | Receptionist | HR |
-|------|:-----:|:------:|:-----:|:------------:|:--:|
-| Dashboard | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Patients | ✅ Full CRUD | 👁️ View own | 👁️ View profiles | ✅ Full CRUD | ❌ |
-| Appointments | ✅ Full CRUD | 👁️ View/Confirm own | ❌ | ✅ Full CRUD + Doctor Availability | ❌ |
-| Clinical Queue | ✅ View | ✅ Call Next/Complete | ✅ Start Triage/Record Vitals & Notes | ❌ | ❌ |
-| Billing/POS | ✅ View | ❌ | ❌ | ✅ Create/Pay/Void invoices | ❌ |
-| Services & Pricing | ✅ Full CRUD | ❌ | ❌ | ❌ | ❌ |
-| Employees (Admin) | ✅ Full CRUD | ❌ | ❌ | ❌ | ❌ |
-| HR Module | ✅ + User Accounts | ❌ | ❌ | ❌ | ✅ |
-| Analytics | ✅ Full | ✅ Own stats | ❌ | ❌ | ❌ |
-| Activity Log | ✅ Full | ✅ | ❌ | ✅ | ✅ Logins only |
-| Settings | ✅ Full + DB mgmt | ✅ Profile only | ✅ Profile only | ✅ Profile only | ✅ Profile only |
+| Page | Admin | Doctor | Nurse | Receptionist | HR | Finance |
+|------|:-----:|:------:|:-----:|:------------:|:--:|:-------:|
+| Dashboard | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Patients | ✅ Full CRUD | 👁️ View own | 👁️ View profiles | ✅ Full CRUD | ❌ | ❌ |
+| Appointments | ✅ Full CRUD | 👁️ View/Confirm own | ❌ | ✅ Full CRUD + Doctor Availability | ❌ | ❌ |
+| Clinical Queue | ✅ View | ✅ Call Next/Complete | ✅ Start Triage/Record Vitals & Notes | ❌ | ❌ | ❌ |
+| Billing/POS | ✅ View | ❌ | ❌ | ✅ Create/Pay/Void invoices | ❌ | ❌ |
+| Services & Pricing | ✅ Full CRUD | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Employees (Admin) | ✅ Full CRUD | ❌ | ❌ | ❌ | ❌ | ❌ |
+| HR Module | ✅ + User Accounts | ❌ | ❌ | ❌ | ✅ | ❌ |
+| Payroll | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ Approve/Reject |
+| Analytics | ✅ Full | ✅ Own stats | ❌ | ❌ | ❌ | ❌ |
+| Activity Log | ✅ Full | ✅ | ❌ | ✅ | ✅ Full | ✅ |
+| Settings | ✅ Full + DB mgmt | ✅ Profile only | ✅ Profile only | ✅ Profile only | ✅ Profile only | ✅ Profile only |
 
 ### How It's Implemented:
 1. **Sidebar filtering**: `main_window.py` checks the role and only adds allowed menu items
@@ -801,6 +806,43 @@ Every important action in the system is recorded with:
    ```
 3. Results shown in a popup table (max 10 per category)
 4. Employee results hidden from non-admin roles
+
+---
+
+### 7.11 Payroll & Finance Module
+
+**Purpose:** Manages the paycheck workflow between HR and Finance roles.
+
+**Workflow:**
+1. **HR submits a paycheck request** — selects an employee, enters the amount (auto-filled from salary), and specifies the pay period (start/end dates)
+2. **Finance reviews the request** — can view all activity done by that employee during the pay period (appointments, logins, etc.) to verify work performed
+3. **Finance approves or rejects** — approves valid requests, rejects with a reason if something is wrong
+4. **HR disburses the paycheck** — once Finance approves, HR can mark the paycheck as disbursed (paid out)
+
+**Files involved:**
+- `backend/employees.py` — `submit_paycheck_request()`, `get_pending_paycheck_requests()`, `get_all_paycheck_requests()`, `get_employee_activity_for_period()`, `approve_paycheck_request()`, `reject_paycheck_request()`, `disburse_paycheck()`
+- `ui/shared/payroll_page.py` — `PayrollPage` (Finance-only page for approval workflow)
+- `ui/shared/hr_employees_page.py` — Paycheck request section in the Payroll & Staffing tab (HR submits and disburses)
+
+**Database table:** `paycheck_requests`
+| Column | Type | Description |
+|--------|------|-------------|
+| paycheck_id | INT PK | Auto-increment ID |
+| employee_id | INT FK | The employee being paid |
+| requested_by | INT FK | The HR employee who submitted the request |
+| approved_by | INT FK | The Finance employee who approved (NULL until approved) |
+| amount | DECIMAL(12,2) | Paycheck amount |
+| period_start / period_end | DATE | Pay period dates |
+| status | ENUM | Pending → Approved/Rejected → Disbursed |
+| created_at | TIMESTAMP | When the request was submitted |
+
+**Paycheck request statuses:**
+- **Pending** — waiting for Finance review
+- **Approved** — Finance approved, waiting for HR to disburse
+- **Rejected** — Finance rejected (with reason logged)
+- **Disbursed** — HR confirmed payout to employee
+
+**Access control:** Only the Finance role has the Payroll navigation tab. HR manages paycheck requests from the Payroll & Staffing tab within the HR Employees page.
 
 ---
 

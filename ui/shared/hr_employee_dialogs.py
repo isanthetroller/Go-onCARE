@@ -40,7 +40,7 @@ class HREmployeeDialog(EmployeeDialog):
         self.emergency_edit = QLineEdit()
         self.emergency_edit.setStyleSheet(self._INPUT_STYLE)
         self.emergency_edit.setPlaceholderText("Emergency contact (name – phone)")
-        self.emergency_edit.setMinimumHeight(38)
+        self.emergency_edit.setMinimumHeight(42)
         self.emergency_edit.setMaxLength(150)
 
         form.insertRow(notes_row, "Monthly Salary",    self.salary_spin)
@@ -249,7 +249,7 @@ class UserAccountDialog(QDialog):
                 self.role_combo.addItem(rn)
         else:
             self.role_combo.addItems(
-                ["Admin", "HR", "Doctor", "Nurse", "Receptionist"])
+                ["Admin", "HR", "Finance", "Doctor", "Nurse", "Receptionist"])
 
         note = QLabel(
             "⚠️  The user will be required to change their password on first login.")

@@ -485,13 +485,13 @@ QLabel#badgeActive {
 /* Line edits and text edits with the #formInput object name */
 QLineEdit#formInput,
 QTextEdit#formInput {
-    padding: 10px 14px 12px 14px;
+    padding: 8px 14px 10px 14px;
     border: 2px solid #BADFE7;
     border-radius: 10px;
     font-size: 13px;
     background-color: #F6F6F2;
     color: #2C3E50;
-    min-height: 18px;
+    min-height: 20px;
 }
 
 QLineEdit#formInput:focus,
@@ -502,13 +502,13 @@ QTextEdit#formInput:focus {
 
 /* Combo boxes with the #formCombo object name */
 QComboBox#formCombo {
-    padding: 10px 14px 12px 14px;
+    padding: 8px 14px 10px 14px;
     border: 2px solid #BADFE7;
     border-radius: 10px;
     font-size: 13px;
     background-color: #F6F6F2;
     color: #2C3E50;
-    min-height: 18px;
+    min-height: 20px;
 }
 
 QComboBox#formCombo:focus {
@@ -870,7 +870,7 @@ QLabel#bannerTitle {
     font-weight: bold;
     color: #FFFFFF;
     background: transparent;
-    padding: 2px 0px 14px 0px;
+    padding: 6px 0px 8px 0px;
 }
 
 /* Banner date line – more prominent than description */
@@ -887,7 +887,7 @@ QLabel#bannerSubtitle {
     font-size: 12px;
     color: rgba(255,255,255,0.65);
     background: transparent;
-    padding: 1px 0px 4px 0px;
+    padding: 2px 0px 6px 0px;
 }
 
 /* Translucent button placed inside the banner */
@@ -1104,14 +1104,15 @@ QMessageBox, QInputDialog {
     background-color: #FFFFFF;
     border: 1px solid #BADFE7;
     border-radius: 14px;
+    min-width: 380px;
 }
 
 QMessageBox QLabel, QInputDialog QLabel {
     color: #2C3E50;
     font-size: 13px;
-    min-width: 300px;
-    padding: 4px 0px;
-    line-height: 1.5;
+    min-width: 340px;
+    min-height: 40px;
+    padding: 6px 4px;
 }
 
 QMessageBox QLabel#qt_msgboxex_icon_label {

@@ -106,6 +106,52 @@ class DatabaseBase:
                 cur.execute("SELECT role_id FROM roles WHERE role_name='Nurse'")
                 if not cur.fetchone():
                     cur.execute("INSERT INTO roles (role_name) VALUES ('Nurse')")
+                # Ensure Finance role exists
+                cur.execute("SELECT role_id FROM roles WHERE role_name='Finance'")
+                if not cur.fetchone():
+                    cur.execute("INSERT INTO roles (role_name) VALUES ('Finance')")
+                # paycheck_requests table (HR→Finance payroll workflow)
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS paycheck_requests (
+                        request_id         INT AUTO_INCREMENT PRIMARY KEY,
+                        employee_id        INT NOT NULL,
+                        amount             DECIMAL(10,2) NOT NULL,
+                        period_from        DATE NOT NULL,
+                        period_until       DATE NOT NULL,
+                        requested_by       INT NOT NULL,
+                        status             ENUM('Pending','Approved','Rejected','Disbursed')
+                                           NOT NULL DEFAULT 'Pending',
+                        finance_decided_by INT DEFAULT NULL,
+                        finance_note       TEXT DEFAULT NULL,
+                        decided_at         DATETIME DEFAULT NULL,
+                        disbursed_at       DATETIME DEFAULT NULL,
+                        created_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (employee_id) REFERENCES employees(employee_id),
+                        FOREIGN KEY (requested_by) REFERENCES employees(employee_id),
+                        FOREIGN KEY (finance_decided_by) REFERENCES employees(employee_id)
+                    )
+                """)
+                # Ensure default Finance employee + user account exists
+                cur.execute("SELECT role_id FROM roles WHERE role_name='Finance'")
+                fin_role_row = cur.fetchone()
+                if fin_role_row:
+                    fin_role_id = fin_role_row.get("role_id") or fin_role_row[0]
+                    cur.execute("SELECT user_id FROM users WHERE email='finance@carecrud.com'")
+                    if not cur.fetchone():
+                        # Check if Management department exists, else use first dept
+                        cur.execute("SELECT department_id FROM departments WHERE department_name='Management'")
+                        dept_row = cur.fetchone()
+                        dept_id = (dept_row.get("department_id") if dept_row else None) or 7
+                        cur.execute(
+                            "INSERT INTO employees (first_name, last_name, role_id, department_id, "
+                            "employment_type, phone, email, hire_date, status, salary) "
+                            "VALUES ('Maria', 'Garcia', %s, %s, 'Full-time', '09173334455', "
+                            "'finance@carecrud.com', '2021-03-01', 'Active', 42000.00)",
+                            (fin_role_id, dept_id))
+                        cur.execute(
+                            "INSERT INTO users (email, password, full_name, role_id, must_change_password) "
+                            "VALUES ('finance@carecrud.com', 'finance123', 'Maria Garcia', %s, 0)",
+                            (fin_role_id,))
                 conn.commit()
         except Exception:
             pass

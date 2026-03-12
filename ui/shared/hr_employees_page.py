@@ -109,6 +109,10 @@ class HREmployeesPage(QWidget):
         # Leave requests
         self._load_leave_requests()
 
+        # Paycheck requests
+        if hasattr(self, "_pr_table"):
+            self._load_paycheck_requests()
+
         # User accounts (Admin only)
         if hasattr(self, "_users_table"):
             self._load_user_accounts()
@@ -214,7 +218,7 @@ class HREmployeesPage(QWidget):
 
         for attr, items, width in [
             ("role_filter",   ["All Roles", "Doctor", "Nurse", "Receptionist",
-                               "Admin", "HR"], 140),
+                               "Admin", "HR", "Finance"], 140),
             ("dept_filter",   ["All Departments", "General Medicine", "Cardiology",
                                "Dentistry", "Pediatrics", "Laboratory",
                                "Front Desk", "Management", "Pharmacy",
@@ -293,6 +297,43 @@ class HREmployeesPage(QWidget):
 
     def _build_payroll_tab(self):
         scroll, lay = self._make_tab_scroll()
+
+        # ── Paycheck Requests ─────────────────────────────────────
+        pr_card = make_card(min_height=280)
+        pr_lay = QVBoxLayout(pr_card)
+        pr_lay.setContentsMargins(16, 14, 16, 14); pr_lay.setSpacing(10)
+
+        pr_header = QHBoxLayout()
+        pr_title = QLabel("Paycheck Requests")
+        pr_title.setObjectName("cardTitle")
+        pr_header.addWidget(pr_title)
+        pr_header.addStretch()
+
+        req_btn = QPushButton("+ Request Paycheck")
+        req_btn.setObjectName("actionBtn"); req_btn.setMinimumHeight(36)
+        req_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        req_btn.clicked.connect(self._on_request_paycheck)
+        pr_header.addWidget(req_btn)
+
+        self._pr_status_filter = QComboBox()
+        self._pr_status_filter.setObjectName("formCombo")
+        self._pr_status_filter.addItems(["All", "Pending", "Approved", "Rejected", "Disbursed"])
+        self._pr_status_filter.setMinimumHeight(36)
+        self._pr_status_filter.setMinimumWidth(120)
+        self._pr_status_filter.currentTextChanged.connect(
+            lambda _: self._load_paycheck_requests())
+        pr_header.addWidget(self._pr_status_filter)
+        pr_lay.addLayout(pr_header)
+
+        self._pr_table = make_read_only_table(
+            ["Employee", "Role", "Amount", "Period", "Status", "Actions"],
+            min_h=200, row_h=44)
+        self._pr_table.horizontalHeader().setSectionResizeMode(
+            5, QHeaderView.ResizeMode.Fixed)
+        self._pr_table.setColumnWidth(5, 180)
+        self._pr_table.horizontalHeader().setStretchLastSection(False)
+        pr_lay.addWidget(self._pr_table)
+        lay.addWidget(pr_card)
 
         # ── Department Payroll ────────────────────────────────────
         dept_card = make_card(min_height=300)
@@ -770,3 +811,97 @@ class HREmployeesPage(QWidget):
                 self._load_user_accounts()
             else:
                 QMessageBox.warning(self, "Error", msg)
+
+    # ── Paycheck Request Management ──────────────────────────────
+
+    def _load_paycheck_requests(self):
+        """Load paycheck requests into the payroll tab table."""
+        if not hasattr(self, "_pr_table"):
+            return
+        filt = self._pr_status_filter.currentText()
+        all_reqs = self._backend.get_all_paycheck_requests() or []
+        if filt == "All":
+            reqs = all_reqs
+        else:
+            reqs = [r for r in all_reqs if r.get("status") == filt]
+        self._paycheck_requests = reqs
+        self._pr_table.setRowCount(0)
+        for req in reqs:
+            r = self._pr_table.rowCount()
+            self._pr_table.insertRow(r)
+            amount = float(req.get("amount", 0) or 0)
+            period = f"{req.get('period_from', '')} to {req.get('period_until', '')}"
+            self._pr_table.setItem(r, 0, QTableWidgetItem(req.get("employee_name", "")))
+            self._pr_table.setItem(r, 1, QTableWidgetItem(req.get("role_name", "")))
+            self._pr_table.setItem(r, 2, QTableWidgetItem(f"₱{amount:,.2f}"))
+            self._pr_table.setItem(r, 3, QTableWidgetItem(period))
+            status_item = QTableWidgetItem(req.get("status", ""))
+            status_item.setForeground(QColor(status_color(req.get("status", ""))))
+            self._pr_table.setItem(r, 4, status_item)
+
+            parts = []
+            status = req.get("status", "")
+            if status == "Approved":
+                disburse_btn = make_table_btn("Disburse")
+                disburse_btn.setObjectName("tblSuccessBtn")
+                disburse_btn.clicked.connect(lambda checked, ri=r: self._on_disburse_paycheck(ri))
+                parts.append(disburse_btn)
+            elif status in ("Rejected", "Disbursed"):
+                note = req.get("finance_note", "") or ""
+                decided = str(req.get("decided_at", "") or "")
+                lbl = QLabel(note if note else f"Done: {decided}" if decided else "—")
+                lbl.setStyleSheet("font-size: 11px; color: #7F8C8D;")
+                lbl.setWordWrap(True)
+                parts.append(lbl)
+            elif status == "Pending":
+                lbl = QLabel("Awaiting Finance")
+                lbl.setStyleSheet("font-size: 11px; color: #E8B931; font-weight: bold;")
+                parts.append(lbl)
+            if parts:
+                self._pr_table.setCellWidget(r, 5, make_action_cell(*parts))
+
+    def _on_request_paycheck(self):
+        """HR submits a paycheck request for an employee."""
+        from ui.shared.payroll_page import _PaycheckRequestDialog
+        dlg = _PaycheckRequestDialog(self, backend=self._backend)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            data = dlg.get_data()
+            hr_emp_id = self._backend.get_employee_id_by_email(
+                self._backend._current_user_email)
+            if not hr_emp_id:
+                QMessageBox.warning(self, "Error", "Could not determine your employee ID.")
+                return
+            ok = self._backend.submit_paycheck_request(
+                data["employee_id"], data["amount"],
+                data["period_from"], data["period_until"], hr_emp_id)
+            if ok is True:
+                QMessageBox.information(self, "Success",
+                    f"Paycheck request submitted for {data['employee_name']}.\n"
+                    "Finance will review and approve it.")
+                self._load_paycheck_requests()
+            else:
+                err = ok if isinstance(ok, str) else ""
+                QMessageBox.warning(self, "Error", f"Failed to submit request.\n{err}")
+
+    def _on_disburse_paycheck(self, row: int):
+        """HR marks an approved paycheck as disbursed."""
+        if row >= len(self._paycheck_requests):
+            return
+        req = self._paycheck_requests[row]
+        emp_name = req.get("employee_name", "")
+        amount = float(req.get("amount", 0) or 0)
+        reply = QMessageBox.question(
+            self, "Disburse Paycheck",
+            f"Mark paycheck of ₱{amount:,.2f} for {emp_name} as disbursed?\n\n"
+            "This confirms the employee has received the payment.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        ok = self._backend.disburse_paycheck(req.get("request_id"))
+        if ok is True:
+            QMessageBox.information(self, "Disbursed",
+                f"Paycheck for {emp_name} has been disbursed.")
+            self._load_paycheck_requests()
+        else:
+            err = ok if isinstance(ok, str) else ""
+            QMessageBox.warning(self, "Error", f"Failed to disburse.\n{err}")

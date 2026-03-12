@@ -20,6 +20,7 @@ from ui.shared.hr_employees_page  import HREmployeesPage
 from ui.shared.analytics_page     import AnalyticsPage
 from ui.shared.settings_page      import SettingsPage
 from ui.shared.activity_log_page  import ActivityLogPage
+from ui.shared.payroll_page       import PayrollPage
 from backend                      import AuthBackend
 
 
@@ -32,6 +33,7 @@ _ALL_NAV = [
     ("Employees",      5),
     ("Activity Log",   6),
     ("Settings",       7),
+    ("Payroll",        8),
 ]
 
 # Category groupings for the sidebar
@@ -39,7 +41,7 @@ _NAV_CATEGORIES = [
     ("OVERVIEW",      ["Dashboard"]),
     ("PATIENT CARE",  ["Patients", "Appointments", "Clinical && POS"]),
     ("INSIGHTS",      ["Data Analytics", "Activity Log"]),
-    ("ADMINISTRATION",["Employees", "Settings"]),
+    ("ADMINISTRATION",["Employees", "Payroll", "Settings"]),
 ]
 
 _ROLE_ACCESS = {
@@ -49,6 +51,7 @@ _ROLE_ACCESS = {
     "Receptionist": {"Dashboard", "Patients", "Appointments", "Clinical && POS", "Settings"},
     "Nurse":        {"Dashboard", "Patients", "Clinical && POS", "Settings"},
     "Doctor":       {"Dashboard", "Patients", "Appointments", "Clinical && POS", "Data Analytics", "Settings"},
+    "Finance":      {"Dashboard", "Payroll", "Activity Log", "Settings"},
 }
 
 
@@ -59,6 +62,7 @@ _NAV_TOOLTIPS = {
     "Clinical && POS": "Queue, billing, and records",
     "Data Analytics": "Reports, charts, and insights",
     "Employees":      "Staff directory and management",
+    "Payroll":        "Paycheck requests and approvals",
     "Activity Log":   "Audit trail of system actions",
     "Settings":       "Database, accounts, and profile",
 }
@@ -80,6 +84,7 @@ class MainWindow(QMainWindow):
         self._role = user_role
         self._user_name = user_name
         self._backend = AuthBackend()
+        self._backend.set_current_user(user_email, user_role)
         self._nav_buttons: list[QPushButton] = []
         self._nav_map: list[tuple[str, int]] = []
 
@@ -351,6 +356,10 @@ class MainWindow(QMainWindow):
         self._settings_page = SettingsPage(backend=self._backend, user_email=self._user, role=self._role)
         self.stack.addWidget(self._settings_page)
 
+        # 8 – Payroll
+        self._payroll_page = PayrollPage(backend=self._backend, role=self._role, user_email=self._user)
+        self.stack.addWidget(self._payroll_page)
+
         # Page-refresh map: stack index → (page_ref, refresh_method_name)
         self._page_refresh_map = {
             0: (self._dashboard_page,   "refresh"),
@@ -361,6 +370,7 @@ class MainWindow(QMainWindow):
             5: (self._employees_page,   "_load_from_db"),
             6: (self._activity_log_page,"refresh"),
             7: (self._settings_page,    "_refresh_counts"),
+            8: (self._payroll_page,     "_load_data"),
         }
 
         lay.addWidget(self.stack)

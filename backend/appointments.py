@@ -159,10 +159,14 @@ class AppointmentMixin:
             return False
 
     def update_appointment(self, appointment_id, data):
-        # Validate date range
-        ok, err = self._validate_appointment_date(data["date"])
-        if not ok:
-            return False
+        # Validate date range only if date changed from original
+        original = self.fetch("SELECT appointment_date FROM appointments WHERE appointment_id=%s",
+                              (appointment_id,), one=True)
+        original_date = str(original["appointment_date"]) if original else ""
+        if data["date"] != original_date:
+            ok, err = self._validate_appointment_date(data["date"])
+            if not ok:
+                return False
         pid = data.get("patient_id") or self._lookup_patient_id(data["patient_name"])
         if not pid:
             return False

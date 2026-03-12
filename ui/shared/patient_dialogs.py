@@ -19,7 +19,7 @@ class PatientDialog(QDialog):
     """Add / Edit patient dialog with emergency contact, blood type, condition picker."""
 
     _INPUT_STYLE = (
-        "QLineEdit, QTextEdit { padding: 10px 14px; border: 2px solid #BADFE7;"
+        "QLineEdit, QTextEdit { padding: 8px 14px 10px 14px; border: 2px solid #BADFE7;"
         " border-radius: 10px; font-size: 13px; background-color: #FFFFFF;"
         " color: #2C3E50; }"
         "QLineEdit:focus, QTextEdit:focus { border: 2px solid #388087; }"
@@ -57,7 +57,7 @@ class PatientDialog(QDialog):
             " background: #FFFFFF; }"
         )
         self._phone_frame.setStyleSheet(self._phone_normal_ss)
-        self._phone_frame.setFixedHeight(42)
+        self._phone_frame.setFixedHeight(44)
         phone_lay = QHBoxLayout(self._phone_frame)
         phone_lay.setContentsMargins(0, 0, 0, 0)
         phone_lay.setSpacing(0)
@@ -102,24 +102,40 @@ class PatientDialog(QDialog):
                 f"{dt['type_name']} ({float(dt['discount_percent']):.0f}%)",
                 dt['discount_id'])
 
-        # Condition picker – styled checkboxes in a scrollable frame
+        # Condition picker – searchable checkbox list
         self._cond_checkboxes = []
+        cond_container = QWidget()
+        cond_outer = QVBoxLayout(cond_container)
+        cond_outer.setContentsMargins(0, 0, 0, 0)
+        cond_outer.setSpacing(6)
+
+        self._cond_search = QLineEdit()
+        self._cond_search.setPlaceholderText("Search conditions…")
+        self._cond_search.setStyleSheet(
+            "QLineEdit { padding: 8px 12px; border: 2px solid #BADFE7;"
+            " border-radius: 8px; font-size: 12px; background: #FFFFFF; }"
+            "QLineEdit:focus { border-color: #388087; }")
+        self._cond_search.setMinimumHeight(34)
+        self._cond_search.textChanged.connect(self._filter_conditions)
+        cond_outer.addWidget(self._cond_search)
+
         self._cond_frame = QFrame()
         self._cond_frame.setStyleSheet(
             "QFrame { border: 2px solid #BADFE7; border-radius: 10px;"
             " background: #F6F6F2; }"
         )
-        cond_grid = QGridLayout(self._cond_frame)
-        cond_grid.setContentsMargins(12, 10, 12, 10)
-        cond_grid.setSpacing(6)
-        self._load_standard_conditions(data, cond_grid)
+        self._cond_grid = QGridLayout(self._cond_frame)
+        self._cond_grid.setContentsMargins(12, 10, 12, 10)
+        self._cond_grid.setSpacing(6)
+        self._load_standard_conditions(data, self._cond_grid)
         cond_scroll = QScrollArea()
         cond_scroll.setWidget(self._cond_frame)
         cond_scroll.setWidgetResizable(True)
-        cond_scroll.setMaximumHeight(130)
+        cond_scroll.setMaximumHeight(160)
         cond_scroll.setStyleSheet(
             "QScrollArea { border: none; background: transparent; }"
         )
+        cond_outer.addWidget(cond_scroll)
         self.cond_custom = self._input("Other conditions (comma-separated)")
         self.cond_custom.setMaxLength(300)
 
@@ -138,7 +154,7 @@ class PatientDialog(QDialog):
         form.addRow("Emergency Contact", self.emergency_edit)
         form.addRow("Blood Type", self.blood_combo)
         form.addRow("Discount Category", self.discount_combo)
-        form.addRow("Conditions", cond_scroll)
+        form.addRow("Conditions", cond_container)
         form.addRow("Other Conditions", self.cond_custom)
         form.addRow("Status", self.status_combo)
         form.addRow("Notes", self.notes_edit)
@@ -192,7 +208,7 @@ class PatientDialog(QDialog):
             existing = {c.strip() for c in data["conditions"].split(",") if c.strip()}
         std = self._backend.get_standard_conditions() if self._backend else []
         std_names = {c["condition_name"] for c in std}
-        cols = 2
+        cols = 3
         for i, c in enumerate(std):
             cb = QCheckBox(c["condition_name"])
             cb.setStyleSheet(self._CB_STYLE)
@@ -203,6 +219,12 @@ class PatientDialog(QDialog):
         leftover = existing - std_names
         if leftover and hasattr(self, 'cond_custom'):
             self.cond_custom.setText(", ".join(sorted(leftover)))
+
+    def _filter_conditions(self, text: str):
+        """Show/hide condition checkboxes based on search text."""
+        needle = text.lower().strip()
+        for cb in self._cond_checkboxes:
+            cb.setVisible(needle in cb.text().lower() if needle else True)
 
     def get_data(self) -> dict:
         checked = [cb.text() for cb in self._cond_checkboxes if cb.isChecked()]
@@ -226,7 +248,7 @@ class PatientDialog(QDialog):
     @staticmethod
     def _input(placeholder: str) -> QLineEdit:
         le = QLineEdit(); le.setPlaceholderText(placeholder)
-        le.setObjectName("formInput"); le.setMinimumHeight(38); le.setMinimumWidth(320)
+        le.setObjectName("formInput"); le.setMinimumHeight(42); le.setMinimumWidth(320)
         return le
 
     def eventFilter(self, obj, event):

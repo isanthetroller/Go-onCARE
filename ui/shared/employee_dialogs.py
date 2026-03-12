@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QFrame,
     QDateEdit, QTabWidget, QMessageBox, QCheckBox, QTimeEdit,
-    QGroupBox,
+    QGroupBox, QScrollArea,
 )
 from PyQt6.QtCore import Qt, QDate, QEvent, QTime
 from PyQt6.QtGui import QColor
@@ -18,7 +18,7 @@ from ui.validators import NameValidator, PhoneDigitsValidator, validate_name, va
 # ══════════════════════════════════════════════════════════════════════
 class EmployeeDialog(QDialog):
     _INPUT_STYLE = (
-        "QLineEdit, QTextEdit { padding: 10px 14px; border: 2px solid #BADFE7;"
+        "QLineEdit, QTextEdit { padding: 8px 14px 10px 14px; border: 2px solid #BADFE7;"
         " border-radius: 10px; font-size: 13px; background-color: #FFFFFF;"
         " color: #2C3E50; }"
         "QLineEdit:focus, QTextEdit:focus { border: 2px solid #388087; }"
@@ -27,31 +27,69 @@ class EmployeeDialog(QDialog):
     def __init__(self, parent=None, *, title="Add Employee", data=None):
         super().__init__(parent)
         self.setWindowTitle(title)
-        self.setMinimumWidth(600)
+        self.setMinimumWidth(640)
         self._fired = False
 
-        form = QFormLayout(self)
+        main_lay = QVBoxLayout(self)
+        main_lay.setContentsMargins(28, 24, 28, 24)
+        main_lay.setSpacing(0)
+
+        # Dialog title header
+        header = QLabel(title)
+        header.setStyleSheet(
+            "font-size: 20px; font-weight: bold; color: #388087;"
+            " padding-bottom: 4px;")
+        header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        main_lay.addWidget(header)
+
+        sep = QFrame()
+        sep.setFixedHeight(1)
+        sep.setStyleSheet("background: #BADFE7;")
+        main_lay.addWidget(sep)
+        main_lay.addSpacing(14)
+
+        # Scrollable form area
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet(
+            "QScrollArea { border: none; background: transparent; }")
+        form_widget = QWidget()
+        form = QFormLayout(form_widget)
         form.setSpacing(14)
-        form.setContentsMargins(28, 28, 28, 28)
+        form.setContentsMargins(0, 0, 0, 0)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        scroll.setWidget(form_widget)
+        main_lay.addWidget(scroll, 1)
+        main_lay.addSpacing(10)
 
         self._build_fields(form)
-        self._build_buttons(form, data)
+        self._build_buttons(main_lay, data)
         if data:
             self._prefill(data)
 
     # ── Overridable hooks ─────────────────────────────────────────
+    def _section_label(self, text: str) -> QLabel:
+        lbl = QLabel(text)
+        lbl.setStyleSheet(
+            "font-size: 13px; font-weight: bold; color: #388087;"
+            " padding: 8px 0 2px 0; border: none; background: transparent;")
+        return lbl
+
     def _build_fields(self, form):
         """Create all form widgets and attach them to *form*."""
+        # ── Personal Information ──────────────────────────────────
+        form.addRow(self._section_label("Personal Information"))
+
         self.name_edit = QLineEdit()
         self.name_edit.setStyleSheet(self._INPUT_STYLE)
         self.name_edit.setPlaceholderText("Full name")
-        self.name_edit.setMinimumHeight(38)
+        self.name_edit.setMinimumHeight(42)
         self.name_edit.setMinimumWidth(320)
         self.name_edit.setValidator(NameValidator())
         self.name_edit.setMaxLength(100)
 
         self.role_combo = QComboBox(); self.role_combo.setObjectName("formCombo")
-        self.role_combo.addItems(["Doctor", "Nurse", "Receptionist", "Admin", "HR"])
+        self.role_combo.addItems(["Doctor", "Nurse", "Receptionist", "Admin", "HR", "Finance"])
         self.role_combo.setMinimumHeight(38)
 
         self.dept_combo = QComboBox(); self.dept_combo.setObjectName("formCombo")
@@ -77,7 +115,7 @@ class EmployeeDialog(QDialog):
             " background: #FFFFFF; }"
         )
         self._phone_frame.setStyleSheet(self._phone_normal_ss)
-        self._phone_frame.setFixedHeight(42)
+        self._phone_frame.setFixedHeight(44)
         phone_lay = QHBoxLayout(self._phone_frame)
         phone_lay.setContentsMargins(0, 0, 0, 0)
         phone_lay.setSpacing(0)
@@ -103,7 +141,7 @@ class EmployeeDialog(QDialog):
         self.email_edit = QLineEdit()
         self.email_edit.setStyleSheet(self._INPUT_STYLE)
         self.email_edit.setPlaceholderText("Email")
-        self.email_edit.setMinimumHeight(38)
+        self.email_edit.setMinimumHeight(42)
         self.email_edit.setMinimumWidth(320)
         self.email_edit.setMaxLength(150)
 
@@ -177,17 +215,23 @@ class EmployeeDialog(QDialog):
             lambda txt: self._schedule_group.setVisible(txt == "Doctor"))
 
         form.addRow("Full Name",   self.name_edit)
+        form.addRow("Phone",       self._phone_frame)
+        form.addRow("Email",       self.email_edit)
+
+        # ── Employment Details ────────────────────────────────────
+        form.addRow(self._section_label("Employment Details"))
         form.addRow("Role",        self.role_combo)
         form.addRow("Department",  self.dept_combo)
         form.addRow("Type",        self.type_combo)
-        form.addRow("Phone",       self._phone_frame)
-        form.addRow("Email",       self.email_edit)
         form.addRow("Hire Date",   self.hire_date)
         form.addRow("Status",      self.status_combo)
         form.addRow(self._schedule_group)
+
+        # ── Additional ───────────────────────────────────────────
+        form.addRow(self._section_label("Additional"))
         form.addRow("Notes",       self.notes_edit)
 
-    def _build_buttons(self, form, data):
+    def _build_buttons(self, parent_lay, data):
         btn_row = QHBoxLayout(); btn_row.setSpacing(12)
         if data:
             fire_btn = QPushButton("Fire")
@@ -208,7 +252,7 @@ class EmployeeDialog(QDialog):
         save_btn.clicked.connect(self.accept)
 
         btn_row.addWidget(cancel_btn); btn_row.addWidget(save_btn)
-        form.addRow(btn_row)
+        parent_lay.addLayout(btn_row)
 
     def _prefill(self, data):
         self.name_edit.setText(data.get("name", ""))

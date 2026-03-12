@@ -27,7 +27,7 @@ class ActivityLogPage(QWidget):
         scroll, lay = make_page_layout()
 
         # ── Banner ────────────────────────────────────────────────
-        sub = "Login activity of Doctors and Receptionists" if self._role == "HR" else "Audit trail of all system actions"
+        sub = "Audit trail of all system actions"
         lay.addWidget(make_banner("Activity Log", sub))
 
         # ── Filters row ──────────────────────────────────────────
@@ -46,7 +46,8 @@ class ActivityLogPage(QWidget):
         self._action_combo = QComboBox(); self._action_combo.setObjectName("formCombo")
         self._action_combo.setMinimumHeight(36)
         self._action_combo.addItems(["All", "Login", "Created", "Edited", "Deleted",
-                                       "Voided", "Merged", "Requested", "Approved", "Declined"])
+                                       "Voided", "Merged", "Requested", "Approved", "Declined",
+                                       "Rejected"])
         fr.addWidget(self._action_combo)
 
         self._type_label = QLabel("Type:")
@@ -54,16 +55,11 @@ class ActivityLogPage(QWidget):
         self._type_combo = QComboBox(); self._type_combo.setObjectName("formCombo")
         self._type_combo.setMinimumHeight(36)
         self._type_combo.addItems(["All", "User", "Patient", "Appointment", "Invoice",
-                                    "Service", "Employee", "Queue", "Leave",
+                                    "Service", "Employee", "Queue", "Leave", "Paycheck",
                                     "Condition", "Discount Type", "Notification", "System"])
         fr.addWidget(self._type_combo)
 
-        # Hide Action & Type filters for HR role
-        if self._role == "HR":
-            self._action_label.setVisible(False)
-            self._action_combo.setVisible(False)
-            self._type_label.setVisible(False)
-            self._type_combo.setVisible(False)
+        # HR now sees the full activity log like Admin
 
         fr.addWidget(QLabel("From:"))
         self._from_date = QDateEdit(); self._from_date.setCalendarPopup(True)
@@ -104,26 +100,14 @@ class ActivityLogPage(QWidget):
         from_d = self._from_date.date().toString("yyyy-MM-dd")
         to_d = self._to_date.date().toString("yyyy-MM-dd")
 
-        # HR role: only show Login activity from Doctor & Receptionist
-        if self._role == "HR":
-            rows = self._backend.get_activity_log(
-                limit=500,
-                user_filter=user if user else "",
-                action_filter="Login",
-                record_type_filter="",
-                from_date=from_d,
-                to_date=to_d,
-                include_roles=["Doctor", "Receptionist"],
-            )
-        else:
-            rows = self._backend.get_activity_log(
-                limit=500,
-                user_filter=user if user else "",
-                action_filter=action if action != "All" else "",
-                record_type_filter=rtype if rtype != "All" else "",
-                from_date=from_d,
-                to_date=to_d,
-            )
+        rows = self._backend.get_activity_log(
+            limit=500,
+            user_filter=user if user else "",
+            action_filter=action if action != "All" else "",
+            record_type_filter=rtype if rtype != "All" else "",
+            from_date=from_d,
+            to_date=to_d,
+        )
         self._table.setRowCount(len(rows))
         action_colors = ACTION_COLORS
         for r, row in enumerate(rows):

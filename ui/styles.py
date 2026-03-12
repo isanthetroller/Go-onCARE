@@ -50,12 +50,15 @@ STATUS_COLORS = {
     "Paid": "#5CB85C", "Unpaid": "#D9534F", "Partial": "#E8B931", "Voided": "#7F8C8D",
     # Billing
     "No Invoice": "#7F8C8D",
+    # Paycheck statuses
+    "Rejected": "#D9534F", "Disbursed": "#3498DB",
 }
 
 ACTION_COLORS = {
     "Login": "#388087", "Created": "#5CB85C", "Edited": "#E8B931",
     "Deleted": "#D9534F", "Voided": "#D9534F", "Merged": "#6FB3B8",
     "Requested": "#9B59B6", "Approved": "#27AE60", "Declined": "#C0392B",
+    "Rejected": "#C0392B", "Disbursed": "#3498DB",
 }
 
 # ── QSS loader ────────────────────────────────────────────────────────
@@ -151,28 +154,29 @@ def make_banner(title_text: str, subtitle_text: str,
                 btn_text: str = "", btn_slot=None):
     """Build a standard page banner (teal header bar).
 
-    Returns the banner QFrame.  If *btn_text* is given a bannerBtn is added to
-    the right side (connected to *btn_slot*).
+    Returns a wrapper QWidget that holds the banner QFrame.
+    If *btn_text* is given a bannerBtn is added to the right side
+    (connected to *btn_slot*).
     """
-    from PyQt6.QtWidgets import (QFrame, QHBoxLayout, QVBoxLayout, QLabel,
-                                 QPushButton, QGraphicsDropShadowEffect)
+    from PyQt6.QtWidgets import (QWidget, QFrame, QHBoxLayout, QVBoxLayout,
+                                 QLabel, QPushButton)
     from PyQt6.QtCore import Qt
-    from PyQt6.QtGui import QColor
+
+    # Outer wrapper prevents QGraphicsDropShadowEffect from clipping text
+    wrapper = QWidget()
+    wrapper.setContentsMargins(0, 0, 0, 0)
+    wrapper_lay = QVBoxLayout(wrapper)
+    wrapper_lay.setContentsMargins(0, 0, 0, 0)
 
     banner = QFrame()
     banner.setObjectName("pageBanner")
     banner.setMinimumHeight(100)
-    shadow = QGraphicsDropShadowEffect()
-    shadow.setBlurRadius(20)
-    shadow.setOffset(0, 4)
-    shadow.setColor(QColor(0, 0, 0, 15))
-    banner.setGraphicsEffect(shadow)
 
     banner_lay = QHBoxLayout(banner)
-    banner_lay.setContentsMargins(32, 20, 32, 20)
+    banner_lay.setContentsMargins(32, 24, 32, 24)
     banner_lay.setSpacing(0)
     tc = QVBoxLayout()
-    tc.setSpacing(4)
+    tc.setSpacing(6)
     t = QLabel(title_text)
     t.setObjectName("bannerTitle")
     s = QLabel(subtitle_text)
@@ -191,7 +195,8 @@ def make_banner(title_text: str, subtitle_text: str,
         btn.clicked.connect(btn_slot)
         banner_lay.addWidget(btn, alignment=Qt.AlignmentFlag.AlignVCenter)
 
-    return banner
+    wrapper_lay.addWidget(banner)
+    return wrapper
 
 
 def make_read_only_table(headers: list[str], *, min_h: int = 420,

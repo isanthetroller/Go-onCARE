@@ -607,6 +607,7 @@ NAV_ICON_MAP = {
     "Clinical && POS": "nav_clinical",
     "Data Analytics": "nav_analytics",
     "Employees":      "nav_employees",
+    "Payroll":        "money",
     "Activity Log":   "nav_activity_log",
     "Settings":       "nav_settings",
 }

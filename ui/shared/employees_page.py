@@ -125,7 +125,7 @@ class EmployeesPage(QWidget):
 
         self.role_filter = QComboBox()
         self.role_filter.setObjectName("formCombo")
-        self.role_filter.addItems(["All Roles", "Doctor", "Nurse", "Receptionist", "Admin", "HR"])
+        self.role_filter.addItems(["All Roles", "Doctor", "Nurse", "Receptionist", "Admin", "HR", "Finance"])
         self.role_filter.setMinimumHeight(42); self.role_filter.setMinimumWidth(140)
         self.role_filter.currentTextChanged.connect(lambda _: self._apply_filters())
         bar.addWidget(self.role_filter)
