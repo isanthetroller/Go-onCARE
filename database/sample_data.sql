@@ -8,10 +8,14 @@
 USE carecrud_db;
 
 -- Clear existing data (child tables first, then parents)
+DELETE FROM paycheck_requests;
+DELETE FROM notifications;
+DELETE FROM leave_requests;
 DELETE FROM invoice_items;
 DELETE FROM invoices;
 DELETE FROM queue_entries;
 DELETE FROM appointments;
+DELETE FROM doctor_schedules;
 DELETE FROM patient_conditions;
 DELETE FROM patients;
 DELETE FROM employees;
@@ -21,6 +25,7 @@ DELETE FROM activity_log;
 DELETE FROM standard_conditions;
 DELETE FROM payment_methods;
 DELETE FROM services;
+DELETE FROM discount_types;
 DELETE FROM roles;
 DELETE FROM departments;
 
@@ -42,10 +47,11 @@ INSERT INTO departments (department_id, department_name) VALUES
 
 INSERT INTO roles (role_id, role_name) VALUES
     (1, 'Doctor'),
-    (2, 'Cashier'),
+    (2, 'Nurse'),
     (3, 'Receptionist'),
     (4, 'Admin'),
-    (5, 'HR');
+    (5, 'HR'),
+    (6, 'Finance');
 
 INSERT INTO services (service_id, service_name, price, category, is_active) VALUES
     (1,  'General Checkup',          800.00,  'Consultation', 1),
@@ -87,9 +93,10 @@ INSERT INTO users (email, password, full_name, role_id) VALUES
     ('ana.reyes@carecrud.com',     'doctor123',    'Ana Reyes',     1),
     ('mark.tan@carecrud.com',      'doctor123',    'Mark Tan',      1),
     ('lisa.lim@carecrud.com',      'doctor123',    'Lisa Lim',      1),
-    ('sofia.reyes@carecrud.com',   'cashier123',   'Sofia Reyes',   2),
+    ('sofia.reyes@carecrud.com',   'nurse123',     'Sofia Reyes',   2),
     ('james.cruz@carecrud.com',    'reception123', 'James Cruz',    3),
-    ('hr@carecrud.com',            'hr123',        'Elena Ramos',   5);
+    ('hr@carecrud.com',            'hr123',        'Elena Ramos',   5),
+    ('finance@carecrud.com',       'finance123',   'Maria Garcia',  6);
 
 
 -- ────────────────────────────────────────────────────────────
@@ -112,7 +119,8 @@ INSERT INTO employees (employee_id, first_name, last_name, role_id, department_i
     (5, 'Sofia',  'Reyes',   2, 2, 'Full-time', '09174445566', 'sofia.reyes@carecrud.com',  '2022-04-12', 'Active',   NULL,         NULL,         28000.00),
     (6, 'James',  'Cruz',    3, 6, 'Full-time', '09177778899', 'james.cruz@carecrud.com',   '2021-07-01', 'Active',   NULL,         NULL,         25000.00),
     (7, 'Carlo',  'Santos',  4, 7, 'Full-time', '09176667788', 'carlo.santos@carecrud.com', '2019-01-05', 'Active',   NULL,         NULL,         70000.00),
-    (8, 'Elena',  'Ramos',   5, 9, 'Full-time', '09178889900', 'hr@carecrud.com',           '2020-01-15', 'Active',   NULL,         NULL,         45000.00);
+    (8, 'Elena',  'Ramos',   5, 9, 'Full-time', '09178889900', 'hr@carecrud.com',           '2020-01-15', 'Active',   NULL,         NULL,         45000.00),
+    (9, 'Maria',  'Garcia',  6, 7, 'Full-time', '09173334455', 'finance@carecrud.com',      '2021-03-01', 'Active',   NULL,         NULL,         42000.00);
 
 
 -- ────────────────────────────────────────────────────────────

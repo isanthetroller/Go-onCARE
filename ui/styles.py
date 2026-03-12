@@ -404,3 +404,134 @@ def make_action_cell(*buttons) -> "QWidget":
     for b in buttons:
         lay.addWidget(b)
     return w
+
+
+# ── Confirm Fire dialog (shared by employee pages) ──────────────────
+
+def confirm_fire_dialog(parent, name: str) -> bool:
+    """Show a styled 'Confirm Fire' dialog. Returns True if user confirmed."""
+    from PyQt6.QtWidgets import QMessageBox
+    from PyQt6.QtCore import Qt
+    msg = QMessageBox(parent)
+    msg.setWindowTitle("Confirm Fire")
+    msg.setText(f"Are you sure you want to fire {name}?")
+    msg.setIcon(QMessageBox.Icon.Warning)
+    yes_btn = msg.addButton("Yes, Fire", QMessageBox.ButtonRole.YesRole)
+    no_btn = msg.addButton("Cancel", QMessageBox.ButtonRole.NoRole)
+    yes_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+    no_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+    yes_btn.setStyleSheet(
+        "QPushButton { background-color: #D9534F; color: #FFF; border: none;"
+        " border-radius: 8px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
+        " QPushButton:hover { background-color: #C9302C; }"
+    )
+    no_btn.setStyleSheet(
+        "QPushButton { background-color: #FFFFFF; color: #2C3E50; border: 2px solid #BADFE7;"
+        " border-radius: 8px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
+        " QPushButton:hover { background-color: #F0F7F8; border-color: #388087; }"
+    )
+    msg.exec()
+    return msg.clickedButton() == yes_btn
+
+
+def confirm_action_dialog(parent, title: str, text: str, confirm_label: str = "Approve",
+                          confirm_color: str = "#5CB85C", confirm_hover: str = "#4CAE4C") -> bool:
+    """Show a styled confirmation dialog with custom button colors. Returns True if confirmed."""
+    from PyQt6.QtWidgets import QMessageBox
+    from PyQt6.QtCore import Qt
+    msg = QMessageBox(parent)
+    msg.setWindowTitle(title)
+    msg.setText(text)
+    msg.setIcon(QMessageBox.Icon.Question)
+    yes_btn = msg.addButton(confirm_label, QMessageBox.ButtonRole.YesRole)
+    no_btn = msg.addButton("Cancel", QMessageBox.ButtonRole.NoRole)
+    yes_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+    no_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+    yes_btn.setStyleSheet(
+        f"QPushButton {{ background-color: {confirm_color}; color: #FFF; border: none;"
+        f" border-radius: 8px; padding: 8px 24px; font-size: 13px; font-weight: bold; }}"
+        f" QPushButton:hover {{ background-color: {confirm_hover}; }}"
+    )
+    no_btn.setStyleSheet(
+        "QPushButton { background-color: #FFFFFF; color: #2C3E50; border: 2px solid #BADFE7;"
+        " border-radius: 8px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
+        " QPushButton:hover { background-color: #F0F7F8; border-color: #388087; }"
+    )
+    msg.exec()
+    return msg.clickedButton() == yes_btn
+
+
+def add_employee_common(parent, backend, dialog_data, load_callback):
+    """Shared logic for adding an employee (used by employees_page and hr_employees_page).
+    dialog_data = dict from EmployeeDialog/HREmployeeDialog.get_data()
+    Returns True if added, False otherwise.
+    """
+    from PyQt6.QtWidgets import QMessageBox
+    d = dialog_data
+    if not d["name"].strip():
+        QMessageBox.warning(parent, "Validation", "Employee name is required.")
+        return False
+    phone = d.get("phone", "").strip()
+    if phone and backend:
+        existing = backend.check_duplicate_phone(phone)
+        if existing:
+            QMessageBox.warning(parent, "Duplicate Phone",
+                f"Phone number {phone} is already assigned to "
+                f"{existing['full_name']} (ID: {existing['employee_id']}).")
+            return False
+    reply = QMessageBox.question(parent, "Confirm Add Employee",
+        f"Are you sure you want to add '{d['name']}' as a new employee?",
+        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+    if reply != QMessageBox.StandardButton.Yes:
+        return False
+    ok = backend.add_employee(d)
+    if ok is True:
+        if d.get("role") == "Doctor" and d.get("schedules"):
+            emp_id = backend.get_employee_id_by_email(d.get("email", ""))
+            if emp_id:
+                backend.save_doctor_schedules(emp_id, d["schedules"])
+        load_callback()
+        QMessageBox.information(parent, "Success", f"Employee '{d['name']}' added.")
+        return True
+    else:
+        err = ok if isinstance(ok, str) else ''
+        QMessageBox.warning(parent, "Error", f"Failed to save employee.\n{err}")
+        return False
+
+
+def edit_employee_common(parent, backend, emp_id, old_email, dialog_data, load_callback):
+    """Shared logic for editing an employee (used by employees_page and hr_employees_page).
+    Returns True if updated, False otherwise.
+    """
+    from PyQt6.QtWidgets import QMessageBox
+    d = dialog_data
+    if not d["name"].strip():
+        QMessageBox.warning(parent, "Validation", "Employee name is required.")
+        return False
+    ok = backend.update_employee(emp_id, d, old_email=old_email)
+    if ok is not True:
+        err = ok if isinstance(ok, str) else ''
+        QMessageBox.warning(parent, "Error", f"Failed to update employee.\n{err}")
+        return False
+    if d.get("role") == "Doctor" and "schedules" in d:
+        backend.save_doctor_schedules(emp_id, d["schedules"])
+    load_callback()
+    QMessageBox.information(parent, "Success", f"Employee '{d['name']}' updated.")
+    return True
+
+
+def delete_employee_common(parent, backend, emp_id, name, load_callback):
+    """Shared logic for deleting/firing an employee.
+    Returns True if deleted, False otherwise.
+    """
+    from PyQt6.QtWidgets import QMessageBox
+    if not confirm_fire_dialog(parent, name):
+        return False
+    ok = backend.delete_employee(emp_id)
+    if ok:
+        load_callback()
+        QMessageBox.information(parent, "Success", f"Employee '{name}' removed.")
+        return True
+    else:
+        QMessageBox.warning(parent, "Error", "Failed to delete employee.")
+        return False

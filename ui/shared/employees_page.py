@@ -10,7 +10,7 @@ from PyQt6.QtGui import QColor
 from ui.styles import (
     make_page_layout, finish_page, make_banner, make_read_only_table,
     make_action_table, make_card, make_stat_card, make_table_btn, status_color,
-    make_action_cell,
+    make_action_cell, add_employee_common, edit_employee_common, delete_employee_common,
 )
 from ui.shared.employee_dialogs import EmployeeDialog, EmployeeProfileDialog
 from backend import AuthBackend
@@ -65,7 +65,7 @@ class EmployeesPage(QWidget):
             self.table.setCellWidget(r, 8, make_action_cell(view_btn, edit_btn))
 
         # Stat cards
-        stats = self._backend.get_employee_stats()
+        stats = self._backend.get_hr_stats()
         for key, lbl in self._stat_labels.items():
             lbl.setText(str(stats.get(key, 0) or 0))
 
@@ -187,37 +187,7 @@ class EmployeesPage(QWidget):
     def _on_add(self):
         dlg = EmployeeDialog(self, title="Add Employee")
         if dlg.exec() == QDialog.DialogCode.Accepted:
-            d = dlg.get_data()
-            if not d["name"].strip():
-                QMessageBox.warning(self, "Validation", "Employee name is required.")
-                return
-            # Check for duplicate phone number
-            phone = d.get("phone", "").strip()
-            if phone and self._backend:
-                existing = self._backend.check_duplicate_phone(phone)
-                if existing:
-                    QMessageBox.warning(self, "Duplicate Phone",
-                        f"Phone number {phone} is already assigned to "
-                        f"{existing['full_name']} (ID: {existing['employee_id']}).")
-                    return
-            # Confirmation dialog
-            reply = QMessageBox.question(self, "Confirm Add Employee",
-                f"Are you sure you want to add '{d['name']}' as a new employee?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-            if reply != QMessageBox.StandardButton.Yes:
-                return
-            ok = self._backend.add_employee(d)
-            if ok is True:
-                # Save doctor schedules if applicable
-                if d.get("role") == "Doctor" and d.get("schedules"):
-                    emp_id = self._backend.get_employee_id_by_email(d.get("email", ""))
-                    if emp_id:
-                        self._backend.save_doctor_schedules(emp_id, d["schedules"])
-                self._load_from_db()
-                QMessageBox.information(self, "Success", f"Employee '{d['name']}' added.")
-            else:
-                err = ok if isinstance(ok, str) else ''
-                QMessageBox.warning(self, "Error", f"Failed to save employee.\n{err}")
+            add_employee_common(self, self._backend, dlg.get_data(), self._load_from_db)
 
     # ── Edit ──────────────────────────────────────────────────────
     def _on_edit(self, row: int):
@@ -239,56 +209,19 @@ class EmployeesPage(QWidget):
         if dlg.fired:
             self._on_delete(row); return
         if result == QDialog.DialogCode.Accepted:
-            d = dlg.get_data()
-            if not d["name"].strip():
-                QMessageBox.warning(self, "Validation", "Employee name is required.")
-                return
             try:
                 emp_id = int(data["id"])
             except (ValueError, KeyError):
                 QMessageBox.warning(self, "Error", "Invalid employee ID.")
                 return
-            old_email = data.get("email", "")
-            ok = self._backend.update_employee(emp_id, d, old_email=old_email)
-            if ok is not True:
-                err = ok if isinstance(ok, str) else ''
-                QMessageBox.warning(self, "Error", f"Failed to update employee.\n{err}")
-                return
-            # Save doctor schedules if applicable
-            if d.get("role") == "Doctor" and "schedules" in d:
-                self._backend.save_doctor_schedules(emp_id, d["schedules"])
-            self._load_from_db()
-            QMessageBox.information(self, "Success", f"Employee '{d['name']}' updated.")
+            edit_employee_common(self, self._backend, emp_id, data.get("email", ""),
+                                dlg.get_data(), self._load_from_db)
 
     # ── Delete ────────────────────────────────────────────────────
     def _on_delete(self, row: int):
         name = self.table.item(row, 1).text() if self.table.item(row, 1) else "this employee"
-        msg = QMessageBox(self); msg.setWindowTitle("Confirm Fire")
-        msg.setText(f"Are you sure you want to fire {name}?")
-        msg.setIcon(QMessageBox.Icon.Warning)
-        yes_btn = msg.addButton("Yes, Fire", QMessageBox.ButtonRole.YesRole)
-        no_btn = msg.addButton("Cancel", QMessageBox.ButtonRole.NoRole)
-        yes_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        no_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        yes_btn.setStyleSheet(
-            "QPushButton { background-color: #D9534F; color: #FFF; border: none;"
-            " border-radius: 4px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
-            " QPushButton:hover { background-color: #c9302c; }"
-        )
-        no_btn.setStyleSheet(
-            "QPushButton { background-color: #6c757d; color: #FFF; border: none;"
-            " border-radius: 4px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
-            " QPushButton:hover { background-color: #5a6268; }"
-        )
-        msg.exec()
-        if msg.clickedButton() == yes_btn:
-            try:
-                emp_id = int(self.table.item(row, 0).text())
-            except (ValueError, AttributeError):
-                QMessageBox.warning(self, "Error", "Invalid employee ID."); return
-            ok = self._backend.delete_employee(emp_id)
-            if ok:
-                self._load_from_db()
-                QMessageBox.information(self, "Success", f"Employee '{name}' removed.")
-            else:
-                QMessageBox.warning(self, "Error", "Failed to delete employee.")
+        try:
+            emp_id = int(self.table.item(row, 0).text())
+        except (ValueError, AttributeError):
+            QMessageBox.warning(self, "Error", "Invalid employee ID."); return
+        delete_employee_common(self, self._backend, emp_id, name, self._load_from_db)

@@ -227,10 +227,6 @@ class EmployeeMixin:
             return True
         return False
 
-    def get_employee_stats(self):
-        """Alias for get_hr_stats — returns the same superset."""
-        return self.get_hr_stats()
-
     def get_department_counts(self):
         return self.fetch("""
             SELECT d.department_name, COUNT(e.employee_id) AS cnt
@@ -466,20 +462,6 @@ class EmployeeMixin:
             except Exception:
                 pass
             return False
-
-    def get_available_doctors_today(self):
-        """Return doctors who are available today based on their schedules."""
-        return self.fetch("""
-            SELECT DISTINCT e.employee_id, CONCAT(e.first_name,' ',e.last_name) AS doctor_name,
-                   ds.start_time, ds.end_time
-            FROM employees e
-            INNER JOIN roles r ON e.role_id = r.role_id
-            INNER JOIN doctor_schedules ds ON e.employee_id = ds.doctor_id
-            WHERE r.role_name = 'Doctor'
-              AND e.status = 'Active'
-              AND ds.day_of_week = DAYNAME(CURDATE())
-            ORDER BY e.first_name
-        """)
 
     def get_all_doctor_schedules(self):
         """Return all active doctors' weekly schedules for dashboard display."""

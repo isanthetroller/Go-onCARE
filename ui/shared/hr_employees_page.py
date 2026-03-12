@@ -12,6 +12,8 @@ from ui.styles import (
     make_card, make_stat_card, make_read_only_table,
     make_interactive_table, make_action_table,
     status_color, make_action_cell, TAB_ACTIVE, TAB_INACTIVE,
+    confirm_action_dialog, add_employee_common, edit_employee_common,
+    delete_employee_common,
 )
 from ui.icons import get_icon
 from ui.shared.hr_employee_dialogs import HREmployeeDialog, HREmployeeProfileDialog, UserAccountDialog
@@ -467,25 +469,12 @@ class HREmployeesPage(QWidget):
         req = self._leave_requests[row]
         request_id = req.get("request_id")
         emp_name = req.get("employee_name", "")
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Confirm Approval")
-        msg.setText(f"Approve leave request for {emp_name}?\n"
-                    f"Period: {req.get('leave_from', '')} to {req.get('leave_until', '')}")
-        msg.setIcon(QMessageBox.Icon.Question)
-        yes_btn = msg.addButton("Approve", QMessageBox.ButtonRole.YesRole)
-        no_btn = msg.addButton("Cancel", QMessageBox.ButtonRole.NoRole)
-        yes_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        no_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        yes_btn.setStyleSheet(
-            "QPushButton { background-color: #5CB85C; color: #FFF; border: none;"
-            " border-radius: 8px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
-            " QPushButton:hover { background-color: #4CAE4C; }")
-        no_btn.setStyleSheet(
-            "QPushButton { background-color: #FFFFFF; color: #2C3E50; border: 2px solid #BADFE7;"
-            " border-radius: 8px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
-            " QPushButton:hover { background-color: #F0F7F8; border-color: #388087; }")
-        msg.exec()
-        if msg.clickedButton() == yes_btn:
+        confirmed = confirm_action_dialog(
+            self, "Confirm Approval",
+            f"Approve leave request for {emp_name}?\n"
+            f"Period: {req.get('leave_from', '')} to {req.get('leave_until', '')}",
+            confirm_label="Approve", confirm_color="#5CB85C", confirm_hover="#4CAE4C")
+        if confirmed:
             hr_emp_id = self._backend.get_employee_id_by_email(
                 self._backend._current_user_email)
             ok = self._backend.approve_leave_request(request_id, hr_emp_id)
@@ -607,35 +596,7 @@ class HREmployeesPage(QWidget):
     def _on_add(self):
         dlg = HREmployeeDialog(self, title="Add Employee")
         if dlg.exec() == QDialog.DialogCode.Accepted:
-            d = dlg.get_data()
-            if not d["name"].strip():
-                QMessageBox.warning(self, "Validation", "Employee name is required.")
-                return
-            phone = d.get("phone", "").strip()
-            if phone and self._backend:
-                existing = self._backend.check_duplicate_phone(phone)
-                if existing:
-                    QMessageBox.warning(self, "Duplicate Phone",
-                        f"Phone number {phone} is already assigned to "
-                        f"{existing['full_name']} (ID: {existing['employee_id']}).")
-                    return
-            reply = QMessageBox.question(self, "Confirm Add Employee",
-                f"Are you sure you want to add '{d['name']}' as a new employee?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-            if reply != QMessageBox.StandardButton.Yes:
-                return
-            ok = self._backend.add_employee(d)
-            if ok is True:
-                # Save doctor schedules if applicable
-                if d.get("role") == "Doctor" and d.get("schedules"):
-                    emp_id = self._backend.get_employee_id_by_email(d.get("email", ""))
-                    if emp_id:
-                        self._backend.save_doctor_schedules(emp_id, d["schedules"])
-                self._load_from_db()
-                QMessageBox.information(self, "Success", f"Employee '{d['name']}' added.")
-            else:
-                err = ok if isinstance(ok, str) else ''
-                QMessageBox.warning(self, "Error", f"Failed to save employee.\n{err}")
+            add_employee_common(self, self._backend, dlg.get_data(), self._load_from_db)
 
     # ── Edit ──────────────────────────────────────────────────────
     def _on_edit(self, row: int):
@@ -668,26 +629,13 @@ class HREmployeesPage(QWidget):
         if dlg.fired:
             self._on_delete(row); return
         if result == QDialog.DialogCode.Accepted:
-            d = dlg.get_data()
-            if not d["name"].strip():
-                QMessageBox.warning(self, "Validation", "Employee name is required.")
-                return
             try:
                 emp_id = int(data["id"])
             except (ValueError, KeyError):
                 QMessageBox.warning(self, "Error", "Invalid employee ID.")
                 return
-            old_email = data.get("email", "")
-            ok = self._backend.update_employee(emp_id, d, old_email=old_email)
-            if ok is not True:
-                err = ok if isinstance(ok, str) else ''
-                QMessageBox.warning(self, "Error", f"Failed to update employee.\n{err}")
-                return
-            # Save doctor schedules if applicable
-            if d.get("role") == "Doctor" and "schedules" in d:
-                self._backend.save_doctor_schedules(emp_id, d["schedules"])
-            self._load_from_db()
-            QMessageBox.information(self, "Success", f"Employee '{d['name']}' updated.")
+            edit_employee_common(self, self._backend, emp_id, data.get("email", ""),
+                                dlg.get_data(), self._load_from_db)
 
     # ── Delete ────────────────────────────────────────────────────
     def _on_delete(self, row: int):
@@ -695,34 +643,10 @@ class HREmployeesPage(QWidget):
             return
         emp = self._employees[row]
         name = emp.get("full_name", "this employee")
-        msg = QMessageBox(self); msg.setWindowTitle("Confirm Fire")
-        msg.setText(f"Are you sure you want to fire {name}?")
-        msg.setIcon(QMessageBox.Icon.Warning)
-        yes_btn = msg.addButton("Yes, Fire", QMessageBox.ButtonRole.YesRole)
-        no_btn = msg.addButton("Cancel", QMessageBox.ButtonRole.NoRole)
-        yes_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        no_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        yes_btn.setStyleSheet(
-            "QPushButton { background-color: #D9534F; color: #FFF; border: none;"
-            " border-radius: 8px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
-            " QPushButton:hover { background-color: #C9302C; }"
-        )
-        no_btn.setStyleSheet(
-            "QPushButton { background-color: #FFFFFF; color: #2C3E50; border: 2px solid #BADFE7;"
-            " border-radius: 8px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
-            " QPushButton:hover { background-color: #F0F7F8; border-color: #388087; }"
-        )
-        msg.exec()
-        if msg.clickedButton() == yes_btn:
-            emp_id = emp.get("employee_id")
-            if not emp_id:
-                QMessageBox.warning(self, "Error", "Invalid employee ID."); return
-            ok = self._backend.delete_employee(emp_id)
-            if ok:
-                self._load_from_db()
-                QMessageBox.information(self, "Success", f"Employee '{name}' removed.")
-            else:
-                QMessageBox.warning(self, "Error", "Failed to delete employee.")
+        emp_id = emp.get("employee_id")
+        if not emp_id:
+            QMessageBox.warning(self, "Error", "Invalid employee ID."); return
+        delete_employee_common(self, self._backend, emp_id, name, self._load_from_db)
 
     # ── User Account Management (Admin) ────────────────────
     def _load_user_accounts(self):

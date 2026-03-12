@@ -2,17 +2,11 @@
 
 import mysql.connector
 from mysql.connector import Error
+from backend.db_config import DB_CONFIG
 
 
 class DatabaseBase:
-    DB_CONFIG = {
-        "host": "localhost",
-        "user": "root",
-        "password": "",
-        "database": "carecrud_db",
-        "connection_timeout": 5,
-        "use_pure": True,
-    }
+    DB_CONFIG = DB_CONFIG
 
     def __init__(self):
         self._conn = None

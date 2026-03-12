@@ -8,10 +8,14 @@
 USE carecrud_db;
 
 -- Delete in child-to-parent order so FK constraints are satisfied
+DELETE FROM paycheck_requests;
+DELETE FROM notifications;
+DELETE FROM leave_requests;
 DELETE FROM invoice_items;
 DELETE FROM invoices;
 DELETE FROM queue_entries;
 DELETE FROM appointments;
+DELETE FROM doctor_schedules;
 DELETE FROM patient_conditions;
 DELETE FROM patients;
 DELETE FROM employees;

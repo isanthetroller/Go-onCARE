@@ -4,13 +4,13 @@ import math
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame,
-    QGridLayout, QTableWidget, QTableWidgetItem,
-    QHeaderView, QPushButton, QDateEdit, QComboBox,
+    QGridLayout, QTableWidgetItem,
+    QPushButton, QDateEdit, QComboBox,
 )
 from PyQt6.QtCore import Qt, QDate, QTimer
 from PyQt6.QtGui import QColor
 from ui.styles import (
-    configure_table, make_page_layout, finish_page, make_banner,
+    make_page_layout, finish_page, make_banner,
     make_card, make_read_only_table, busy_cursor, fmt_peso,
 )
 from ui.shared.chart_widgets import (
@@ -238,17 +238,8 @@ class AnalyticsPage(QWidget):
             vbox2.addWidget(self._lbl("Monthly Breakdown", "cardTitle"))
             vbox2.addWidget(self._lbl("Appointments and revenue per month", "mutedSubtext"))
             cols = ["Month", "Appointments", "Completed", "Revenue"]
-            tbl = QTableWidget(len(monthly), len(cols))
-            tbl.setHorizontalHeaderLabels(cols)
-            tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-            tbl.verticalHeader().setVisible(False)
-            tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-            tbl.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-            tbl.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-            tbl.setAlternatingRowColors(True)
-            tbl.setMinimumHeight(max(len(monthly), 1) * 48 + 48)
-            tbl.verticalHeader().setDefaultSectionSize(48)
-            configure_table(tbl)
+            tbl = make_read_only_table(cols, min_h=max(len(monthly), 1) * 48 + 48, row_h=48)
+            tbl.setRowCount(len(monthly))
             for r, m in enumerate(monthly):
                 tbl.setItem(r, 0, QTableWidgetItem(m.get("month_label", "")))
                 tbl.setItem(r, 1, QTableWidgetItem(str(m.get("total_appointments", 0))))
@@ -328,17 +319,8 @@ class AnalyticsPage(QWidget):
         vbox.addWidget(self._lbl("New vs returning patients per month", "mutedSubtext"))
 
         cols = ["Month", "New Patients", "Returning", "Total"]
-        tbl = QTableWidget(len(retention), len(cols))
-        tbl.setHorizontalHeaderLabels(cols)
-        tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        tbl.verticalHeader().setVisible(False)
-        tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        tbl.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        tbl.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        tbl.setAlternatingRowColors(True)
-        tbl.setMinimumHeight(max(len(retention), 1) * 48 + 48)
-        tbl.verticalHeader().setDefaultSectionSize(48)
-        configure_table(tbl)
+        tbl = make_read_only_table(cols, min_h=max(len(retention), 1) * 48 + 48, row_h=48)
+        tbl.setRowCount(len(retention))
         for r, row in enumerate(retention):
             new_p = int(row.get("new_patients", 0) or 0)
             ret_p = int(row.get("returning_patients", 0) or 0)
@@ -359,17 +341,8 @@ class AnalyticsPage(QWidget):
         vbox.addWidget(self._lbl("Monthly cancellation rate over time", "mutedSubtext"))
 
         cols = ["Month", "Total", "Cancelled", "Rate"]
-        tbl = QTableWidget(len(cancel_trend), len(cols))
-        tbl.setHorizontalHeaderLabels(cols)
-        tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        tbl.verticalHeader().setVisible(False)
-        tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        tbl.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        tbl.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        tbl.setAlternatingRowColors(True)
-        tbl.setMinimumHeight(max(len(cancel_trend), 1) * 48 + 48)
-        tbl.verticalHeader().setDefaultSectionSize(48)
-        configure_table(tbl)
+        tbl = make_read_only_table(cols, min_h=max(len(cancel_trend), 1) * 48 + 48, row_h=48)
+        tbl.setRowCount(len(cancel_trend))
         for r, row in enumerate(cancel_trend):
             tbl.setItem(r, 0, QTableWidgetItem(row.get("month_label", "")))
             tbl.setItem(r, 1, QTableWidgetItem(str(row.get("total", 0))))
@@ -391,17 +364,8 @@ class AnalyticsPage(QWidget):
         vbox.addWidget(self._lbl("Appointments, completions, and revenue generated", "mutedSubtext"))
 
         cols = ["Doctor", "Total Appts", "Completed", "Revenue Generated"]
-        tbl = QTableWidget(len(doctors), len(cols))
-        tbl.setHorizontalHeaderLabels(cols)
-        tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        tbl.verticalHeader().setVisible(False)
-        tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        tbl.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        tbl.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        tbl.setAlternatingRowColors(True)
-        tbl.setMinimumHeight(max(len(doctors), 1) * 48 + 48)
-        tbl.verticalHeader().setDefaultSectionSize(48)
-        configure_table(tbl)
+        tbl = make_read_only_table(cols, min_h=max(len(doctors), 1) * 48 + 48, row_h=48)
+        tbl.setRowCount(len(doctors))
         for r, doc in enumerate(doctors):
             name = doc.get("doctor_name", "")
             tbl.setItem(r, 0, QTableWidgetItem(f"Dr. {name.split()[-1]}" if name else ""))
@@ -419,17 +383,8 @@ class AnalyticsPage(QWidget):
         vbox.addWidget(self._lbl("Most requested services and revenue contribution", "mutedSubtext"))
 
         cols = ["Service", "Count", "Revenue"]
-        tbl = QTableWidget(len(services), len(cols))
-        tbl.setHorizontalHeaderLabels(cols)
-        tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        tbl.verticalHeader().setVisible(False)
-        tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        tbl.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        tbl.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        tbl.setAlternatingRowColors(True)
-        tbl.setMinimumHeight(max(len(services), 1) * 48 + 48)
-        tbl.verticalHeader().setDefaultSectionSize(48)
-        configure_table(tbl)
+        tbl = make_read_only_table(cols, min_h=max(len(services), 1) * 48 + 48, row_h=48)
+        tbl.setRowCount(len(services))
         for r, svc in enumerate(services):
             tbl.setItem(r, 0, QTableWidgetItem(svc.get("service_name", "")))
             tbl.setItem(r, 1, QTableWidgetItem(str(svc.get("usage_count", 0))))
@@ -445,17 +400,8 @@ class AnalyticsPage(QWidget):
         vbox.addWidget(self._lbl("Revenue over the last 6 months", "mutedSubtext"))
 
         cols = ["Month", "Revenue"]
-        tbl = QTableWidget(len(monthly), len(cols))
-        tbl.setHorizontalHeaderLabels(cols)
-        tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        tbl.verticalHeader().setVisible(False)
-        tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        tbl.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
-        tbl.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        tbl.setAlternatingRowColors(True)
-        tbl.setMinimumHeight(max(len(monthly), 1) * 48 + 48)
-        tbl.verticalHeader().setDefaultSectionSize(48)
-        configure_table(tbl)
+        tbl = make_read_only_table(cols, min_h=max(len(monthly), 1) * 48 + 48, row_h=48)
+        tbl.setRowCount(len(monthly))
         grand = 0.0
         for r, row in enumerate(monthly):
             tbl.setItem(r, 0, QTableWidgetItem(row.get("month_label", "")))

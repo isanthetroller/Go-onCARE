@@ -259,6 +259,26 @@ CREATE TABLE notifications (
     FOREIGN KEY (employee_id) REFERENCES employees(employee_id)
 );
 
+-- Paycheck requests (HR→Finance payroll workflow)
+CREATE TABLE paycheck_requests (
+    request_id         INT AUTO_INCREMENT PRIMARY KEY,
+    employee_id        INT NOT NULL,
+    amount             DECIMAL(10,2) NOT NULL,
+    period_from        DATE NOT NULL,
+    period_until       DATE NOT NULL,
+    requested_by       INT NOT NULL,
+    status             ENUM('Pending','Approved','Rejected','Disbursed')
+                       NOT NULL DEFAULT 'Pending',
+    finance_decided_by INT DEFAULT NULL,
+    finance_note       TEXT DEFAULT NULL,
+    decided_at         DATETIME DEFAULT NULL,
+    disbursed_at       DATETIME DEFAULT NULL,
+    created_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (employee_id) REFERENCES employees(employee_id),
+    FOREIGN KEY (requested_by) REFERENCES employees(employee_id),
+    FOREIGN KEY (finance_decided_by) REFERENCES employees(employee_id)
+);
+
 
 -- ────────────────────────────────────────────────────────────
 -- INDEXES
@@ -284,6 +304,8 @@ CREATE INDEX idx_leave_requests_employee ON leave_requests(employee_id);
 CREATE INDEX idx_leave_requests_status   ON leave_requests(status);
 CREATE INDEX idx_notifications_employee  ON notifications(employee_id);
 CREATE INDEX idx_notifications_read      ON notifications(is_read);
+CREATE INDEX idx_paycheck_requests_emp    ON paycheck_requests(employee_id);
+CREATE INDEX idx_paycheck_requests_status ON paycheck_requests(status);
 
 
 -- ============================================================
@@ -306,7 +328,8 @@ INSERT INTO roles (role_name) VALUES
     ('Nurse'),
     ('Receptionist'),
     ('Admin'),
-    ('HR');
+    ('HR'),
+    ('Finance');
 
 INSERT INTO services (service_name, price, category, is_active) VALUES
     ('General Checkup',          800.00,  'Consultation', 1),
@@ -350,7 +373,8 @@ INSERT INTO users (email, password, full_name, role_id) VALUES
     ('ana.reyes@carecrud.com',     'doctor123',    'Ana Reyes',     1),
     ('sofia.reyes@carecrud.com',   'nurse123',     'Sofia Reyes',   2),
     ('james.cruz@carecrud.com',    'reception123', 'James Cruz',    3),
-    ('hr@carecrud.com',            'hr123',        'Elena Ramos',   5);
+    ('hr@carecrud.com',            'hr123',        'Elena Ramos',   5),
+    ('finance@carecrud.com',       'finance123',   'Maria Garcia',  6);
 
 -- Default employees
 INSERT INTO employees (first_name, last_name, role_id, department_id, employment_type, phone, email, hire_date, status, salary) VALUES
@@ -361,7 +385,8 @@ INSERT INTO employees (first_name, last_name, role_id, department_id, employment
     ('Sofia',  'Reyes',   2, 2, 'Full-time', '09174445566', 'sofia.reyes@carecrud.com',  '2022-04-12', 'Active',   28000.00),
     ('James',  'Cruz',    3, 6, 'Full-time', '09177778899', 'james.cruz@carecrud.com',   '2021-07-01', 'Active',   25000.00),
     ('Carlo',  'Santos',  4, 7, 'Full-time', '09176667788', 'carlo.santos@carecrud.com', '2019-01-05', 'Active',   70000.00),
-    ('Elena',  'Ramos',   5, 9, 'Full-time', '09178889900', 'hr@carecrud.com',           '2020-01-15', 'Active',   45000.00);
+    ('Elena',  'Ramos',   5, 9, 'Full-time', '09178889900', 'hr@carecrud.com',           '2020-01-15', 'Active',   45000.00),
+    ('Maria',  'Garcia',  6, 7, 'Full-time', '09173334455', 'finance@carecrud.com',      '2021-03-01', 'Active',   42000.00);
 
 -- Default doctor schedules
 INSERT INTO doctor_schedules (doctor_id, day_of_week, start_time, end_time) VALUES
