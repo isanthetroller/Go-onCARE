@@ -144,11 +144,11 @@ class DatabaseBase:
                     cur.execute("""
                         INSERT INTO tax_settings (setting_key, value, description) VALUES
                         ('sss_rate', 4.500,
-                         'SSS Employee Share (%%) – RA 11199, 2025 schedule: 14%% total, 4.5%% employee'),
+                         'SSS Employee Share (%) – RA 11199, 2025 schedule: 14% total, 4.5% employee'),
                         ('philhealth_rate', 2.500,
-                         'PhilHealth Employee Share (%%) – 5%% premium split 50/50 (PhilHealth Circular 2024-0009)'),
+                         'PhilHealth Employee Share (%) – 5% premium split 50/50 (PhilHealth Circular 2024-0009)'),
                         ('hospital_share_rate', 10.000,
-                         'Hospital/Company Share (%%) – portion retained by the hospital')
+                         'Hospital/Company Share (%) – portion retained by the hospital')
                     """)
                 # Add deduction columns to paycheck_requests
                 for col, typedef in [
@@ -160,6 +160,31 @@ class DatabaseBase:
                     cur.execute(f"SHOW COLUMNS FROM paycheck_requests LIKE '{col}'")
                     if not cur.fetchone():
                         cur.execute(f"ALTER TABLE paycheck_requests ADD COLUMN {col} {typedef}")
+
+                # service_departments junction table (links services to departments)
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS service_departments (
+                        service_id    INT NOT NULL,
+                        department_id INT NOT NULL,
+                        PRIMARY KEY (service_id, department_id),
+                        FOREIGN KEY (service_id) REFERENCES services(service_id)
+                            ON DELETE CASCADE,
+                        FOREIGN KEY (department_id) REFERENCES departments(department_id)
+                            ON DELETE CASCADE
+                    )
+                """)
+                # Seed service_departments if table is empty
+                cur.execute("SELECT COUNT(*) AS cnt FROM service_departments")
+                sd_cnt = cur.fetchone()
+                if (sd_cnt.get("cnt", 0) if isinstance(sd_cnt, dict) else sd_cnt[0]) == 0:
+                    cur.execute("""
+                        INSERT IGNORE INTO service_departments (service_id, department_id)
+                        SELECT s.service_id, d.department_id
+                        FROM services s
+                        CROSS JOIN departments d
+                        WHERE (s.category = 'Lab'     AND d.department_name = 'Laboratory')
+                           OR (s.category = 'Dental'  AND d.department_name = 'Dentistry')
+                    """)
 
                 # Ensure default Finance employee + user account exists
                 cur.execute("SELECT role_id FROM roles WHERE role_name='Finance'")
@@ -192,7 +217,7 @@ class DatabaseBase:
         try:
             conn = self._get_connection()
             with conn.cursor(dictionary=True) as cur:
-                cur.execute(sql, params or ())
+                cur.execute(sql, params)
                 return cur.fetchone() if one else cur.fetchall()
         except Error:
             return None if one else []
@@ -202,7 +227,7 @@ class DatabaseBase:
         try:
             conn = self._get_connection()
             with conn.cursor() as cur:
-                cur.execute(sql, params or ())
+                cur.execute(sql, params)
                 conn.commit()
                 return cur.lastrowid or cur.rowcount
         except Error:

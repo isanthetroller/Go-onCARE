@@ -28,7 +28,7 @@ class PatientDialog(QDialog):
     def __init__(self, parent=None, *, title="Add New Patient", data=None, backend=None):
         super().__init__(parent)
         self.setWindowTitle(title)
-        self.setMinimumWidth(600)
+        self.setMinimumWidth(720)
         self._backend = backend
 
         form = QFormLayout(self)
@@ -121,17 +121,18 @@ class PatientDialog(QDialog):
 
         self._cond_frame = QFrame()
         self._cond_frame.setStyleSheet(
-            "QFrame { border: 2px solid #BADFE7; border-radius: 10px;"
-            " background: #F6F6F2; }"
+            "QFrame { border: 1.5px solid #BADFE7; border-radius: 12px;"
+            " background: #FAFCFD; }"
         )
         self._cond_grid = QGridLayout(self._cond_frame)
-        self._cond_grid.setContentsMargins(12, 10, 12, 10)
-        self._cond_grid.setSpacing(6)
+        self._cond_grid.setContentsMargins(14, 12, 14, 12)
+        self._cond_grid.setHorizontalSpacing(8)
+        self._cond_grid.setVerticalSpacing(8)
         self._load_standard_conditions(data, self._cond_grid)
         cond_scroll = QScrollArea()
         cond_scroll.setWidget(self._cond_frame)
         cond_scroll.setWidgetResizable(True)
-        cond_scroll.setMaximumHeight(160)
+        cond_scroll.setMaximumHeight(180)
         cond_scroll.setStyleSheet(
             "QScrollArea { border: none; background: transparent; }"
         )
@@ -192,13 +193,16 @@ class PatientDialog(QDialog):
             self.notes_edit.setPlainText(data.get("notes", ""))
 
     _CB_STYLE = (
-        "QCheckBox { font-size: 13px; color: #2C3E50; spacing: 8px;"
-        " padding: 4px 6px; border: none; background: transparent; }"
-        "QCheckBox::indicator { width: 18px; height: 18px;"
-        " border: 2px solid #BADFE7; border-radius: 4px; background: #FFFFFF; }"
+        "QCheckBox { font-size: 12px; color: #2C3E50; spacing: 6px;"
+        " padding: 6px 12px; border: 1.5px solid #BADFE7; border-radius: 14px;"
+        " background: #FFFFFF; }"
+        "QCheckBox:checked { background: #E8F6F3; border-color: #388087; color: #388087;"
+        " font-weight: bold; }"
+        "QCheckBox:hover { border-color: #388087; background: #F0F7F8; }"
+        "QCheckBox::indicator { width: 14px; height: 14px;"
+        " border: 1.5px solid #BADFE7; border-radius: 3px; background: #FFFFFF; }"
         "QCheckBox::indicator:checked { background: #388087;"
-        " border-color: #388087;"
-        " image: none; }"
+        " border-color: #388087; }"
         "QCheckBox::indicator:hover { border-color: #388087; }"
     )
 
@@ -208,7 +212,7 @@ class PatientDialog(QDialog):
             existing = {c.strip() for c in data["conditions"].split(",") if c.strip()}
         std = self._backend.get_standard_conditions() if self._backend else []
         std_names = {c["condition_name"] for c in std}
-        cols = 3
+        cols = 4
         for i, c in enumerate(std):
             cb = QCheckBox(c["condition_name"])
             cb.setStyleSheet(self._CB_STYLE)

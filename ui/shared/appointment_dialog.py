@@ -151,8 +151,7 @@ class AppointmentDialog(QDialog):
         self.purpose_combo = QComboBox()
         self.purpose_combo.setObjectName("formCombo")
         self.purpose_combo.setMinimumHeight(40)
-        for svc in self._services:
-            self.purpose_combo.addItem(svc["service_name"], svc["service_id"])
+        self._populate_services(self._services)
 
         self.notes_edit = QTextEdit()
         self.notes_edit.setObjectName("formInput")
@@ -272,12 +271,29 @@ class AppointmentDialog(QDialog):
         if self.doctor_combo.count() > 0:
             self._on_doctor_changed(self.doctor_combo.currentIndex())
 
+    def _populate_services(self, services):
+        """Fill the purpose combo with the given service list."""
+        prev = self.purpose_combo.currentData()
+        self.purpose_combo.clear()
+        for svc in services:
+            self.purpose_combo.addItem(svc["service_name"], svc["service_id"])
+        if prev is not None:
+            for i in range(self.purpose_combo.count()):
+                if self.purpose_combo.itemData(i) == prev:
+                    self.purpose_combo.setCurrentIndex(i)
+                    break
+
     def _on_doctor_changed(self, index):
-        """When doctor selection changes, load and display their schedule."""
+        """When doctor selection changes, load schedule and filter services."""
         doc_id = self.doctor_combo.currentData()
         if not doc_id or not self._backend:
             self._sched_panel.setVisible(False)
             return
+
+        # Refresh services for this doctor's department
+        if hasattr(self._backend, 'get_services_for_doctor'):
+            filtered = self._backend.get_services_for_doctor(doc_id) or []
+            self._populate_services(filtered if filtered else self._services)
 
         self._sched_panel.setVisible(True)
         schedules = self._backend.get_doctor_schedules(doc_id) or []

@@ -29,6 +29,16 @@ CREATE TABLE services (
     is_active    TINYINT(1) NOT NULL DEFAULT 1
 );
 
+-- Maps services to the departments that can offer them
+-- Services with no rows here are available to ALL departments
+CREATE TABLE service_departments (
+    service_id    INT NOT NULL,
+    department_id INT NOT NULL,
+    PRIMARY KEY (service_id, department_id),
+    FOREIGN KEY (service_id)    REFERENCES services(service_id)   ON DELETE CASCADE,
+    FOREIGN KEY (department_id) REFERENCES departments(department_id) ON DELETE CASCADE
+);
+
 -- Payment methods
 CREATE TABLE payment_methods (
     method_id   INT AUTO_INCREMENT PRIMARY KEY,
@@ -359,6 +369,14 @@ INSERT INTO services (service_name, price, category, is_active) VALUES
     ('Lab Results Review',       300.00,  'Lab',          1),
     ('X-Ray Review',             800.00,  'Imaging',      1),
     ('Physical Exam',           1000.00,  'Consultation', 1);
+
+-- Lab services → Laboratory dept, Dental → Dentistry dept
+-- Consultation / Imaging / Therapy have no mapping → available to all
+INSERT INTO service_departments (service_id, department_id)
+SELECT s.service_id, d.department_id
+FROM services s CROSS JOIN departments d
+WHERE (s.category = 'Lab'    AND d.department_name = 'Laboratory')
+   OR (s.category = 'Dental' AND d.department_name = 'Dentistry');
 
 INSERT INTO payment_methods (method_name) VALUES
     ('Cash'),

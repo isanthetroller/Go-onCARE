@@ -32,7 +32,8 @@ class AppointmentMixin:
 
     def get_doctors(self):
         return self.fetch("""
-            SELECT e.employee_id, CONCAT(e.first_name,' ',e.last_name) AS doctor_name
+            SELECT e.employee_id, CONCAT(e.first_name,' ',e.last_name) AS doctor_name,
+                   e.department_id
             FROM employees e INNER JOIN roles r ON e.role_id = r.role_id
             WHERE r.role_name='Doctor' AND e.status='Active' ORDER BY e.first_name
         """)
@@ -41,8 +42,9 @@ class AppointmentMixin:
         """Return only doctors available today based on their schedule."""
         return self.fetch("""
             SELECT DISTINCT e.employee_id, CONCAT(e.first_name,' ',e.last_name) AS doctor_name,
-                   DATE_FORMAT(ds.start_time, '%%h:%%i %%p') AS sched_start,
-                   DATE_FORMAT(ds.end_time, '%%h:%%i %%p') AS sched_end
+                   e.department_id,
+                   TIME_FORMAT(ds.start_time, '%h:%i %p') AS sched_start,
+                   TIME_FORMAT(ds.end_time, '%h:%i %p') AS sched_end
             FROM employees e
             INNER JOIN roles r ON e.role_id = r.role_id
             INNER JOIN doctor_schedules ds ON e.employee_id = ds.doctor_id
@@ -60,10 +62,10 @@ class AppointmentMixin:
         return self.fetch("""
             SELECT e.employee_id,
                    CONCAT(e.first_name,' ',e.last_name) AS doctor_name,
-                   COALESCE(d.department_name, '—') AS department,
+                   COALESCE(d.department_name, '\u2014') AS department,
                    ds.day_of_week,
-                   DATE_FORMAT(ds.start_time, '%%h:%%i %%p') AS sched_start,
-                   DATE_FORMAT(ds.end_time, '%%h:%%i %%p')   AS sched_end,
+                   TIME_FORMAT(ds.start_time, '%h:%i %p') AS sched_start,
+                   TIME_FORMAT(ds.end_time, '%h:%i %p')   AS sched_end,
                    IF(ds.schedule_id IS NOT NULL, 'Available', 'Not Available') AS availability,
                    COALESCE(ac.appt_count, 0) AS appt_count
             FROM employees e
@@ -87,6 +89,28 @@ class AppointmentMixin:
         if active_only:
             q += " WHERE is_active = 1"
         return self.fetch(q + " ORDER BY service_name")
+
+    def get_services_for_doctor(self, doctor_id):
+        """Return active services available for a doctor based on their department.
+
+        Uses service_departments junction table.  If a service has no department
+        mapping it is available to everyone; otherwise only to mapped departments.
+        """
+        return self.fetch("""
+            SELECT s.service_id, s.service_name, s.price, s.category
+            FROM services s
+            WHERE s.is_active = 1
+              AND (
+                  NOT EXISTS (SELECT 1 FROM service_departments sd WHERE sd.service_id = s.service_id)
+                  OR s.service_id IN (
+                      SELECT sd.service_id FROM service_departments sd
+                      WHERE sd.department_id = (
+                          SELECT e.department_id FROM employees e WHERE e.employee_id = %s
+                      )
+                  )
+              )
+            ORDER BY s.service_name
+        """, (doctor_id,))
 
     def get_all_services(self):
         return self.get_services_list(active_only=False)
