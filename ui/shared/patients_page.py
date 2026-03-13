@@ -335,7 +335,7 @@ class PatientsPage(QWidget):
         profile = self._backend.get_patient_full_profile(pid, doctor_email=doc_email)
         if not profile:
             QMessageBox.warning(self, "Error", "Could not load patient profile."); return
-        dlg = PatientProfileDialog(self, profile=profile)
+        dlg = PatientProfileDialog(self, profile=profile, role=self._role)
         dlg.exec()
 
     def _on_merge(self):

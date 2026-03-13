@@ -20,15 +20,13 @@ class HREmployeeDialog(EmployeeDialog):
 
     def __init__(self, parent=None, *, title="Add Employee", data=None):
         super().__init__(parent, title=title, data=data)
-        self.setMinimumWidth(640)
 
     # ── Override hooks ────────────────────────────────────────────
-    def _build_fields(self, form):
-        super()._build_fields(form)
-        # Insert salary & emergency contact before Notes (last row)
-        # Using insertRow avoids the removeRow C++ widget deletion bug
-        notes_row = form.rowCount() - 1  # Notes is the last row from parent
-
+    def _build_fields(self, _unused):
+        super()._build_fields(_unused)
+        # Replace the plain salary_edit with a QDoubleSpinBox on the right column
+        right = self._right_form
+        self.salary_edit.setVisible(False)
         self.salary_spin = QDoubleSpinBox()
         self.salary_spin.setObjectName("formCombo")
         self.salary_spin.setRange(0, 999999.99)
@@ -36,19 +34,17 @@ class HREmployeeDialog(EmployeeDialog):
         self.salary_spin.setPrefix("₱ ")
         self.salary_spin.setSingleStep(1000)
         self.salary_spin.setMinimumHeight(38)
-
-        self.emergency_edit = QLineEdit()
-        self.emergency_edit.setStyleSheet(self._INPUT_STYLE)
-        self.emergency_edit.setPlaceholderText("Emergency contact (name – phone)")
-        self.emergency_edit.setMinimumHeight(42)
-        self.emergency_edit.setMaxLength(150)
-
-        form.insertRow(notes_row, "Monthly Salary",    self.salary_spin)
-        form.insertRow(notes_row + 1, "Emergency Contact", self.emergency_edit)
+        # Find and replace salary row in right form
+        for r in range(right.rowCount()):
+            lbl = right.itemAt(r, QFormLayout.ItemRole.LabelRole)
+            if lbl and hasattr(lbl, 'widget') and lbl.widget() and lbl.widget().text() == "Salary":
+                right.insertRow(r + 1, "Monthly Salary", self.salary_spin)
+                return
+        # Fallback: append
+        right.addRow("Monthly Salary", self.salary_spin)
 
     def _prefill(self, data):
         super()._prefill(data)
-        self.emergency_edit.setText(data.get("emergency_contact", ""))
         try:
             self.salary_spin.setValue(float(data.get("salary", 0) or 0))
         except (ValueError, TypeError):
@@ -94,6 +90,7 @@ class HREmployeeProfileDialog(QDialog):
             ("Type",       self._emp.get("employment_type", "")),
             ("Phone",      self._emp.get("phone", "") or "—"),
             ("Email",      self._emp.get("email", "") or "—"),
+            ("Address",    self._emp.get("address", "") or "—"),
             ("Hire Date",  str(self._emp.get("hire_date", "")) or "—"),
             ("Status",     self._emp.get("status", "")),
             ("Notes",      self._emp.get("notes", "") or "—"),

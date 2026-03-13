@@ -2,8 +2,8 @@
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QTableWidget, QTableWidgetItem, QHeaderView,
-    QComboBox, QDialog, QMessageBox,
+    QTableWidget, QTableWidgetItem, QHeaderView, QFrame,
+    QComboBox, QDialog, QMessageBox, QSizePolicy,
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor
@@ -25,12 +25,19 @@ class EmployeesPage(QWidget):
         self._backend = backend or AuthBackend()
         self._role = role
         self._employees: list[dict] = []
+        self._initial_load_done = False
         self._build()
         self._load_from_db()
         # Auto-refresh data every 10 seconds
         self._refresh_timer = QTimer(self)
         self._refresh_timer.timeout.connect(self._load_from_db)
         self._refresh_timer.start(10_000)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not self._initial_load_done:
+            self._initial_load_done = True
+            QTimer.singleShot(0, self._load_from_db)
 
     def _load_from_db(self):
         if not self.isVisible():
@@ -74,27 +81,68 @@ class EmployeesPage(QWidget):
 
         # Department counts
         dept_counts = self._backend.get_department_counts()
-        self._dept_table.setRowCount(len(dept_counts))
-        for r, d in enumerate(dept_counts):
-            self._dept_table.setItem(r, 0, QTableWidgetItem(d.get("department_name", "")))
-            self._dept_table.setItem(r, 1, QTableWidgetItem(str(d.get("cnt", 0))))
+        # Clear old rows
+        while self._dept_rows_container.count():
+            child = self._dept_rows_container.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+        max_cnt = max((d.get("cnt", 0) for d in dept_counts), default=1) or 1
+        colors = ["#388087", "#6FB3B8", "#5CB85C", "#E8B931", "#D4826A", "#9B59B6",
+                  "#3498DB", "#1ABC9C", "#E67E22", "#95A5A6"]
+        for i, d in enumerate(dept_counts):
+            name = d.get("department_name", "")
+            cnt  = d.get("cnt", 0)
+            color = colors[i % len(colors)]
+            row_w = QWidget()
+            row_l = QHBoxLayout(row_w)
+            row_l.setContentsMargins(0, 0, 0, 0)
+            row_l.setSpacing(12)
+            lbl = QLabel(name)
+            lbl.setStyleSheet("font-size:13px; color:#2C3E50;")
+            lbl.setMinimumWidth(140)
+            # bar — use stretch factors so Qt handles proportional sizing
+            bar_bg = QFrame()
+            bar_bg.setFixedHeight(22)
+            bar_bg.setStyleSheet(
+                "QFrame { background:#F0F0EC; border-radius:4px; }")
+            bar_bg.setSizePolicy(QSizePolicy.Policy.Expanding,
+                                 QSizePolicy.Policy.Fixed)
+            bar_lay = QHBoxLayout(bar_bg)
+            bar_lay.setContentsMargins(0, 0, 0, 0)
+            bar_lay.setSpacing(0)
+            pct = max(int(cnt / max_cnt * 100), 6)
+            bar_inner = QFrame()
+            bar_inner.setStyleSheet(
+                f"background:{color}; border-radius:4px;")
+            bar_lay.addWidget(bar_inner, pct)
+            spacer = QFrame()
+            spacer.setStyleSheet("background:transparent;")
+            bar_lay.addWidget(spacer, 100 - pct)
+            # count label
+            cnt_lbl = QLabel(str(cnt))
+            cnt_lbl.setStyleSheet(
+                f"font-size:13px; font-weight:bold; color:{color};")
+            cnt_lbl.setFixedWidth(30)
+            cnt_lbl.setAlignment(Qt.AlignmentFlag.AlignRight
+                                 | Qt.AlignmentFlag.AlignVCenter)
+            row_l.addWidget(lbl)
+            row_l.addWidget(bar_bg, 1)
+            row_l.addWidget(cnt_lbl)
+            self._dept_rows_container.addWidget(row_w)
 
     def _build(self):
         scroll, lay = make_page_layout()
 
         # ── Banner ────────────────────────────────────────────────
-        banner = make_banner(
-            "Employee Management",
-            "Manage staff, doctors, and personnel",
-        )
-        banner_lay = banner.layout()
-
         if self._role != "Finance":
-            add_btn = QPushButton("＋  Add Employee")
-            add_btn.setObjectName("bannerBtn"); add_btn.setMinimumHeight(42)
-            add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            add_btn.clicked.connect(self._on_add)
-            banner_lay.addWidget(add_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
+            banner = make_banner(
+                "Employee Management",
+                "Manage staff, doctors, and personnel",
+                btn_text="\uff0b  Add Employee", btn_slot=self._on_add)
+        else:
+            banner = make_banner(
+                "Employee Management",
+                "Manage staff, doctors, and personnel")
         lay.addWidget(banner)
 
         # ── Stat cards ────────────────────────────────────────────
@@ -109,13 +157,17 @@ class EmployeesPage(QWidget):
             stats_row.addWidget(make_stat_card(key, label, color, self._stat_labels))
         lay.addLayout(stats_row)
 
-        # ── Department count mini-table ───────────────────────────
+        # ── Department count breakdown ─────────────────────────────
         dept_card = make_card()
-        dc_lay = QVBoxLayout(dept_card); dc_lay.setContentsMargins(16, 12, 16, 12); dc_lay.setSpacing(8)
-        dc_title = QLabel("Staff per Department"); dc_title.setObjectName("cardTitle")
+        dc_lay = QVBoxLayout(dept_card)
+        dc_lay.setContentsMargins(20, 16, 20, 16)
+        dc_lay.setSpacing(12)
+        dc_title = QLabel("Staff per Department")
+        dc_title.setObjectName("cardTitle")
         dc_lay.addWidget(dc_title)
-        self._dept_table = make_read_only_table(["Department", "Count"], max_h=200, row_h=48)
-        dc_lay.addWidget(self._dept_table)
+        self._dept_rows_container = QVBoxLayout()
+        self._dept_rows_container.setSpacing(6)
+        dc_lay.addLayout(self._dept_rows_container)
         lay.addWidget(dept_card)
 
         # ── Filter bar ────────────────────────────────────────────
@@ -136,11 +188,12 @@ class EmployeesPage(QWidget):
 
         self.dept_filter = QComboBox()
         self.dept_filter.setObjectName("formCombo")
-        self.dept_filter.addItems([
-            "All Departments", "General Medicine", "Cardiology", "Dentistry",
-            "Pediatrics", "Laboratory", "Front Desk", "Management", "Pharmacy",
-            "Human Resources",
-        ])
+        self.dept_filter.addItem("All Departments")
+        # Load departments from database
+        if self._backend:
+            depts = self._backend.get_all_departments() if hasattr(self._backend, 'get_all_departments') else []
+            for d in depts:
+                self.dept_filter.addItem(d.get("department_name", ""))
         self.dept_filter.setMinimumHeight(42); self.dept_filter.setMinimumWidth(160)
         self.dept_filter.currentTextChanged.connect(lambda _: self._apply_filters())
         bar.addWidget(self.dept_filter)
@@ -200,6 +253,17 @@ class EmployeesPage(QWidget):
         for c, key in enumerate(keys):
             item = self.table.item(row, c)
             data[key] = item.text() if item else ""
+        # Load full employee record for additional fields (address, salary, emergency_contact)
+        try:
+            emp_id = int(data["id"])
+            if self._backend and hasattr(self._backend, 'get_employee_by_id'):
+                full = self._backend.get_employee_by_id(emp_id)
+                if full:
+                    data["address"] = full.get("address", "") or ""
+                    data["salary"] = full.get("salary", "") or ""
+                    data["emergency_contact"] = full.get("emergency_contact", "") or ""
+        except (ValueError, KeyError):
+            pass
         # Load doctor schedules for prefill
         if data.get("role") == "Doctor" and self._backend:
             try:

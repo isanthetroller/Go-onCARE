@@ -106,6 +106,56 @@ class DashboardMixin:
                 s.setdefault(k, 0)
         return s
 
+    def get_financial_summary(self):
+        """Return total revenue collected, total payroll disbursed, and net balance."""
+        defaults = {"total_revenue": 0, "total_disbursed": 0, "net_balance": 0,
+                    "pending_payroll": 0, "monthly_revenue": 0, "monthly_disbursed": 0}
+        try:
+            # Total revenue: all paid/partial invoices
+            rev = self.fetch(
+                "SELECT COALESCE(SUM(amount_paid),0) AS c FROM invoices "
+                "WHERE status IN ('Paid','Partial')", one=True)
+            total_rev = float(rev["c"]) if rev else 0
+
+            # This month's revenue
+            m_rev = self.fetch(
+                "SELECT COALESCE(SUM(amount_paid),0) AS c FROM invoices "
+                "WHERE status IN ('Paid','Partial') "
+                "AND YEAR(created_at)=YEAR(CURDATE()) AND MONTH(created_at)=MONTH(CURDATE())",
+                one=True)
+            monthly_rev = float(m_rev["c"]) if m_rev else 0
+
+            # Total disbursed payroll
+            dis = self.fetch(
+                "SELECT COALESCE(SUM(net_amount),0) AS c FROM paycheck_requests "
+                "WHERE status='Disbursed'", one=True)
+            total_dis = float(dis["c"]) if dis else 0
+
+            # This month's disbursed
+            m_dis = self.fetch(
+                "SELECT COALESCE(SUM(net_amount),0) AS c FROM paycheck_requests "
+                "WHERE status='Disbursed' "
+                "AND YEAR(disbursed_at)=YEAR(CURDATE()) AND MONTH(disbursed_at)=MONTH(CURDATE())",
+                one=True)
+            monthly_dis = float(m_dis["c"]) if m_dis else 0
+
+            # Pending payroll (approved but not yet disbursed)
+            pend = self.fetch(
+                "SELECT COALESCE(SUM(net_amount),0) AS c FROM paycheck_requests "
+                "WHERE status IN ('Pending','Approved')", one=True)
+            pending = float(pend["c"]) if pend else 0
+
+            return {
+                "total_revenue": total_rev,
+                "total_disbursed": total_dis,
+                "net_balance": total_rev - total_dis,
+                "pending_payroll": pending,
+                "monthly_revenue": monthly_rev,
+                "monthly_disbursed": monthly_dis,
+            }
+        except Exception:
+            return defaults
+
     def get_upcoming_appointments(self, limit=10, doctor_email=None):
         where_extra = ""
         params = []

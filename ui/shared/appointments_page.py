@@ -223,6 +223,7 @@ class AppointmentsPage(QWidget):
         rows = self._rows_for_tab()
         rows.sort(key=lambda a: (str(a.get("appointment_date","")), str(a.get("appointment_time",""))),
                   reverse=(self._active_tab == "All"))
+        self.table.setRowCount(0)
         self.table.setRowCount(len(rows))
         self._appointment_ids = []
         col_count = self.table.columnCount()

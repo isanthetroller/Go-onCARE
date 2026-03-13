@@ -104,6 +104,7 @@ CREATE TABLE employees (
     leave_until        DATE DEFAULT NULL,
     salary             DECIMAL(10, 2) DEFAULT NULL,
     emergency_contact  VARCHAR(200) DEFAULT '',
+    address            VARCHAR(300) DEFAULT '',
 
     FOREIGN KEY (role_id)       REFERENCES roles(role_id),
     FOREIGN KEY (department_id) REFERENCES departments(department_id)
@@ -370,13 +371,36 @@ INSERT INTO services (service_name, price, category, is_active) VALUES
     ('X-Ray Review',             800.00,  'Imaging',      1),
     ('Physical Exam',           1000.00,  'Consultation', 1);
 
--- Lab services → Laboratory dept, Dental → Dentistry dept
--- Consultation / Imaging / Therapy have no mapping → available to all
+-- Department → Service mapping
+-- Cardiology
 INSERT INTO service_departments (service_id, department_id)
-SELECT s.service_id, d.department_id
-FROM services s CROSS JOIN departments d
-WHERE (s.category = 'Lab'    AND d.department_name = 'Laboratory')
-   OR (s.category = 'Dental' AND d.department_name = 'Dentistry');
+SELECT s.service_id, d.department_id FROM services s, departments d
+WHERE d.department_name = 'Cardiology'
+  AND s.service_name IN ('ECG','Consultation','Follow-up Visit','General Checkup','Lab Results Review');
+
+-- Dentistry
+INSERT INTO service_departments (service_id, department_id)
+SELECT s.service_id, d.department_id FROM services s, departments d
+WHERE d.department_name = 'Dentistry'
+  AND s.service_name IN ('Dental Cleaning','X-Ray','Consultation');
+
+-- Laboratory
+INSERT INTO service_departments (service_id, department_id)
+SELECT s.service_id, d.department_id FROM services s, departments d
+WHERE d.department_name = 'Laboratory'
+  AND s.service_name IN ('Blood Work','Lab Tests – CBC','Lab Tests – Urinalysis');
+
+-- General Medicine
+INSERT INTO service_departments (service_id, department_id)
+SELECT s.service_id, d.department_id FROM services s, departments d
+WHERE d.department_name = 'General Medicine'
+  AND s.service_name IN ('General Checkup','Consultation','Follow-up Visit','Physical Exam');
+
+-- Pediatrics
+INSERT INTO service_departments (service_id, department_id)
+SELECT s.service_id, d.department_id FROM services s, departments d
+WHERE d.department_name = 'Pediatrics'
+  AND s.service_name IN ('General Checkup','Consultation','Follow-up Visit','Physical Exam');
 
 INSERT INTO payment_methods (method_name) VALUES
     ('Cash'),

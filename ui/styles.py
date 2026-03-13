@@ -170,18 +170,25 @@ def make_banner(title_text: str, subtitle_text: str,
 
     banner = QFrame()
     banner.setObjectName("pageBanner")
-    banner.setMinimumHeight(100)
+    banner.setMinimumHeight(120)
 
     banner_lay = QHBoxLayout(banner)
-    banner_lay.setContentsMargins(32, 24, 32, 24)
+    banner_lay.setContentsMargins(32, 28, 32, 24)
     banner_lay.setSpacing(0)
     tc = QVBoxLayout()
     tc.setSpacing(6)
     t = QLabel(title_text)
     t.setObjectName("bannerTitle")
+    tc.addWidget(t)
+
+    # Thin accent separator (matches dashboard style)
+    sep = QFrame()
+    sep.setFixedHeight(1)
+    sep.setStyleSheet("background: rgba(255,255,255,0.25); border: none;")
+    tc.addWidget(sep)
+
     s = QLabel(subtitle_text)
     s.setObjectName("bannerSubtitle")
-    tc.addWidget(t)
     tc.addWidget(s)
     banner_lay.addLayout(tc)
     banner_lay.addStretch()

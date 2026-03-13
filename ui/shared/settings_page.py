@@ -179,53 +179,99 @@ class SettingsPage(QWidget):
         lay.addWidget(tax_card)
         self._load_tax_settings()
 
+        # ── Department Management ──────────────────────────────────
+        lay.addWidget(self._section("Department Management"))
+        dept_card = self._card()
+        dptl = QVBoxLayout(dept_card); dptl.setContentsMargins(20, 16, 20, 16); dptl.setSpacing(12)
+
+        dept_info = QLabel(
+            "Manage hospital departments. Departments with assigned employees cannot be deleted."
+        )
+        dept_info.setStyleSheet("font-size: 12px; color: #7F8C8D;")
+        dept_info.setWordWrap(True)
+        dptl.addWidget(dept_info)
+
+        self._dept_table = make_interactive_table(
+            ["Department Name", "Employees"], min_h=160, max_h=260, row_h=40)
+        dptl.addWidget(self._dept_table)
+
+        dept_btn_row = QHBoxLayout(); dept_btn_row.setSpacing(8)
+        add_dept_btn = self._action_btn("Add Department")
+        add_dept_btn.clicked.connect(self._on_add_department)
+        dept_btn_row.addWidget(add_dept_btn)
+        del_dept_btn = self._action_btn("Delete Selected", danger=True)
+        del_dept_btn.clicked.connect(self._on_delete_department)
+        dept_btn_row.addWidget(del_dept_btn)
+        dept_btn_row.addStretch()
+        dptl.addLayout(dept_btn_row)
+
+        lay.addWidget(dept_card)
+        self._dept_ids: list[int] = []
+        self._load_departments()
+
         # ── Database Overview ──────────────────────────────────────
         lay.addWidget(self._section("Database Overview"))
         self.counts_table = make_read_only_table(
             ["Table", "Row Count"], min_h=300, row_h=40)
         lay.addWidget(self.counts_table)
 
-        # ── Cleanup actions ────────────────────────────────────────
-        lay.addWidget(self._section("Cleanup Actions"))
+        # ── Data maintenance ────────────────────────────────────────
+        lay.addWidget(self._section("Data Maintenance"))
 
-        # 1) Completed appointments older than …
+        # 1) Old completed appointments
         card1 = self._card(); c1 = QHBoxLayout(card1)
-        c1.setContentsMargins(20, 16, 20, 16); c1.setSpacing(12)
-        c1.addWidget(self._cleanup_lbl("Remove completed appointments before:"))
+        c1.setContentsMargins(20, 16, 20, 16); c1.setSpacing(16)
+        lbl_col1 = QVBoxLayout(); lbl_col1.setSpacing(2)
+        lbl_col1.addWidget(self._cleanup_title("Archive Old Appointments"))
+        lbl_col1.addWidget(self._cleanup_hint(
+            "Permanently remove completed appointments older than the selected date.\n"
+            "This helps keep your records tidy without affecting recent data."))
+        c1.addLayout(lbl_col1, 1)
         self.cutoff_date = QDateEdit(); self.cutoff_date.setCalendarPopup(True)
         self.cutoff_date.setDate(QDate.currentDate().addMonths(-3))
         self.cutoff_date.setObjectName("formCombo"); self.cutoff_date.setMinimumHeight(38)
+        self.cutoff_date.setToolTip("Only appointments completed before this date will be removed")
         c1.addWidget(self.cutoff_date)
-        btn1 = self._action_btn("Clean Up"); btn1.clicked.connect(self._cleanup_completed)
+        btn1 = self._action_btn("Remove Old Data"); btn1.clicked.connect(self._cleanup_completed)
         c1.addWidget(btn1)
         lay.addWidget(card1)
 
         # 2) Cancelled appointments
         card2 = self._card(); c2 = QHBoxLayout(card2)
-        c2.setContentsMargins(20, 16, 20, 16); c2.setSpacing(12)
-        c2.addWidget(self._cleanup_lbl("Remove all cancelled appointments and linked records"), 1)
-        btn2 = self._action_btn("Clean Up"); btn2.clicked.connect(self._cleanup_cancelled)
+        c2.setContentsMargins(20, 16, 20, 16); c2.setSpacing(16)
+        lbl_col2 = QVBoxLayout(); lbl_col2.setSpacing(2)
+        lbl_col2.addWidget(self._cleanup_title("Clear Cancelled Appointments"))
+        lbl_col2.addWidget(self._cleanup_hint(
+            "Remove all appointments that were cancelled, along with any\n"
+            "related billing or queue records. Active appointments are not affected."))
+        c2.addLayout(lbl_col2, 1)
+        btn2 = self._action_btn("Clear Cancelled"); btn2.clicked.connect(self._cleanup_cancelled)
         c2.addWidget(btn2)
         lay.addWidget(card2)
 
         # 3) Inactive patients
         card3 = self._card(); c3 = QHBoxLayout(card3)
-        c3.setContentsMargins(20, 16, 20, 16); c3.setSpacing(12)
-        c3.addWidget(self._cleanup_lbl("Remove inactive patients and all their linked data"), 1)
-        btn3 = self._action_btn("Clean Up"); btn3.clicked.connect(self._cleanup_inactive)
+        c3.setContentsMargins(20, 16, 20, 16); c3.setSpacing(16)
+        lbl_col3 = QVBoxLayout(); lbl_col3.setSpacing(2)
+        lbl_col3.addWidget(self._cleanup_title("Remove Inactive Patients"))
+        lbl_col3.addWidget(self._cleanup_hint(
+            "Delete patients marked as \"Inactive\" and all their associated records\n"
+            "(appointments, invoices, conditions). Active patients are never touched."))
+        c3.addLayout(lbl_col3, 1)
+        btn3 = self._action_btn("Remove Inactive"); btn3.clicked.connect(self._cleanup_inactive)
         c3.addWidget(btn3)
         lay.addWidget(card3)
 
-        # 4) Truncate table
+        # 4) Reset visit queue
         card4 = self._card(); c4 = QHBoxLayout(card4)
-        c4.setContentsMargins(20, 16, 20, 16); c4.setSpacing(12)
-        c4.addWidget(self._cleanup_lbl("Truncate (empty) table:"))
-        self.trunc_combo = QComboBox(); self.trunc_combo.setObjectName("formCombo")
-        self.trunc_combo.setMinimumHeight(38); self.trunc_combo.setMinimumWidth(200)
-        self.trunc_combo.addItems(["queue_entries", "invoice_items", "invoices",
-                                   "appointments", "patient_conditions"])
-        c4.addWidget(self.trunc_combo)
-        btn4 = self._action_btn("Truncate", danger=True); btn4.clicked.connect(self._truncate)
+        c4.setContentsMargins(20, 16, 20, 16); c4.setSpacing(16)
+        lbl_col4 = QVBoxLayout(); lbl_col4.setSpacing(2)
+        lbl_col4.addWidget(self._cleanup_title("Reset Today's Visit Queue"))
+        lbl_col4.addWidget(self._cleanup_hint(
+            "Clear the patient waiting queue. Use this if the queue gets stuck\n"
+            "or at the start of a new day to begin with a clean slate."))
+        c4.addLayout(lbl_col4, 1)
+        btn4 = self._action_btn("Reset Queue", danger=True); btn4.clicked.connect(self._reset_queue)
         c4.addWidget(btn4)
         lay.addWidget(card4)
 
@@ -247,8 +293,21 @@ class SettingsPage(QWidget):
         l = QLabel(text); l.setObjectName("cleanupLabel"); return l
 
     @staticmethod
+    def _cleanup_title(text: str) -> QLabel:
+        l = QLabel(text)
+        l.setStyleSheet("font-size: 14px; font-weight: bold; color: #2C3E50;")
+        return l
+
+    @staticmethod
+    def _cleanup_hint(text: str) -> QLabel:
+        l = QLabel(text)
+        l.setWordWrap(True)
+        l.setStyleSheet("font-size: 12px; color: #7F8C8D; line-height: 1.4;")
+        return l
+
+    @staticmethod
     def _action_btn(label: str, *, danger: bool = False) -> QPushButton:
-        btn = QPushButton(label); btn.setMinimumHeight(38); btn.setMinimumWidth(110)
+        btn = QPushButton(label); btn.setMinimumHeight(38); btn.setMinimumWidth(150)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.setObjectName("truncateBtn" if danger else "cleanupBtn"); return btn
 
@@ -287,52 +346,73 @@ class SettingsPage(QWidget):
 
     def _cleanup_completed(self):
         cutoff = self.cutoff_date.date().toString("yyyy-MM-dd")
+        display_date = self.cutoff_date.date().toString("MMMM d, yyyy")
         reply = QMessageBox.question(
-            self, "Confirm Cleanup",
-            f"Delete all completed appointments before {cutoff} and their linked invoices / queue entries?",
+            self, "Archive Old Appointments",
+            f"This will permanently remove all completed appointments "
+            f"from before {display_date}, along with their billing and queue records.\n\n"
+            f"Recent and upcoming appointments will not be affected.\n\n"
+            f"Do you want to continue?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
             n = self._backend.cleanup_completed_appointments(cutoff)
-            QMessageBox.information(self, "Done", f"{n} completed appointment(s) removed.")
+            QMessageBox.information(self, "Done",
+                f"Successfully removed {n} old appointment(s)." if n
+                else "No old completed appointments found to remove.")
             self._refresh_counts()
 
     def _cleanup_cancelled(self):
         reply = QMessageBox.question(
-            self, "Confirm Cleanup",
-            "Delete ALL cancelled appointments and their linked records?",
+            self, "Clear Cancelled Appointments",
+            "This will permanently remove all cancelled appointments "
+            "and their related records.\n\n"
+            "Active, confirmed, and completed appointments will not be affected.\n\n"
+            "Do you want to continue?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
             n = self._backend.cleanup_cancelled_appointments()
-            QMessageBox.information(self, "Done", f"{n} cancelled appointment(s) removed.")
+            QMessageBox.information(self, "Done",
+                f"Successfully removed {n} cancelled appointment(s)." if n
+                else "No cancelled appointments found to remove.")
             self._refresh_counts()
 
     def _cleanup_inactive(self):
         reply = QMessageBox.question(
-            self, "Confirm Cleanup",
-            "Delete ALL inactive patients and every record linked to them\n"
-            "(appointments, invoices, conditions, queue entries)?",
+            self, "Remove Inactive Patients",
+            "This will permanently remove all patients marked as \"Inactive\" "
+            "and all of their associated records "
+            "(appointments, invoices, medical conditions, and queue entries).\n\n"
+            "Active patients will not be affected.\n\n"
+            "Do you want to continue?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
             n = self._backend.cleanup_inactive_patients()
-            QMessageBox.information(self, "Done", f"{n} inactive patient(s) removed.")
+            QMessageBox.information(self, "Done",
+                f"Successfully removed {n} inactive patient(s) and their records." if n
+                else "No inactive patients found to remove.")
             self._refresh_counts()
 
-    def _truncate(self):
-        table = self.trunc_combo.currentText()
+    def _reset_queue(self):
         reply = QMessageBox.warning(
-            self, "Confirm Truncate",
-            f"This will permanently delete ALL rows from '{table}'.\n\nContinue?",
+            self, "Reset Visit Queue",
+            "This will clear the entire patient visit queue.\n\n"
+            "Use this if the queue is stuck or to start fresh for the day.\n"
+            "Appointments themselves will not be deleted.\n\n"
+            "Do you want to continue?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
-            ok = self._backend.truncate_table(table)
+            ok = self._backend.truncate_table("queue_entries")
             if ok:
-                QMessageBox.information(self, "Done", f"Table '{table}' has been emptied.")
+                QMessageBox.information(self, "Done",
+                    "The visit queue has been cleared. "
+                    "New patients can now be queued as usual.")
             else:
-                QMessageBox.critical(self, "Error", f"Failed to truncate '{table}'.")
+                QMessageBox.critical(self, "Error",
+                    "Could not reset the visit queue. Please try again.")
             self._refresh_counts()
 
     # ── Discount Management ────────────────────────────────────────────
@@ -478,6 +558,90 @@ class SettingsPage(QWidget):
             self._phil_spin.setValue(2.5)
             self._hosp_spin.setValue(10.0)
             self._save_tax_settings()
+
+    # ── Department Management ──────────────────────────────────────
+    def _load_departments(self):
+        """Populate the department table from the database."""
+        if not self._backend:
+            return
+        depts = self._backend.get_all_departments() if hasattr(self._backend, 'get_all_departments') else []
+        self._dept_ids = []
+        self._dept_table.setRowCount(len(depts))
+        for r, d in enumerate(depts):
+            dept_id = d.get("department_id", 0)
+            self._dept_ids.append(dept_id)
+            name_item = QTableWidgetItem(d.get("department_name", ""))
+            name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self._dept_table.setItem(r, 0, name_item)
+            # Employee count
+            count = 0
+            if hasattr(self._backend, 'get_department_employee_count'):
+                count = self._backend.get_department_employee_count(dept_id) or 0
+            count_item = QTableWidgetItem(str(count))
+            count_item.setFlags(count_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            count_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._dept_table.setItem(r, 1, count_item)
+
+    def _on_add_department(self):
+        name, ok = QInputDialog.getText(self, "Add Department", "Department name:")
+        if not ok or not name.strip():
+            return
+        name = name.strip()
+        if not self._backend or not hasattr(self._backend, 'add_department'):
+            return
+        result = self._backend.add_department(name)
+        if result is True:
+            QMessageBox.information(self, "Success", f"Department '{name}' created.")
+            self._load_departments()
+        else:
+            QMessageBox.warning(self, "Error",
+                                f"Could not create department.\n{result}" if isinstance(result, str)
+                                else "Department may already exist.")
+
+    def _on_delete_department(self):
+        row = self._dept_table.currentRow()
+        if row < 0 or row >= len(self._dept_ids):
+            QMessageBox.information(self, "Delete", "Select a department first.")
+            return
+        dept_id = self._dept_ids[row]
+        dept_name = self._dept_table.item(row, 0).text()
+        emp_count = 0
+        if hasattr(self._backend, 'get_department_employee_count'):
+            emp_count = self._backend.get_department_employee_count(dept_id) or 0
+
+        # ── First confirmation ──────────────────────────────────
+        msg1 = (f"Are you sure you want to delete the department '{dept_name}'?\n\n"
+                f"This department currently has {emp_count} employee(s).")
+        reply1 = QMessageBox.question(
+            self, "Confirm Deletion", msg1,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply1 != QMessageBox.StandardButton.Yes:
+            return
+
+        # ── Second confirmation (final) ─────────────────────────
+        msg2 = (f"⚠  FINAL CONFIRMATION  ⚠\n\n"
+                f"Deleting '{dept_name}' is permanent and cannot be undone.\n"
+                f"Employees in this department MUST be reassigned first.\n\n"
+                f"Proceed with deletion?")
+        reply2 = QMessageBox.warning(
+            self, "Final Confirmation – Delete Department", msg2,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if reply2 != QMessageBox.StandardButton.Yes:
+            return
+
+        if not self._backend or not hasattr(self._backend, 'delete_department'):
+            return
+        result = self._backend.delete_department(dept_id)
+        if result is True:
+            QMessageBox.information(self, "Deleted", f"Department '{dept_name}' has been removed.")
+            self._load_departments()
+        else:
+            QMessageBox.warning(self, "Cannot Delete",
+                                f"Cannot delete '{dept_name}'.\n\n"
+                                "Reassign all employees from this department first."
+                                if emp_count > 0 else
+                                f"Deletion failed: {result}" if isinstance(result, str)
+                                else "Deletion failed.")
 
 # ══════════════════════════════════════════════════════════════════════
 #  Discount Type Add/Edit Dialog

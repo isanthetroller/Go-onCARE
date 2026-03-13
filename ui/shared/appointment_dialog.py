@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QMessageBox, QCompleter, QHBoxLayout, QVBoxLayout,
     QWidget, QFrame, QTableWidget, QTableWidgetItem, QHeaderView,
 )
-from PyQt6.QtCore import Qt, QDate, QTime
+from PyQt6.QtCore import Qt, QDate, QTime, QTimer
 from PyQt6.QtGui import QColor, QFont
 from ui.styles import style_dialog_btns
 
@@ -82,6 +82,10 @@ class AppointmentDialog(QDialog):
         self._is_edit = data is not None
         self._original_date = data.get("date", "") if data else ""
 
+        # Track current schedule bounds for time validation
+        self._sched_start_hhmm: str | None = None
+        self._sched_end_hhmm: str | None = None
+
         # Main horizontal layout: form left, schedule right
         root = QHBoxLayout(self)
         root.setSpacing(20)
@@ -132,8 +136,6 @@ class AppointmentDialog(QDialog):
             _my_emp_id = self._backend.get_employee_id_by_email(self._user_email)
         for i, doc in enumerate(self._doctors):
             label = doc["doctor_name"]
-            if doc.get("sched_start") and doc.get("sched_end"):
-                label += f"  ({doc['sched_start']} \u2013 {doc['sched_end']})"
             self.doctor_combo.addItem(label, doc["employee_id"])
             if _my_emp_id is not None and doc["employee_id"] == _my_emp_id:
                 preselect_idx = i
@@ -148,36 +150,51 @@ class AppointmentDialog(QDialog):
         self.time_edit.setDisplayFormat("hh:mm AP")
         self.time_edit.setMinimumHeight(40)
 
+        # No-slots warning (hidden by default)
+        self._no_slots_label = QLabel()
+        self._no_slots_label.setStyleSheet(
+            "font-size: 12px; font-weight: bold; color: #D9534F; padding: 4px 0;")
+        self._no_slots_label.setWordWrap(True)
+        self._no_slots_label.setVisible(False)
+
+        # Service combo — with placeholder
         self.purpose_combo = QComboBox()
         self.purpose_combo.setObjectName("formCombo")
         self.purpose_combo.setMinimumHeight(40)
-        self._populate_services(self._services)
+        self.purpose_combo.addItem("Select a service\u2026", None)
+        self.purpose_combo.setCurrentIndex(0)
 
         self.notes_edit = QTextEdit()
         self.notes_edit.setObjectName("formInput")
         self.notes_edit.setMaximumHeight(70)
         self.notes_edit.setPlaceholderText("Optional notes\u2026")
 
+        # Cancel reason — hidden by default
+        self._cancel_reason_label = QLabel("Cancel Reason")
         self.cancel_reason = QLineEdit()
         self.cancel_reason.setObjectName("formInput")
-        self.cancel_reason.setPlaceholderText("Reason (if cancelling)")
+        self.cancel_reason.setPlaceholderText("Reason for cancellation")
         self.cancel_reason.setMinimumHeight(38)
         self.cancel_reason.setMaxLength(300)
+        self._cancel_reason_label.setVisible(False)
+        self.cancel_reason.setVisible(False)
 
         self.status_combo = QComboBox()
         self.status_combo.setObjectName("formCombo")
         self.status_combo.addItems(["Confirmed", "Cancelled", "Completed"])
         self.status_combo.setMinimumHeight(40)
+        self.status_combo.currentTextChanged.connect(self._on_status_changed)
 
         form.addRow("Date", self._today_label)
         form.addRow("Patient", self.patient_combo)
         form.addRow("Doctor", self.doctor_combo)
         form.addRow("Time", self.time_edit)
+        form.addRow("", self._no_slots_label)
         form.addRow("Service", self.purpose_combo)
         form.addRow("Notes", self.notes_edit)
         if self._is_edit:
             form.addRow("Status", self.status_combo)
-            form.addRow("Cancel Reason", self.cancel_reason)
+            form.addRow(self._cancel_reason_label, self.cancel_reason)
 
         btns = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
@@ -257,32 +274,49 @@ class AppointmentDialog(QDialog):
                     break
             if data.get("time"):
                 self.time_edit.setTime(QTime.fromString(data["time"], "HH:mm:ss"))
-            idx = self.purpose_combo.findText(data.get("purpose", ""))
-            if idx >= 0:
-                self.purpose_combo.setCurrentIndex(idx)
             idx = self.status_combo.findText(data.get("status", ""))
             if idx >= 0:
                 self.status_combo.setCurrentIndex(idx)
             if data.get("notes"):
                 self.notes_edit.setPlainText(data["notes"])
             self.cancel_reason.setText(data.get("cancellation_reason", "") or "")
+            # Show cancel reason if editing a cancelled appointment
+            if data.get("status") == "Cancelled":
+                self._cancel_reason_label.setVisible(True)
+                self.cancel_reason.setVisible(True)
 
-        # Trigger initial schedule load
+        # Trigger initial schedule load (also sets service filtering)
         if self.doctor_combo.count() > 0:
             self._on_doctor_changed(self.doctor_combo.currentIndex())
 
+        # After initial load, try to re-select the original service for edits
+        if data and data.get("purpose"):
+            idx = self.purpose_combo.findText(data["purpose"])
+            if idx >= 0:
+                self.purpose_combo.setCurrentIndex(idx)
+
+        # Real-time clock timer: refresh time constraints every 60 seconds
+        self._clock_timer = QTimer(self)
+        self._clock_timer.timeout.connect(self._refresh_time_range)
+        self._clock_timer.start(60_000)
+
+    # ── Service handling ──────────────────────────────────────────
     def _populate_services(self, services):
-        """Fill the purpose combo with the given service list."""
+        """Fill the purpose combo with the given service list, keeping placeholder."""
         prev = self.purpose_combo.currentData()
         self.purpose_combo.clear()
+        self.purpose_combo.addItem("Select a service\u2026", None)
         for svc in services:
             self.purpose_combo.addItem(svc["service_name"], svc["service_id"])
+        # Try to re-select previous
         if prev is not None:
             for i in range(self.purpose_combo.count()):
                 if self.purpose_combo.itemData(i) == prev:
                     self.purpose_combo.setCurrentIndex(i)
-                    break
+                    return
+        self.purpose_combo.setCurrentIndex(0)
 
+    # ── Doctor change ─────────────────────────────────────────────
     def _on_doctor_changed(self, index):
         """When doctor selection changes, load schedule and filter services."""
         doc_id = self.doctor_combo.currentData()
@@ -294,6 +328,8 @@ class AppointmentDialog(QDialog):
         if hasattr(self._backend, 'get_services_for_doctor'):
             filtered = self._backend.get_services_for_doctor(doc_id) or []
             self._populate_services(filtered if filtered else self._services)
+        else:
+            self._populate_services(self._services)
 
         self._sched_panel.setVisible(True)
         schedules = self._backend.get_doctor_schedules(doc_id) or []
@@ -328,33 +364,113 @@ class AppointmentDialog(QDialog):
             self._sched_table.setItem(r, 1, start_item)
             self._sched_table.setItem(r, 2, end_item)
 
+        # Store schedule bounds for time validation
+        self._sched_start_hhmm = today_start
+        self._sched_end_hhmm = today_end
+        self._apply_time_range(appt_d, target_day, today_start, today_end)
+
+    def _apply_time_range(self, appt_d, target_day, today_start, today_end):
+        """Set time edit range respecting schedule + real-time constraints."""
         day_label = "today" if appt_d == date.today() else f"on {target_day}"
+
         if today_start and today_end:
+            t_start = QTime.fromString(today_start, "HH:mm")
+            t_end = QTime.fromString(today_end, "HH:mm")
+            if not t_start.isValid() or not t_end.isValid():
+                self._set_no_schedule(target_day, day_label)
+                return
+
+            effective_start = t_start
+            # If appointment date is today, enforce real-time floor
+            if appt_d == date.today():
+                now = QTime.currentTime()
+                # Round up to next 30-min slot
+                now_mins = now.hour() * 60 + now.minute()
+                next_slot = now_mins + (30 - now_mins % 30)
+                if next_slot >= 1440:
+                    # Past midnight boundary — no valid slots remain
+                    effective_start = t_end
+                else:
+                    real_floor = QTime(next_slot // 60, next_slot % 60)
+                    if real_floor > t_start:
+                        effective_start = real_floor
+
+            if effective_start >= t_end:
+                # All time slots have passed
+                self.time_edit.setEnabled(False)
+                self._no_slots_label.setText(
+                    "No available time slots remaining for today. "
+                    "Please select a future date.")
+                self._no_slots_label.setVisible(True)
+                self._today_sched_label.setText(
+                    f"No remaining slots {day_label} ({target_day})")
+                self._today_sched_label.setStyleSheet(
+                    "font-size: 13px; font-weight: bold; color: #D9534F;"
+                    " padding: 8px; background: #FDECEA; border-radius: 6px;")
+                self._sched_info.setText(
+                    f"Doctor's hours are {_format_time_display(today_start)} \u2013 "
+                    f"{_format_time_display(today_end)} but all slots have passed.")
+                return
+
+            self.time_edit.setEnabled(True)
+            self._no_slots_label.setVisible(False)
+            self.time_edit.setTimeRange(effective_start, t_end)
+            if self.time_edit.time() < effective_start:
+                self.time_edit.setTime(effective_start)
+            elif self.time_edit.time() > t_end:
+                self.time_edit.setTime(effective_start)
+
             self._today_sched_label.setText(
-                f"Available {day_label} ({target_day}):  {_format_time_display(today_start)}"
+                f"Available {day_label} ({target_day}):  "
+                f"{_format_time_display(effective_start.toString('HH:mm'))}"
                 f" \u2013 {_format_time_display(today_end)}")
             self._today_sched_label.setStyleSheet(
                 "font-size: 13px; font-weight: bold; color: #27AE60;"
                 " padding: 8px; background: #E8F6F3; border-radius: 6px;")
-            self._sched_info.setText(f"Available {day_label} \u2014 time restricted to schedule hours")
-            t_start = QTime.fromString(today_start, "HH:mm")
-            t_end = QTime.fromString(today_end, "HH:mm")
-            if t_start.isValid() and t_end.isValid():
-                self.time_edit.setTimeRange(t_start, t_end)
-                if self.time_edit.time() < t_start:
-                    self.time_edit.setTime(t_start)
-                elif self.time_edit.time() > t_end:
-                    self.time_edit.setTime(t_start)
-        else:
-            self._today_sched_label.setText(f"Not available {day_label} ({target_day})")
-            self._today_sched_label.setStyleSheet(
-                "font-size: 13px; font-weight: bold; color: #D9534F;"
-                " padding: 8px; background: #FDECEA; border-radius: 6px;")
             self._sched_info.setText(
-                f"This doctor has no schedule for {target_day}.\n"
-                "You can still create the appointment.")
-            self.time_edit.setTimeRange(QTime(0, 0), QTime(23, 59))
+                f"Available {day_label} \u2014 time restricted to schedule hours")
+        else:
+            self._set_no_schedule(target_day, day_label)
 
+    def _set_no_schedule(self, target_day, day_label):
+        """Doctor has no schedule for the target day."""
+        self._today_sched_label.setText(f"Not available {day_label} ({target_day})")
+        self._today_sched_label.setStyleSheet(
+            "font-size: 13px; font-weight: bold; color: #D9534F;"
+            " padding: 8px; background: #FDECEA; border-radius: 6px;")
+        self._sched_info.setText(
+            f"This doctor has no schedule for {target_day}.\n"
+            "You can still create the appointment.")
+        self.time_edit.setEnabled(True)
+        self._no_slots_label.setVisible(False)
+        self.time_edit.setTimeRange(QTime(0, 0), QTime(23, 59))
+
+    def _refresh_time_range(self):
+        """Called by timer to refresh time constraints as real time advances."""
+        if not self._sched_start_hhmm or not self._sched_end_hhmm:
+            return
+        if self._is_edit and self._original_date:
+            try:
+                appt_d = datetime.strptime(self._original_date, "%Y-%m-%d").date()
+            except Exception:
+                appt_d = date.today()
+        else:
+            appt_d = date.today()
+        # Only re-apply if the appointment is for today
+        if appt_d == date.today():
+            target_day = _DAY_NAMES[appt_d.weekday()]
+            self._apply_time_range(
+                appt_d, target_day, self._sched_start_hhmm, self._sched_end_hhmm)
+
+    # ── Status change → cancel reason visibility ──────────────────
+    def _on_status_changed(self, status_text):
+        is_cancelled = status_text == "Cancelled"
+        self._cancel_reason_label.setVisible(is_cancelled)
+        self.cancel_reason.setVisible(is_cancelled)
+        if not is_cancelled:
+            self.cancel_reason.clear()
+
+    # ── Patient selection ─────────────────────────────────────────
     def _on_patient_selected(self, text):
         idx = self.patient_combo.findText(text, Qt.MatchFlag.MatchExactly)
         if idx >= 0:
@@ -376,6 +492,7 @@ class AppointmentDialog(QDialog):
             return self._selected_patient_id
         return None
 
+    # ── Validation + Save ─────────────────────────────────────────
     def _validate_and_accept(self):
         patient_text = self.patient_combo.currentText().strip()
         patient_id = self._get_patient_id()
@@ -388,11 +505,68 @@ class AppointmentDialog(QDialog):
                                 "Please select an existing patient from the list.")
             self.patient_combo.setFocus()
             return
-        if self._backend:
-            doc_id = self.doctor_combo.currentData()
-            dt = date.today().isoformat()
-            tm = self.time_edit.time().toString("HH:mm:ss")
-            if doc_id and self._backend.check_appointment_conflict(doc_id, dt, tm):
+
+        # Validate service selection
+        if self.purpose_combo.currentData() is None:
+            QMessageBox.warning(self, "Missing Service",
+                                "Please select a service.")
+            self.purpose_combo.setFocus()
+            return
+
+        # Validate service matches doctor's department
+        doc_id = self.doctor_combo.currentData()
+        if doc_id and self._backend and hasattr(self._backend, 'get_services_for_doctor'):
+            allowed = self._backend.get_services_for_doctor(doc_id) or []
+            allowed_ids = {s["service_id"] for s in allowed}
+            svc_id = self.purpose_combo.currentData()
+            if svc_id and svc_id not in allowed_ids:
+                QMessageBox.warning(
+                    self, "Service Mismatch",
+                    f"'{self.purpose_combo.currentText()}' is not available for this doctor's department.\n"
+                    "Please select a valid service.")
+                self.purpose_combo.setFocus()
+                return
+
+        # Validate cancel reason if status is Cancelled
+        if self._is_edit and self.status_combo.currentText() == "Cancelled":
+            if not self.cancel_reason.text().strip():
+                QMessageBox.warning(self, "Missing Reason",
+                                    "Please provide a cancellation reason.")
+                self.cancel_reason.setFocus()
+                return
+
+        # Real-time re-validation of selected time
+        appt_date = self._original_date if self._is_edit and self._original_date else date.today().isoformat()
+        selected_time = self.time_edit.time()
+        try:
+            appt_d = datetime.strptime(appt_date, "%Y-%m-%d").date()
+        except Exception:
+            appt_d = date.today()
+
+        if appt_d == date.today():
+            now = QTime.currentTime()
+            if selected_time <= now:
+                QMessageBox.warning(
+                    self, "Time Has Passed",
+                    f"The selected time ({selected_time.toString('hh:mm AP')}) "
+                    f"has already passed.\nCurrent time is {now.toString('hh:mm AP')}. "
+                    "Please choose a later time.")
+                self.time_edit.setFocus()
+                # Refresh the time range to update stale limits
+                self._refresh_time_range()
+                return
+
+        # Conflict check
+        if self._backend and doc_id:
+            dt = appt_date
+            tm = selected_time.toString("HH:mm:ss")
+            exclude_id = None
+            if self._is_edit:
+                # Pass the current appointment_id to exclude from conflict check
+                # (the parent passes it via data, but we don't have it directly —
+                #  so just check without exclusion for walk-ins)
+                pass
+            if self._backend.check_appointment_conflict(doc_id, dt, tm, exclude_id):
                 reply = QMessageBox.warning(
                     self, "Conflict Detected",
                     "This doctor already has an appointment at the same time.\nSave anyway?",

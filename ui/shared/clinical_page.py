@@ -397,46 +397,134 @@ class ClinicalPage(QWidget):
         patient = self._queue_table.item(row, 1).text() if self._queue_table.item(row, 1) else ""
         dlg = QDialog(self)
         dlg.setWindowTitle(f"Record Vitals \u2013 {patient}")
-        dlg.setMinimumWidth(440)
-        fl = QFormLayout(dlg)
-        fl.setSpacing(12); fl.setContentsMargins(24, 24, 24, 24)
+        dlg.setMinimumWidth(520)
+        main_lay = QVBoxLayout(dlg)
+        main_lay.setContentsMargins(0, 0, 0, 0)
+        main_lay.setSpacing(0)
 
+        # Header bar
+        hdr = QFrame()
+        hdr.setStyleSheet("background: #388087; border: none;")
+        hdr.setFixedHeight(56)
+        hdr_lay = QHBoxLayout(hdr)
+        hdr_lay.setContentsMargins(20, 0, 20, 0)
+        hdr_lbl = QLabel(f"\u2764  Vitals \u2013 {patient}")
+        hdr_lbl.setStyleSheet("font-size: 16px; font-weight: bold; color: #FFFFFF; border: none;")
+        hdr_lay.addWidget(hdr_lbl)
+        main_lay.addWidget(hdr)
+
+        content = QWidget()
+        fl = QFormLayout(content)
+        fl.setSpacing(14)
+        fl.setContentsMargins(28, 22, 28, 22)
+        fl.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+
+        _LABEL_SS = "font-size: 13px; font-weight: bold; color: #2C3E50;"
         _INPUT_SS = (
-            "QLineEdit { padding: 8px 12px; border: 2px solid #BADFE7;"
-            " border-radius: 10px; font-size: 13px; background: #FFF; }"
+            "QLineEdit { padding: 8px 14px; border: 2px solid #BADFE7;"
+            " border-radius: 10px; font-size: 13px; background: #FFF; color: #2C3E50; }"
             "QLineEdit:focus { border: 2px solid #388087; }")
+        _UNIT_SS = ("font-size: 11px; color: #7F8C8D; font-weight: bold;"
+                    " padding: 0 6px; min-width: 30px;")
 
+        from PyQt6.QtGui import QDoubleValidator, QRegularExpressionValidator
+        from PyQt6.QtCore import QRegularExpression
+
+        # Blood pressure (special: allow digits and /)
         bp_edit = QLineEdit()
-        bp_edit.setPlaceholderText("e.g. 120/80  (optional)")
-        bp_edit.setMinimumHeight(36)
-        bp_edit.setMaxLength(20)
+        bp_edit.setPlaceholderText("e.g. 120/80")
+        bp_edit.setMinimumHeight(40); bp_edit.setMaxLength(20)
         bp_edit.setStyleSheet(_INPUT_SS)
+        bp_edit.setValidator(QRegularExpressionValidator(
+            QRegularExpression(r"^[0-9]{0,3}/?[0-9]{0,3}$")))
+        bp_row = QHBoxLayout(); bp_row.setSpacing(4)
+        bp_row.addWidget(bp_edit, 1)
+        bp_unit = QLabel("mmHg"); bp_unit.setStyleSheet(_UNIT_SS)
+        bp_row.addWidget(bp_unit)
+        bp_lbl = QLabel("Blood Pressure"); bp_lbl.setStyleSheet(_LABEL_SS)
+        fl.addRow(bp_lbl, bp_row)
 
+        # Height with Feet/CM toggle
         height_edit = QLineEdit()
-        height_edit.setPlaceholderText("cm  (optional)")
-        height_edit.setMinimumHeight(36)
-        height_edit.setMaxLength(10)
+        height_edit.setMinimumHeight(40); height_edit.setMaxLength(10)
         height_edit.setStyleSheet(_INPUT_SS)
+        height_edit.setValidator(QDoubleValidator(0.0, 999.9, 1))
 
+        height_unit_btn = QPushButton("CM")
+        height_unit_btn.setCheckable(True)
+        height_unit_btn.setMinimumHeight(36); height_unit_btn.setMinimumWidth(64)
+        height_unit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        height_unit_btn.setStyleSheet(
+            "QPushButton { background: #388087; color: white; font-size: 11px;"
+            " font-weight: bold; border-radius: 8px; padding: 4px 10px; }"
+            "QPushButton:checked { background: #6FB3B8; }")
+
+        _height_is_feet = [False]  # mutable flag
+
+        def _toggle_height_unit(checked):
+            if checked:
+                height_unit_btn.setText("Feet")
+                height_edit.setPlaceholderText("e.g. 5.6  (feet)")
+                height_edit.setValidator(QDoubleValidator(0.0, 10.0, 2))
+                _height_is_feet[0] = True
+            else:
+                height_unit_btn.setText("CM")
+                height_edit.setPlaceholderText("e.g. 165.5")
+                height_edit.setValidator(QDoubleValidator(0.0, 999.9, 1))
+                _height_is_feet[0] = False
+            height_edit.clear()
+
+        height_unit_btn.toggled.connect(_toggle_height_unit)
+        height_edit.setPlaceholderText("e.g. 165.5")
+
+        ht_row = QHBoxLayout(); ht_row.setSpacing(4)
+        ht_row.addWidget(height_edit, 1)
+        ht_row.addWidget(height_unit_btn)
+        ht_lbl = QLabel("Height"); ht_lbl.setStyleSheet(_LABEL_SS)
+        fl.addRow(ht_lbl, ht_row)
+
+        # Weight
         weight_edit = QLineEdit()
-        weight_edit.setPlaceholderText("kg  (optional)")
-        weight_edit.setMinimumHeight(36)
-        weight_edit.setMaxLength(10)
+        weight_edit.setPlaceholderText("e.g. 70.5")
+        weight_edit.setMinimumHeight(40); weight_edit.setMaxLength(10)
         weight_edit.setStyleSheet(_INPUT_SS)
+        weight_edit.setValidator(QDoubleValidator(0.0, 999.9, 1))
+        wt_row = QHBoxLayout(); wt_row.setSpacing(4)
+        wt_row.addWidget(weight_edit, 1)
+        wt_unit = QLabel("kg"); wt_unit.setStyleSheet(_UNIT_SS)
+        wt_row.addWidget(wt_unit)
+        wt_lbl = QLabel("Weight"); wt_lbl.setStyleSheet(_LABEL_SS)
+        fl.addRow(wt_lbl, wt_row)
 
+        # Temperature
         temp_edit = QLineEdit()
-        temp_edit.setPlaceholderText("\u00b0C  (optional, e.g. 36.5)")
-        temp_edit.setMinimumHeight(36)
-        temp_edit.setMaxLength(10)
+        temp_edit.setPlaceholderText("e.g. 36.5")
+        temp_edit.setMinimumHeight(40); temp_edit.setMaxLength(10)
         temp_edit.setStyleSheet(_INPUT_SS)
+        temp_edit.setValidator(QDoubleValidator(25.0, 45.0, 1))
+        tp_row = QHBoxLayout(); tp_row.setSpacing(4)
+        tp_row.addWidget(temp_edit, 1)
+        tp_unit = QLabel("\u00b0C"); tp_unit.setStyleSheet(_UNIT_SS)
+        tp_row.addWidget(tp_unit)
+        tp_lbl = QLabel("Temperature"); tp_lbl.setStyleSheet(_LABEL_SS)
+        fl.addRow(tp_lbl, tp_row)
 
+        # Separator
+        sep = QFrame(); sep.setFixedHeight(1)
+        sep.setStyleSheet("background: #BADFE7; border: none; margin: 4px 0;")
+        fl.addRow(sep)
+
+        # Nurse notes (free text)
         from PyQt6.QtWidgets import QTextEdit
         notes_edit = QTextEdit()
         notes_edit.setPlaceholderText("Triage observations, chief complaint, symptoms\u2026")
-        notes_edit.setMaximumHeight(100)
+        notes_edit.setMaximumHeight(90)
         notes_edit.setStyleSheet(
-            "QTextEdit { padding: 8px; border: 2px solid #BADFE7;"
-            " border-radius: 10px; font-size: 13px; background: #FFF; }")
+            "QTextEdit { padding: 8px 12px; border: 2px solid #BADFE7;"
+            " border-radius: 10px; font-size: 13px; background: #FFF; color: #2C3E50; }"
+            "QTextEdit:focus { border: 2px solid #388087; }")
+        notes_lbl = QLabel("Nurse Notes"); notes_lbl.setStyleSheet(_LABEL_SS)
+        fl.addRow(notes_lbl, notes_edit)
 
         # Pre-fill existing vitals if updating
         if entry:
@@ -456,29 +544,29 @@ class ClinicalPage(QWidget):
             if nn:
                 notes_edit.setPlainText(nn)
 
-        fl.addRow("Blood Pressure", bp_edit)
-        fl.addRow("Height (cm)", height_edit)
-        fl.addRow("Weight (kg)", weight_edit)
-        fl.addRow("Temperature (\u00b0C)", temp_edit)
-        fl.addRow("Nurse Notes", notes_edit)
-
         hint = QLabel("All vitals are optional. Fill in what\u2019s available.")
         hint.setStyleSheet("font-size: 11px; color: #7F8C8D; font-style: italic;")
         fl.addRow(hint)
 
-        btn_row = QHBoxLayout(); btn_row.setSpacing(10); btn_row.addStretch()
-        cancel_btn = QPushButton("Cancel"); cancel_btn.setMinimumHeight(34)
+        main_lay.addWidget(content, 1)
+
+        # Buttons
+        btn_frame = QFrame()
+        btn_frame.setStyleSheet("background: #F0F7F8; border-top: 1px solid #BADFE7;")
+        btn_row = QHBoxLayout(btn_frame)
+        btn_row.setContentsMargins(20, 12, 20, 12); btn_row.setSpacing(10); btn_row.addStretch()
+        cancel_btn = QPushButton("Cancel"); cancel_btn.setMinimumHeight(36)
         cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         cancel_btn.setObjectName("dialogCancelBtn")
         cancel_btn.clicked.connect(dlg.reject)
-        save_btn = QPushButton("Save Vitals"); save_btn.setMinimumHeight(34)
+        save_btn = QPushButton("Save Vitals"); save_btn.setMinimumHeight(36)
         save_btn.setIcon(get_icon("save_vitals"))
         save_btn.setIconSize(QSize(18, 18))
         save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         save_btn.setObjectName("dialogSaveBtn")
         save_btn.clicked.connect(dlg.accept)
         btn_row.addWidget(cancel_btn); btn_row.addWidget(save_btn)
-        fl.addRow(btn_row)
+        main_lay.addWidget(btn_frame)
 
         if dlg.exec() == QDialog.DialogCode.Accepted:
             bp = bp_edit.text().strip()
@@ -487,18 +575,20 @@ class ClinicalPage(QWidget):
             temp_text = temp_edit.text().strip()
             notes = notes_edit.toPlainText().strip()
 
-            # Validate numeric fields
+            # Convert height from feet to cm if needed
             ht = None
             if ht_text:
                 try:
                     ht = float(ht_text)
+                    if _height_is_feet[0]:
+                        ht = round(ht * 30.48, 1)
                     if ht <= 0 or ht > 300:
                         QMessageBox.warning(self, "Validation",
                             "Height must be between 0 and 300 cm.")
                         return
                 except ValueError:
                     QMessageBox.warning(self, "Validation",
-                        "Height must be a number (e.g. 165.5).")
+                        "Height must be a number.")
                     return
 
             wt = None
@@ -511,7 +601,7 @@ class ClinicalPage(QWidget):
                         return
                 except ValueError:
                     QMessageBox.warning(self, "Validation",
-                        "Weight must be a number (e.g. 70.5).")
+                        "Weight must be a number.")
                     return
 
             temp = None
@@ -524,7 +614,7 @@ class ClinicalPage(QWidget):
                         return
                 except ValueError:
                     QMessageBox.warning(self, "Validation",
-                        "Temperature must be a number (e.g. 36.5).")
+                        "Temperature must be a number.")
                     return
 
             if not bp and ht is None and wt is None and temp is None and not notes:

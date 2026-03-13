@@ -30,12 +30,19 @@ class HREmployeesPage(QWidget):
         self._role = role
         self._employees: list[dict] = []
         self._leave_requests: list[dict] = []
+        self._initial_load_done = False
         self._build()
         self._load_from_db()
         # Auto-refresh data every 10 seconds
         self._refresh_timer = QTimer(self)
         self._refresh_timer.timeout.connect(self._load_from_db)
         self._refresh_timer.start(10_000)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not self._initial_load_done:
+            self._initial_load_done = True
+            QTimer.singleShot(0, self._load_from_db)
 
     def _load_from_db(self):
         if not self.isVisible():
@@ -124,28 +131,29 @@ class HREmployeesPage(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
+        # ── Single scroll area for the whole page ─────────────────
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
         container = QWidget()
         container.setObjectName("pageInner")
         lay = QVBoxLayout(container)
         lay.setContentsMargins(28, 24, 28, 28)
-        lay.setSpacing(16)
+        lay.setSpacing(14)
 
-        # ── Banner (always visible above tabs) ────────────────────
+        # ── Banner ────────────────────────────────────────────────
         banner = make_banner(
             "HR Employee Management",
-            "Comprehensive staff management \u2013 salary, leave, performance")
-        banner_lay = banner.layout()
-        add_btn = QPushButton("\uff0b  Add Employee")
-        add_btn.setObjectName("bannerBtn"); add_btn.setMinimumHeight(42)
-        add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        add_btn.clicked.connect(self._on_add)
-        banner_lay.addWidget(add_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
+            "Comprehensive staff management \u2013 salary, leave, performance",
+            btn_text="\uff0b  Add Employee", btn_slot=self._on_add)
         lay.addWidget(banner)
 
-        # ── Custom tab buttons + stacked widget ────────────────────
+        # ── Tab row ───────────────────────────────────────────────
         self._tab_buttons: dict[str, QPushButton] = {}
         self._stack = QStackedWidget()
-        tab_row = QHBoxLayout(); tab_row.setSpacing(8)
+        tab_row = QHBoxLayout()
+        tab_row.setSpacing(8)
+        tab_row.setContentsMargins(0, 4, 0, 0)
 
         tab_labels = ["Employees", "Leave Management", "Payroll && Staffing"]
         self._stack.addWidget(self._build_employees_tab())
@@ -165,11 +173,16 @@ class HREmployeesPage(QWidget):
             tab_row.addWidget(btn)
         tab_row.addStretch()
         lay.addLayout(tab_row)
+
+        # ── Stacked tab content (no extra scroll — each tab is just a widget) ─
         lay.addWidget(self._stack, 1)
+        lay.addStretch()
+
         if tab_labels:
             self._switch_tab(0, tab_labels[0])
 
-        outer.addWidget(container)
+        scroll.setWidget(container)
+        outer.addWidget(scroll)
 
     # ── Tab helpers ───────────────────────────────────────────────
 
@@ -179,21 +192,16 @@ class HREmployeesPage(QWidget):
             btn.setStyleSheet(TAB_ACTIVE if name == label else TAB_INACTIVE)
 
     @staticmethod
-    def _make_tab_scroll():
-        """Create a scrollable content area for one tab."""
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
+    def _make_tab_content():
+        """Create a plain widget container for one tab's content."""
         inner = QWidget()
-        inner.setObjectName("pageInner")
         lay = QVBoxLayout(inner)
-        lay.setSpacing(16)
-        lay.setContentsMargins(20, 20, 20, 20)
-        scroll.setWidget(inner)
-        return scroll, lay
+        lay.setSpacing(14)
+        lay.setContentsMargins(0, 8, 0, 0)
+        return inner, lay
 
     def _build_employees_tab(self):
-        scroll, lay = self._make_tab_scroll()
+        inner, lay = self._make_tab_content()
 
         # ── Stat cards row (6 unified cards) ─────────────────────
         self._stat_labels = {}
@@ -245,10 +253,10 @@ class HREmployeesPage(QWidget):
         lay.addWidget(self.table)
 
         lay.addStretch()
-        return scroll
+        return inner
 
     def _build_leave_tab(self):
-        scroll, lay = self._make_tab_scroll()
+        inner, lay = self._make_tab_content()
 
         # ── Leave Tracker (employees currently on leave) ─────────
         leave_card = make_card(min_height=220)
@@ -295,10 +303,10 @@ class HREmployeesPage(QWidget):
         lay.addWidget(lr_card)
 
         lay.addStretch()
-        return scroll
+        return inner
 
     def _build_payroll_tab(self):
-        scroll, lay = self._make_tab_scroll()
+        inner, lay = self._make_tab_content()
 
         # ── Paycheck Requests ─────────────────────────────────────
         pr_card = make_card(min_height=280)
@@ -374,10 +382,10 @@ class HREmployeesPage(QWidget):
         lay.addWidget(type_card)
 
         lay.addStretch()
-        return scroll
+        return inner
 
     def _build_accounts_tab(self):
-        scroll, lay = self._make_tab_scroll()
+        inner, lay = self._make_tab_content()
 
         ua_card = make_card(min_height=300)
         ua_lay = QVBoxLayout(ua_card)
@@ -426,7 +434,7 @@ class HREmployeesPage(QWidget):
         self._user_account_ids: list[int] = []
 
         lay.addStretch()
-        return scroll
+        return inner
 
     # ── Leave Request Management ────────────────────────────────
     def _load_leave_requests(self):
@@ -625,6 +633,7 @@ class HREmployeesPage(QWidget):
             "status":            emp.get("status", ""),
             "salary":            emp.get("salary", 0),
             "emergency_contact": emp.get("emergency_contact", ""),
+            "address":           emp.get("address", ""),
             "notes":             emp.get("notes", ""),
         }
         # Load doctor schedules for prefill

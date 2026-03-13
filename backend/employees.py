@@ -15,7 +15,7 @@ class EmployeeMixin:
 
     def get_employees(self, detailed=False):
         """Return employees. Set detailed=True to include salary & emergency_contact."""
-        hr_cols = ", e.salary, e.emergency_contact" if detailed else ""
+        hr_cols = ", e.salary, e.emergency_contact, e.address" if detailed else ""
         return self.fetch(f"""
             SELECT e.employee_id, CONCAT(e.first_name,' ',e.last_name) AS full_name,
                    r.role_name, d.department_name, e.employment_type,
@@ -26,6 +26,19 @@ class EmployeeMixin:
             INNER JOIN departments d ON e.department_id = d.department_id
             ORDER BY e.employee_id
         """)
+
+    def get_employee_by_id(self, employee_id):
+        """Return a single employee's full record (with address, salary, emergency_contact)."""
+        return self.fetch("""
+            SELECT e.employee_id, CONCAT(e.first_name,' ',e.last_name) AS full_name,
+                   r.role_name, d.department_name, e.employment_type,
+                   e.phone, e.email, e.hire_date, e.status, e.notes,
+                   e.leave_from, e.leave_until, e.salary, e.emergency_contact, e.address
+            FROM employees e
+            INNER JOIN roles r ON e.role_id = r.role_id
+            INNER JOIN departments d ON e.department_id = d.department_id
+            WHERE e.employee_id = %s
+        """, (employee_id,), one=True)
 
     def get_employees_detailed(self):
         """Convenience alias — returns employees with HR fields."""
@@ -117,6 +130,9 @@ class EmployeeMixin:
                 if "emergency_contact" in data:
                     cols.append("emergency_contact")
                     vals.append(data.get("emergency_contact", ""))
+                if "address" in data:
+                    cols.append("address")
+                    vals.append(data.get("address", ""))
                 placeholders = ", ".join(["%s"] * len(vals))
                 # Use COALESCE for hire_date so it defaults to today
                 col_str = ", ".join(cols)
@@ -174,6 +190,9 @@ class EmployeeMixin:
                 if "emergency_contact" in data:
                     sets.append("emergency_contact=%s")
                     vals.append(data.get("emergency_contact", ""))
+                if "address" in data:
+                    sets.append("address=%s")
+                    vals.append(data.get("address", ""))
                 vals.append(employee_id)
                 sql = f"UPDATE employees SET {', '.join(sets)} WHERE employee_id=%s"
                 cur.execute(sql, vals)
@@ -226,6 +245,32 @@ class EmployeeMixin:
             self.log_activity("Deleted", "Employee", row["n"] if row else str(employee_id))
             return True
         return False
+
+    def get_all_departments(self):
+        """Return all departments ordered by name."""
+        return self.fetch("SELECT department_id, department_name FROM departments ORDER BY department_name")
+
+    def add_department(self, name):
+        """Create a new department. Returns True on success."""
+        return bool(self.exec(
+            "INSERT INTO departments (department_name) VALUES (%s)", (name,)))
+
+    def delete_department(self, department_id):
+        """Delete a department. Returns True on success, False if it still has employees."""
+        emp_count = self.fetch(
+            "SELECT COUNT(*) AS cnt FROM employees WHERE department_id = %s",
+            (department_id,), one=True)
+        if emp_count and emp_count.get("cnt", 0) > 0:
+            return False
+        return bool(self.exec(
+            "DELETE FROM departments WHERE department_id = %s", (department_id,)))
+
+    def get_department_employee_count(self, department_id):
+        """Return the number of employees in a department."""
+        row = self.fetch(
+            "SELECT COUNT(*) AS cnt FROM employees WHERE department_id = %s",
+            (department_id,), one=True)
+        return row.get("cnt", 0) if row else 0
 
     def get_department_counts(self):
         return self.fetch("""
@@ -656,3 +701,46 @@ class EmployeeMixin:
             except Exception:
                 pass
             return str(e)
+
+    def get_paycheck_history(self, employee_id):
+        """Return all paycheck requests for a specific employee, newest first."""
+        return self.fetch("""
+            SELECT pr.request_id, pr.employee_id,
+                   CONCAT(e.first_name,' ',e.last_name) AS employee_name,
+                   r.role_name, d.department_name, e.salary,
+                   pr.amount, pr.sss_deduction, pr.philhealth_deduction,
+                   pr.hospital_share, pr.net_amount,
+                   pr.period_from, pr.period_until,
+                   pr.status, pr.finance_note, pr.decided_at,
+                   pr.disbursed_at, pr.created_at,
+                   CONCAT(h.first_name,' ',h.last_name) AS requested_by_name,
+                   CASE WHEN pr.finance_decided_by IS NOT NULL
+                        THEN (SELECT CONCAT(f.first_name,' ',f.last_name)
+                              FROM employees f WHERE f.employee_id = pr.finance_decided_by)
+                        ELSE NULL END AS decided_by_name
+            FROM paycheck_requests pr
+            INNER JOIN employees e ON pr.employee_id = e.employee_id
+            INNER JOIN roles r ON e.role_id = r.role_id
+            INNER JOIN departments d ON e.department_id = d.department_id
+            INNER JOIN employees h ON pr.requested_by = h.employee_id
+            WHERE pr.employee_id = %s
+            ORDER BY pr.created_at DESC
+        """, (employee_id,))
+
+    def get_last_disbursed_paycheck(self, employee_id):
+        """Return the most recent disbursed paycheck for an employee."""
+        return self.fetch("""
+            SELECT pr.request_id, pr.period_from, pr.period_until,
+                   pr.amount, pr.net_amount, pr.disbursed_at
+            FROM paycheck_requests pr
+            WHERE pr.employee_id = %s AND pr.status = 'Disbursed'
+            ORDER BY pr.period_until DESC
+            LIMIT 1
+        """, (employee_id,), one=True)
+
+    def submit_partial_paycheck(self, employee_id, full_salary, days_worked, total_days,
+                                period_from, period_until, requested_by_id):
+        """Submit a partial (prorated) paycheck based on days worked in period."""
+        prorated = round(float(full_salary) * days_worked / total_days, 2)
+        return self.submit_paycheck_request(
+            employee_id, prorated, period_from, period_until, requested_by_id)

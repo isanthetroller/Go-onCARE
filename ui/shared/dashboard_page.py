@@ -55,15 +55,27 @@ class DashboardPage(QWidget):
         elif self._role == "Finance":
             self._kpi_cards_data = [
                 ("today_revenue",   "Today's Revenue",      "#388087"),
-                ("active_staff",    "Active Staff",         "#5CB85C"),
+                ("total_revenue",   "Total Revenue",        "#6FB3B8"),
+                ("total_disbursed", "Total Disbursed",      "#D4826A"),
+                ("net_balance",     "Net Balance",          "#5CB85C"),
+                ("pending_payroll", "Pending Payroll",      "#E8B931"),
             ]
         else:
-            self._kpi_cards_data = [
-                ("today_appts",     "Today's Appointments", "#388087"),
-                ("active_patients", "Active Patients",      "#5CB85C"),
-                ("today_revenue",   "Today's Revenue",      "#6FB3B8"),
-                ("active_staff",    "Active Staff",         "#C2EDCE"),
-            ]
+            if self._role == "Admin":
+                self._kpi_cards_data = [
+                    ("today_appts",     "Today's Appointments", "#388087"),
+                    ("active_patients", "Active Patients",      "#5CB85C"),
+                    ("today_revenue",   "Today's Revenue",      "#6FB3B8"),
+                    ("net_balance",     "Net Balance",          "#2ECC71"),
+                    ("active_staff",    "Active Staff",         "#C2EDCE"),
+                ]
+            else:
+                self._kpi_cards_data = [
+                    ("today_appts",     "Today's Appointments", "#388087"),
+                    ("active_patients", "Active Patients",      "#5CB85C"),
+                    ("today_revenue",   "Today's Revenue",      "#6FB3B8"),
+                    ("active_staff",    "Active Staff",         "#C2EDCE"),
+                ]
         for key, title, color in self._kpi_cards_data:
             if self._role == "HR" and key in ("today_appts", "active_patients"):
                 continue
@@ -532,8 +544,49 @@ class DashboardPage(QWidget):
         else:
             self._kpi_labels["today_revenue_sub"].setText("")
 
-        self._kpi_labels["active_staff"].setText(str(s.get("active_staff", 0)))
-        self._kpi_labels["active_staff_sub"].setText("")
+        if "active_staff" in self._kpi_labels:
+            self._kpi_labels["active_staff"].setText(str(s.get("active_staff", 0)))
+            self._kpi_labels["active_staff_sub"].setText("")
+
+        # Finance / Admin financial summary KPIs
+        if self._role in ("Finance", "Admin"):
+            fin = self._backend.get_financial_summary() if self._backend else {}
+            if "total_revenue" in self._kpi_labels:
+                self._kpi_labels["total_revenue"].setText(
+                    f"\u20B1 {fin.get('total_revenue', 0):,.0f}")
+                m_rev = fin.get("monthly_revenue", 0)
+                self._kpi_labels["total_revenue_sub"].setText(
+                    f"\u20B1 {m_rev:,.0f} this month")
+                self._kpi_labels["total_revenue_sub"].setStyleSheet(
+                    "color: #388087; font-size: 11px; font-weight: bold;")
+            if "total_disbursed" in self._kpi_labels:
+                self._kpi_labels["total_disbursed"].setText(
+                    f"\u20B1 {fin.get('total_disbursed', 0):,.0f}")
+                m_dis = fin.get("monthly_disbursed", 0)
+                self._kpi_labels["total_disbursed_sub"].setText(
+                    f"\u20B1 {m_dis:,.0f} this month")
+                self._kpi_labels["total_disbursed_sub"].setStyleSheet(
+                    "color: #D4826A; font-size: 11px; font-weight: bold;")
+            if "net_balance" in self._kpi_labels:
+                bal = fin.get("net_balance", 0)
+                clr = "#5CB85C" if bal >= 0 else "#D9534F"
+                self._kpi_labels["net_balance"].setText(
+                    f"\u20B1 {bal:,.0f}")
+                self._kpi_labels["net_balance"].setStyleSheet(
+                    f"font-size: 22px; font-weight: bold; color: {clr};")
+                self._kpi_labels["net_balance_sub"].setText(
+                    "Revenue − Disbursed")
+                self._kpi_labels["net_balance_sub"].setStyleSheet(
+                    f"color: {clr}; font-size: 11px; font-weight: bold;")
+            if "pending_payroll" in self._kpi_labels:
+                pend = fin.get("pending_payroll", 0)
+                self._kpi_labels["pending_payroll"].setText(
+                    f"\u20B1 {pend:,.0f}")
+                self._kpi_labels["pending_payroll_sub"].setText(
+                    "awaiting approval/disbursement" if pend > 0 else "no pending")
+                self._kpi_labels["pending_payroll_sub"].setStyleSheet(
+                    f"color: {'#E8B931' if pend > 0 else '#5CB85C'};"
+                    " font-size: 11px; font-weight: bold;")
 
     def _refresh_schedule(self):
         doc_email = self._user_email if self._role == "Doctor" else None

@@ -27,11 +27,16 @@ class EmployeeDialog(QDialog):
     def __init__(self, parent=None, *, title="Add Employee", data=None):
         super().__init__(parent)
         self.setWindowTitle(title)
-        self.setMinimumWidth(640)
         self._fired = False
 
+        # Size to 70% of screen width, 80% height — no scroll needed
+        from PyQt6.QtWidgets import QApplication
+        screen = QApplication.primaryScreen().availableGeometry()
+        self.resize(int(screen.width() * 0.55), int(screen.height() * 0.78))
+        self.setMinimumWidth(700)
+
         main_lay = QVBoxLayout(self)
-        main_lay.setContentsMargins(28, 24, 28, 24)
+        main_lay.setContentsMargins(28, 20, 28, 18)
         main_lay.setSpacing(0)
 
         # Dialog title header
@@ -46,23 +51,36 @@ class EmployeeDialog(QDialog):
         sep.setFixedHeight(1)
         sep.setStyleSheet("background: #BADFE7;")
         main_lay.addWidget(sep)
-        main_lay.addSpacing(14)
-
-        # Scrollable form area
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setStyleSheet(
-            "QScrollArea { border: none; background: transparent; }")
-        form_widget = QWidget()
-        form = QFormLayout(form_widget)
-        form.setSpacing(14)
-        form.setContentsMargins(0, 0, 0, 0)
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        scroll.setWidget(form_widget)
-        main_lay.addWidget(scroll, 1)
         main_lay.addSpacing(10)
 
-        self._build_fields(form)
+        # Two-column form area (no scroll)
+        columns = QHBoxLayout()
+        columns.setSpacing(28)
+
+        # Left column — Personal Information
+        self._left_form = QFormLayout()
+        self._left_form.setSpacing(10)
+        self._left_form.setContentsMargins(0, 0, 0, 0)
+        self._left_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        columns.addLayout(self._left_form, 1)
+
+        # Vertical divider
+        vdiv = QFrame()
+        vdiv.setFrameShape(QFrame.Shape.VLine)
+        vdiv.setStyleSheet("color: #BADFE7;")
+        columns.addWidget(vdiv)
+
+        # Right column — Employment Details
+        self._right_form = QFormLayout()
+        self._right_form.setSpacing(10)
+        self._right_form.setContentsMargins(0, 0, 0, 0)
+        self._right_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        columns.addLayout(self._right_form, 1)
+
+        main_lay.addLayout(columns, 1)
+        main_lay.addSpacing(8)
+
+        self._build_fields(None)
         self._build_buttons(main_lay, data)
         if data:
             self._prefill(data)
@@ -75,33 +93,20 @@ class EmployeeDialog(QDialog):
             " padding: 8px 0 2px 0; border: none; background: transparent;")
         return lbl
 
-    def _build_fields(self, form):
-        """Create all form widgets and attach them to *form*."""
-        # ── Personal Information ──────────────────────────────────
-        form.addRow(self._section_label("Personal Information"))
+    def _build_fields(self, _unused):
+        """Create all form widgets and distribute across two columns."""
+        left = self._left_form
+        right = self._right_form
+
+        # ── Left Column: Personal Information ─────────────────────
+        left.addRow(self._section_label("Personal Information"))
 
         self.name_edit = QLineEdit()
         self.name_edit.setStyleSheet(self._INPUT_STYLE)
         self.name_edit.setPlaceholderText("Full name")
         self.name_edit.setMinimumHeight(42)
-        self.name_edit.setMinimumWidth(320)
         self.name_edit.setValidator(NameValidator())
         self.name_edit.setMaxLength(100)
-
-        self.role_combo = QComboBox(); self.role_combo.setObjectName("formCombo")
-        self.role_combo.addItems(["Doctor", "Nurse", "Receptionist", "Admin", "HR", "Finance"])
-        self.role_combo.setMinimumHeight(38)
-
-        self.dept_combo = QComboBox(); self.dept_combo.setObjectName("formCombo")
-        self.dept_combo.addItems([
-            "General Medicine", "Cardiology", "Dentistry", "Pediatrics",
-            "Laboratory", "Front Desk", "Management", "Pharmacy", "Human Resources",
-        ])
-        self.dept_combo.setMinimumHeight(38)
-
-        self.type_combo = QComboBox(); self.type_combo.setObjectName("formCombo")
-        self.type_combo.addItems(["Full-time", "Part-time", "Contract"])
-        self.type_combo.setMinimumHeight(38)
 
         # Phone: container frame with unified border
         self._phone_frame = QFrame()
@@ -142,21 +147,83 @@ class EmployeeDialog(QDialog):
         self.email_edit.setStyleSheet(self._INPUT_STYLE)
         self.email_edit.setPlaceholderText("Email")
         self.email_edit.setMinimumHeight(42)
-        self.email_edit.setMinimumWidth(320)
         self.email_edit.setMaxLength(150)
+
+        self.address_edit = QLineEdit()
+        self.address_edit.setStyleSheet(self._INPUT_STYLE)
+        self.address_edit.setPlaceholderText("Full address")
+        self.address_edit.setMinimumHeight(42)
+        self.address_edit.setMaxLength(300)
+
+        self.emergency_edit = QLineEdit()
+        self.emergency_edit.setStyleSheet(self._INPUT_STYLE)
+        self.emergency_edit.setPlaceholderText("Emergency contact (name / phone)")
+        self.emergency_edit.setMinimumHeight(42)
+        self.emergency_edit.setMaxLength(200)
+
+        left.addRow("Full Name",         self.name_edit)
+        left.addRow("Phone",             self._phone_frame)
+        left.addRow("Email",             self.email_edit)
+        left.addRow("Address",           self.address_edit)
+        left.addRow("Emergency Contact", self.emergency_edit)
+
+        # Notes at bottom of left column
+        left.addRow(self._section_label("Additional"))
+        self.notes_edit = QTextEdit()
+        self.notes_edit.setStyleSheet(self._INPUT_STYLE)
+        self.notes_edit.setMaximumHeight(70)
+        left.addRow("Notes", self.notes_edit)
+
+        # ── Right Column: Employment Details ──────────────────────
+        right.addRow(self._section_label("Employment Details"))
+
+        self.role_combo = QComboBox(); self.role_combo.setObjectName("formCombo")
+        self.role_combo.addItems(["Doctor", "Nurse", "Receptionist", "Admin", "HR", "Finance"])
+        self.role_combo.setMinimumHeight(38)
+
+        self.dept_combo = QComboBox(); self.dept_combo.setObjectName("formCombo")
+        # Load departments from database if backend is available
+        from backend import AuthBackend
+        try:
+            _be = AuthBackend()
+            depts = _be.get_all_departments() if hasattr(_be, 'get_all_departments') else []
+            for d in depts:
+                self.dept_combo.addItem(d.get("department_name", ""))
+            _be.close()
+        except Exception:
+            self.dept_combo.addItems([
+                "General Medicine", "Cardiology", "Dentistry", "Pediatrics",
+                "Laboratory", "Front Desk", "Management", "Pharmacy", "Human Resources",
+            ])
+        self.dept_combo.setMinimumHeight(38)
+
+        self.type_combo = QComboBox(); self.type_combo.setObjectName("formCombo")
+        self.type_combo.addItems(["Full-time", "Part-time", "Contract"])
+        self.type_combo.setMinimumHeight(38)
 
         self.hire_date = QDateEdit(); self.hire_date.setCalendarPopup(True)
         self.hire_date.setDate(QDate.currentDate()); self.hire_date.setObjectName("formCombo")
         self.hire_date.setMaximumDate(QDate.currentDate())
         self.hire_date.setMinimumHeight(38)
 
+        self.salary_edit = QLineEdit()
+        self.salary_edit.setStyleSheet(self._INPUT_STYLE)
+        self.salary_edit.setPlaceholderText("Monthly salary (e.g. 55000)")
+        self.salary_edit.setMinimumHeight(42)
+        self.salary_edit.setMaxLength(15)
+        from PyQt6.QtGui import QDoubleValidator
+        self.salary_edit.setValidator(QDoubleValidator(0.0, 9999999.99, 2))
+
         self.status_combo = QComboBox(); self.status_combo.setObjectName("formCombo")
         self.status_combo.addItems(["Active", "On Leave", "Inactive"])
         self.status_combo.setMinimumHeight(38)
 
-        self.notes_edit = QTextEdit()
-        self.notes_edit.setStyleSheet(self._INPUT_STYLE)
-        self.notes_edit.setMaximumHeight(70)
+        right.addRow("Role",        self.role_combo)
+        right.addRow("Department",  self.dept_combo)
+        right.addRow("Type",        self.type_combo)
+        right.addRow("Hire Date",   self.hire_date)
+        right.addRow("Salary",      self.salary_edit)
+        right.addRow("Status",      self.status_combo)
 
         # Doctor schedule picker (shown only when role is Doctor)
         self._schedule_group = QGroupBox("Weekly Availability")
@@ -213,23 +280,7 @@ class EmployeeDialog(QDialog):
         self._schedule_group.setVisible(self.role_combo.currentText() == "Doctor")
         self.role_combo.currentTextChanged.connect(
             lambda txt: self._schedule_group.setVisible(txt == "Doctor"))
-
-        form.addRow("Full Name",   self.name_edit)
-        form.addRow("Phone",       self._phone_frame)
-        form.addRow("Email",       self.email_edit)
-
-        # ── Employment Details ────────────────────────────────────
-        form.addRow(self._section_label("Employment Details"))
-        form.addRow("Role",        self.role_combo)
-        form.addRow("Department",  self.dept_combo)
-        form.addRow("Type",        self.type_combo)
-        form.addRow("Hire Date",   self.hire_date)
-        form.addRow("Status",      self.status_combo)
-        form.addRow(self._schedule_group)
-
-        # ── Additional ───────────────────────────────────────────
-        form.addRow(self._section_label("Additional"))
-        form.addRow("Notes",       self.notes_edit)
+        right.addRow(self._schedule_group)
 
     def _build_buttons(self, parent_lay, data):
         btn_row = QHBoxLayout(); btn_row.setSpacing(12)
@@ -268,6 +319,11 @@ class EmployeeDialog(QDialog):
             raw_phone = raw_phone[3:]
         self.phone_edit.setText(raw_phone)
         self.email_edit.setText(data.get("email", ""))
+        self.address_edit.setText(data.get("address", "") or "")
+        self.emergency_edit.setText(data.get("emergency_contact", "") or "")
+        sal = data.get("salary", "")
+        if sal:
+            self.salary_edit.setText(str(sal))
         # Prefill doctor schedule if present
         schedules = data.get("schedules", [])
         if schedules:
@@ -346,6 +402,9 @@ class EmployeeDialog(QDialog):
             "status":      self.status_combo.currentText(),
             "notes":       self.notes_edit.toPlainText(),
             "schedules":   schedules,
+            "address":     self.address_edit.text().strip(),
+            "salary":      self.salary_edit.text().strip(),
+            "emergency_contact": self.emergency_edit.text().strip(),
         }
         return d
 

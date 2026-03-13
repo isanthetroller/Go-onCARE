@@ -4,10 +4,10 @@ from datetime import date
 
 from PyQt6.QtWidgets import (
     QDialog, QFormLayout, QLineEdit, QTextEdit, QComboBox,
-    QDialogButtonBox, QTableWidget, QTableWidgetItem, QHeaderView,
+    QTableWidget, QTableWidgetItem, QHeaderView,
     QVBoxLayout, QHBoxLayout, QLabel, QWidget, QTabWidget,
-    QDateEdit, QCheckBox, QMessageBox, QFrame, QScrollArea,
-    QGridLayout,
+    QDateEdit, QCheckBox, QMessageBox, QFrame, QPushButton,
+    QGridLayout, QDialogButtonBox,
 )
 from PyQt6.QtCore import Qt, QDate, QEvent
 from ui.styles import configure_table, style_dialog_btns
@@ -28,51 +28,141 @@ class PatientDialog(QDialog):
     def __init__(self, parent=None, *, title="Add New Patient", data=None, backend=None):
         super().__init__(parent)
         self.setWindowTitle(title)
-        self.setMinimumWidth(720)
         self._backend = backend
 
-        form = QFormLayout(self)
-        form.setSpacing(14)
-        form.setContentsMargins(28, 28, 28, 28)
+        # Responsive sizing — landscape proportions
+        from PyQt6.QtWidgets import QApplication
+        screen = QApplication.primaryScreen().availableGeometry()
+        self.resize(int(screen.width() * 0.62), int(screen.height() * 0.82))
+        self.setMinimumWidth(820)
+
+        main_lay = QVBoxLayout(self)
+        main_lay.setContentsMargins(28, 20, 28, 18)
+        main_lay.setSpacing(0)
+
+        # ── Dialog title header ──────────────────────────────────
+        header = QLabel(title)
+        header.setStyleSheet(
+            "font-size: 20px; font-weight: bold; color: #388087;"
+            " padding-bottom: 4px;")
+        header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        main_lay.addWidget(header)
+
+        sep = QFrame()
+        sep.setFixedHeight(1)
+        sep.setStyleSheet("background: #BADFE7;")
+        main_lay.addWidget(sep)
+        main_lay.addSpacing(10)
+
+        # ── Two-column layout ────────────────────────────────────
+        columns = QHBoxLayout()
+        columns.setSpacing(24)
+
+        # Left column — Personal Information
+        self._left_form = QFormLayout()
+        self._left_form.setSpacing(10)
+        self._left_form.setContentsMargins(0, 0, 0, 0)
+        self._left_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        columns.addLayout(self._left_form, 1)
+
+        # Vertical divider
+        vdiv = QFrame()
+        vdiv.setFrameShape(QFrame.Shape.VLine)
+        vdiv.setStyleSheet("color: #BADFE7;")
+        columns.addWidget(vdiv)
+
+        # Right column — Medical & Admin
+        right_col = QVBoxLayout()
+        right_col.setSpacing(0)
+        self._right_form = QFormLayout()
+        self._right_form.setSpacing(10)
+        self._right_form.setContentsMargins(0, 0, 0, 0)
+        self._right_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        right_col.addLayout(self._right_form)
+
+        # Conditions section (below right form fields)
+        right_col.addSpacing(6)
+        self._cond_section = QVBoxLayout()
+        self._cond_section.setSpacing(6)
+        right_col.addLayout(self._cond_section, 1)
+        columns.addLayout(right_col, 1)
+
+        main_lay.addLayout(columns, 1)
+        main_lay.addSpacing(10)
+
+        self._build_fields(data)
+        self._build_buttons(main_lay)
+
+        if data:
+            self._prefill(data)
+
+    _CB_STYLE = (
+        "QCheckBox { font-size: 12px; color: #2C3E50; spacing: 6px;"
+        " padding: 5px 4px; border: none; background: transparent; }"
+        "QCheckBox:checked { color: #388087; font-weight: bold; }"
+        "QCheckBox:hover { color: #388087; }"
+        "QCheckBox::indicator { width: 16px; height: 16px;"
+        " border: 2px solid #BADFE7; border-radius: 4px; background: #FFFFFF; }"
+        "QCheckBox::indicator:checked { background: #388087;"
+        " border-color: #388087;"
+        " image: none; }"
+        "QCheckBox::indicator:hover { border-color: #388087; }"
+    )
+
+    # ── Section label helper ──────────────────────────────────────
+    @staticmethod
+    def _section_label(text: str) -> QLabel:
+        lbl = QLabel(text)
+        lbl.setStyleSheet(
+            "font-size: 13px; font-weight: bold; color: #388087;"
+            " padding: 6px 0 2px 0; border: none; background: transparent;")
+        return lbl
+
+    # ── Build all fields across two columns ───────────────────────
+    def _build_fields(self, data):
+        left = self._left_form
+        right = self._right_form
+
+        # ── LEFT: Personal Information ────────────────────────────
+        left.addRow(self._section_label("Personal Information"))
 
         self.name_edit = self._input("Full name")
         self.name_edit.setValidator(NameValidator())
         self.name_edit.setMaxLength(100)
+
         self.sex_combo = QComboBox(); self.sex_combo.setObjectName("formCombo")
         self.sex_combo.addItems(["Male", "Female"])
+        self.sex_combo.setMinimumHeight(38)
+
         self.dob_edit = QDateEdit(); self.dob_edit.setCalendarPopup(True)
         self.dob_edit.setDate(QDate.currentDate()); self.dob_edit.setObjectName("formCombo")
         self.dob_edit.setMaximumDate(QDate.currentDate())
         self.dob_edit.setDisplayFormat("MMMM d, yyyy")
+        self.dob_edit.setMinimumHeight(38)
 
-        # Phone: container frame with +63 prefix (matches employee dialog)
+        # Phone: +63 prefix frame
         self._phone_frame = QFrame()
         self._phone_frame.setObjectName("phoneFrame")
         self._phone_normal_ss = (
             "QFrame#phoneFrame { border: 2px solid #BADFE7; border-radius: 10px;"
-            " background: #FFFFFF; }"
-        )
+            " background: #FFFFFF; }")
         self._phone_focus_ss = (
             "QFrame#phoneFrame { border: 2px solid #388087; border-radius: 10px;"
-            " background: #FFFFFF; }"
-        )
+            " background: #FFFFFF; }")
         self._phone_frame.setStyleSheet(self._phone_normal_ss)
         self._phone_frame.setFixedHeight(44)
         phone_lay = QHBoxLayout(self._phone_frame)
-        phone_lay.setContentsMargins(0, 0, 0, 0)
-        phone_lay.setSpacing(0)
+        phone_lay.setContentsMargins(0, 0, 0, 0); phone_lay.setSpacing(0)
         self._phone_prefix = QLabel("+63")
         self._phone_prefix.setStyleSheet(
             "QLabel { padding: 0px 10px; border: none;"
             " font-size: 13px; font-weight: bold; background: #F0F7F8;"
             " border-top-left-radius: 8px; border-bottom-left-radius: 8px;"
-            " color: #2C3E50; }"
-        )
+            " color: #2C3E50; }")
         self.phone_edit = QLineEdit()
         self.phone_edit.setStyleSheet(
             "QLineEdit { padding: 0px 14px; border: none;"
-            " font-size: 13px; background-color: transparent; color: #2C3E50; }"
-        )
+            " font-size: 13px; background-color: transparent; color: #2C3E50; }")
         self.phone_edit.setPlaceholderText("9XXXXXXXXX")
         self.phone_edit.setMaxLength(10)
         self.phone_edit.setValidator(PhoneDigitsValidator())
@@ -89,10 +179,30 @@ class PatientDialog(QDialog):
         self.civil_combo.setMinimumHeight(38)
         self.emergency_edit = self._input("Emergency contact (name / phone)")
         self.emergency_edit.setMaxLength(150)
+
+        left.addRow("Full Name", self.name_edit)
+        left.addRow("Sex", self.sex_combo)
+        left.addRow("Date of Birth", self.dob_edit)
+        left.addRow("Phone", self._phone_frame)
+        left.addRow("Email", self.email_edit)
+        left.addRow("Address", self.address_edit)
+        left.addRow("Civil Status", self.civil_combo)
+        left.addRow("Emergency Contact", self.emergency_edit)
+
+        # Notes at bottom of left column
+        left.addRow(self._section_label("Additional"))
+        self.notes_edit = QTextEdit(); self.notes_edit.setObjectName("formInput")
+        self.notes_edit.setStyleSheet(self._INPUT_STYLE)
+        self.notes_edit.setMaximumHeight(70)
+        left.addRow("Notes", self.notes_edit)
+
+        # ── RIGHT: Medical & Admin ────────────────────────────────
+        right.addRow(self._section_label("Medical & Admin"))
+
         self.blood_combo = QComboBox(); self.blood_combo.setObjectName("formCombo")
         self.blood_combo.addItems(["Unknown", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"])
+        self.blood_combo.setMinimumHeight(38)
 
-        # Discount category
         self.discount_combo = QComboBox(); self.discount_combo.setObjectName("formCombo")
         self.discount_combo.setMinimumHeight(38)
         self.discount_combo.addItem("— None —", None)
@@ -102,109 +212,83 @@ class PatientDialog(QDialog):
                 f"{dt['type_name']} ({float(dt['discount_percent']):.0f}%)",
                 dt['discount_id'])
 
-        # Condition picker – searchable checkbox list
-        self._cond_checkboxes = []
-        cond_container = QWidget()
-        cond_outer = QVBoxLayout(cond_container)
-        cond_outer.setContentsMargins(0, 0, 0, 0)
-        cond_outer.setSpacing(6)
+        self.status_combo = QComboBox(); self.status_combo.setObjectName("formCombo")
+        self.status_combo.addItems(["Active", "Inactive"])
+        self.status_combo.setMinimumHeight(38)
+
+        right.addRow("Blood Type", self.blood_combo)
+        right.addRow("Discount", self.discount_combo)
+        right.addRow("Status", self.status_combo)
+
+        # ── Conditions section (below right form) ─────────────────
+        cond_lbl = self._section_label("Conditions")
+        self._cond_section.addWidget(cond_lbl)
 
         self._cond_search = QLineEdit()
-        self._cond_search.setPlaceholderText("Search conditions…")
+        self._cond_search.setPlaceholderText("Search conditions\u2026")
         self._cond_search.setStyleSheet(
             "QLineEdit { padding: 8px 12px; border: 2px solid #BADFE7;"
             " border-radius: 8px; font-size: 12px; background: #FFFFFF; }"
             "QLineEdit:focus { border-color: #388087; }")
         self._cond_search.setMinimumHeight(34)
         self._cond_search.textChanged.connect(self._filter_conditions)
-        cond_outer.addWidget(self._cond_search)
+        self._cond_section.addWidget(self._cond_search)
 
+        self._cond_checkboxes = []
         self._cond_frame = QFrame()
         self._cond_frame.setStyleSheet(
             "QFrame { border: 1.5px solid #BADFE7; border-radius: 12px;"
-            " background: #FAFCFD; }"
-        )
+            " background: #FAFCFD; }")
         self._cond_grid = QGridLayout(self._cond_frame)
         self._cond_grid.setContentsMargins(14, 12, 14, 12)
         self._cond_grid.setHorizontalSpacing(8)
         self._cond_grid.setVerticalSpacing(8)
         self._load_standard_conditions(data, self._cond_grid)
-        cond_scroll = QScrollArea()
-        cond_scroll.setWidget(self._cond_frame)
-        cond_scroll.setWidgetResizable(True)
-        cond_scroll.setMaximumHeight(180)
-        cond_scroll.setStyleSheet(
-            "QScrollArea { border: none; background: transparent; }"
-        )
-        cond_outer.addWidget(cond_scroll)
+        self._cond_section.addWidget(self._cond_frame, 1)
+
         self.cond_custom = self._input("Other conditions (comma-separated)")
         self.cond_custom.setMaxLength(300)
+        self._cond_section.addWidget(self.cond_custom)
 
-        self.status_combo = QComboBox(); self.status_combo.setObjectName("formCombo")
-        self.status_combo.addItems(["Active", "Inactive"])
-        self.notes_edit = QTextEdit(); self.notes_edit.setObjectName("formInput")
-        self.notes_edit.setMaximumHeight(80)
+    def _build_buttons(self, parent_lay):
+        from PyQt6.QtWidgets import QPushButton
+        btn_row = QHBoxLayout(); btn_row.setSpacing(12)
+        btn_row.addStretch()
+        cancel_btn = QPushButton("Cancel"); cancel_btn.setMinimumHeight(32)
+        cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        cancel_btn.setObjectName("dialogCancelBtn")
+        cancel_btn.clicked.connect(self.reject)
+        save_btn = QPushButton("Save"); save_btn.setMinimumHeight(32)
+        save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        save_btn.setObjectName("dialogSaveBtn")
+        save_btn.clicked.connect(self.accept)
+        btn_row.addWidget(cancel_btn); btn_row.addWidget(save_btn)
+        parent_lay.addLayout(btn_row)
 
-        form.addRow("Full Name", self.name_edit)
-        form.addRow("Sex", self.sex_combo)
-        form.addRow("Date of Birth", self.dob_edit)
-        form.addRow("Phone", self._phone_frame)
-        form.addRow("Email", self.email_edit)
-        form.addRow("Address", self.address_edit)
-        form.addRow("Civil Status", self.civil_combo)
-        form.addRow("Emergency Contact", self.emergency_edit)
-        form.addRow("Blood Type", self.blood_combo)
-        form.addRow("Discount Category", self.discount_combo)
-        form.addRow("Conditions", cond_container)
-        form.addRow("Other Conditions", self.cond_custom)
-        form.addRow("Status", self.status_combo)
-        form.addRow("Notes", self.notes_edit)
-
-        btns = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
-        style_dialog_btns(btns)
-        btns.accepted.connect(self.accept); btns.rejected.connect(self.reject)
-        form.addRow(btns)
-
-        if data:
-            self.name_edit.setText(data.get("name", ""))
-            idx = self.sex_combo.findText(data.get("sex", "Male"))
-            if idx >= 0: self.sex_combo.setCurrentIndex(idx)
-            raw_phone = data.get("phone", "")
-            if raw_phone.startswith("+63"):
-                raw_phone = raw_phone[3:]
-            self.phone_edit.setText(raw_phone)
-            self.email_edit.setText(data.get("email", ""))
-            self.address_edit.setText(data.get("address", ""))
-            cidx = self.civil_combo.findText(data.get("civil_status", "Single"))
-            if cidx >= 0: self.civil_combo.setCurrentIndex(cidx)
-            self.emergency_edit.setText(data.get("emergency_contact", ""))
-            bidx = self.blood_combo.findText(data.get("blood_type", "Unknown"))
-            if bidx >= 0: self.blood_combo.setCurrentIndex(bidx)
-            # Restore discount type
-            dt_id = data.get("discount_type_id")
-            if dt_id:
-                for i in range(self.discount_combo.count()):
-                    if self.discount_combo.itemData(i) == dt_id:
-                        self.discount_combo.setCurrentIndex(i)
-                        break
-            sidx = self.status_combo.findText(data.get("status", "Active"))
-            if sidx >= 0: self.status_combo.setCurrentIndex(sidx)
-            self.notes_edit.setPlainText(data.get("notes", ""))
-
-    _CB_STYLE = (
-        "QCheckBox { font-size: 12px; color: #2C3E50; spacing: 6px;"
-        " padding: 6px 12px; border: 1.5px solid #BADFE7; border-radius: 14px;"
-        " background: #FFFFFF; }"
-        "QCheckBox:checked { background: #E8F6F3; border-color: #388087; color: #388087;"
-        " font-weight: bold; }"
-        "QCheckBox:hover { border-color: #388087; background: #F0F7F8; }"
-        "QCheckBox::indicator { width: 14px; height: 14px;"
-        " border: 1.5px solid #BADFE7; border-radius: 3px; background: #FFFFFF; }"
-        "QCheckBox::indicator:checked { background: #388087;"
-        " border-color: #388087; }"
-        "QCheckBox::indicator:hover { border-color: #388087; }"
-    )
+    def _prefill(self, data):
+        self.name_edit.setText(data.get("name", ""))
+        idx = self.sex_combo.findText(data.get("sex", "Male"))
+        if idx >= 0: self.sex_combo.setCurrentIndex(idx)
+        raw_phone = data.get("phone", "")
+        if raw_phone.startswith("+63"):
+            raw_phone = raw_phone[3:]
+        self.phone_edit.setText(raw_phone)
+        self.email_edit.setText(data.get("email", ""))
+        self.address_edit.setText(data.get("address", ""))
+        cidx = self.civil_combo.findText(data.get("civil_status", "Single"))
+        if cidx >= 0: self.civil_combo.setCurrentIndex(cidx)
+        self.emergency_edit.setText(data.get("emergency_contact", ""))
+        bidx = self.blood_combo.findText(data.get("blood_type", "Unknown"))
+        if bidx >= 0: self.blood_combo.setCurrentIndex(bidx)
+        dt_id = data.get("discount_type_id")
+        if dt_id:
+            for i in range(self.discount_combo.count()):
+                if self.discount_combo.itemData(i) == dt_id:
+                    self.discount_combo.setCurrentIndex(i)
+                    break
+        sidx = self.status_combo.findText(data.get("status", "Active"))
+        if sidx >= 0: self.status_combo.setCurrentIndex(sidx)
+        self.notes_edit.setPlainText(data.get("notes", ""))
 
     def _load_standard_conditions(self, data, grid):
         existing = set()
@@ -212,7 +296,7 @@ class PatientDialog(QDialog):
             existing = {c.strip() for c in data["conditions"].split(",") if c.strip()}
         std = self._backend.get_standard_conditions() if self._backend else []
         std_names = {c["condition_name"] for c in std}
-        cols = 4
+        cols = 3
         for i, c in enumerate(std):
             cb = QCheckBox(c["condition_name"])
             cb.setStyleSheet(self._CB_STYLE)
@@ -225,7 +309,6 @@ class PatientDialog(QDialog):
             self.cond_custom.setText(", ".join(sorted(leftover)))
 
     def _filter_conditions(self, text: str):
-        """Show/hide condition checkboxes based on search text."""
         needle = text.lower().strip()
         for cb in self._cond_checkboxes:
             cb.setVisible(needle in cb.text().lower() if needle else True)
@@ -252,7 +335,12 @@ class PatientDialog(QDialog):
     @staticmethod
     def _input(placeholder: str) -> QLineEdit:
         le = QLineEdit(); le.setPlaceholderText(placeholder)
-        le.setObjectName("formInput"); le.setMinimumHeight(42); le.setMinimumWidth(320)
+        le.setStyleSheet(
+            "QLineEdit { padding: 8px 14px 10px 14px; border: 2px solid #BADFE7;"
+            " border-radius: 10px; font-size: 13px; background-color: #FFFFFF;"
+            " color: #2C3E50; }"
+            "QLineEdit:focus { border: 2px solid #388087; }")
+        le.setMinimumHeight(42)
         return le
 
     def eventFilter(self, obj, event):
@@ -280,7 +368,7 @@ class PatientDialog(QDialog):
 class PatientProfileDialog(QDialog):
     """Read-only full profile with tabs: Info, Appointments, Invoices, Queue."""
 
-    def __init__(self, parent=None, profile: dict = None):
+    def __init__(self, parent=None, profile: dict = None, role: str = "Admin"):
         super().__init__(parent)
         self.setWindowTitle("Patient Profile")
         self.setMinimumSize(720, 520)
@@ -303,13 +391,15 @@ class PatientProfileDialog(QDialog):
                     lambda a: [str(a.get("appointment_date","")), str(a.get("appointment_time","")),
                                a.get("doctor_name",""), a.get("service_name",""),
                                a.get("status",""), a.get("notes","") or ""]), "Appointments")
-        tabs.addTab(self._table_tab(p.get("invoices", []),
-                    ["Invoice #", "Services", "Total", "Paid", "Status", "Payment", "Date"],
-                    lambda i: [str(i.get("invoice_id","")), i.get("services","") or "",
-                               f"₱{float(i.get('total_amount',0)):,.2f}",
-                               f"₱{float(i.get('amount_paid',0)):,.2f}",
-                               i.get("status",""), i.get("payment_method",""),
-                               str(i.get("created_at",""))]), "Invoices")
+        # Invoices tab — hidden for Doctor role
+        if role != "Doctor":
+            tabs.addTab(self._table_tab(p.get("invoices", []),
+                        ["Invoice #", "Services", "Total", "Paid", "Status", "Payment", "Date"],
+                        lambda i: [str(i.get("invoice_id","")), i.get("services","") or "",
+                                   f"\u20b1{float(i.get('total_amount',0)):,.2f}",
+                                   f"\u20b1{float(i.get('amount_paid',0)):,.2f}",
+                                   i.get("status",""), i.get("payment_method",""),
+                                   str(i.get("created_at",""))]), "Invoices")
         tabs.addTab(self._table_tab(p.get("queue", []),
                     ["Queue #", "Time", "Doctor", "Purpose", "Status", "Date"],
                     lambda q: [str(q.get("queue_id","")), str(q.get("queue_time","")),

@@ -39,7 +39,7 @@ class AppointmentMixin:
         """)
 
     def get_doctors_available_today(self):
-        """Return only doctors available today based on their schedule."""
+        """Return all active doctors, with schedule info for those available today."""
         return self.fetch("""
             SELECT DISTINCT e.employee_id, CONCAT(e.first_name,' ',e.last_name) AS doctor_name,
                    e.department_id,
@@ -47,11 +47,11 @@ class AppointmentMixin:
                    TIME_FORMAT(ds.end_time, '%h:%i %p') AS sched_end
             FROM employees e
             INNER JOIN roles r ON e.role_id = r.role_id
-            INNER JOIN doctor_schedules ds ON e.employee_id = ds.doctor_id
+            LEFT JOIN doctor_schedules ds ON e.employee_id = ds.doctor_id
+              AND ds.day_of_week = DAYNAME(CURDATE())
             WHERE r.role_name = 'Doctor'
               AND e.status = 'Active'
-              AND ds.day_of_week = DAYNAME(CURDATE())
-            ORDER BY e.first_name
+            ORDER BY ds.start_time IS NULL, e.first_name
         """)
 
     def get_doctor_availability_overview(self):
@@ -93,21 +93,16 @@ class AppointmentMixin:
     def get_services_for_doctor(self, doctor_id):
         """Return active services available for a doctor based on their department.
 
-        Uses service_departments junction table.  If a service has no department
-        mapping it is available to everyone; otherwise only to mapped departments.
+        Uses service_departments junction table.  Only returns services that
+        are explicitly mapped to this doctor's department.
         """
         return self.fetch("""
             SELECT s.service_id, s.service_name, s.price, s.category
             FROM services s
+            INNER JOIN service_departments sd ON s.service_id = sd.service_id
             WHERE s.is_active = 1
-              AND (
-                  NOT EXISTS (SELECT 1 FROM service_departments sd WHERE sd.service_id = s.service_id)
-                  OR s.service_id IN (
-                      SELECT sd.service_id FROM service_departments sd
-                      WHERE sd.department_id = (
-                          SELECT e.department_id FROM employees e WHERE e.employee_id = %s
-                      )
-                  )
+              AND sd.department_id = (
+                  SELECT e.department_id FROM employees e WHERE e.employee_id = %s
               )
             ORDER BY s.service_name
         """, (doctor_id,))

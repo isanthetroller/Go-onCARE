@@ -36,18 +36,24 @@ class PatientMixin:
         """, (patient_id,), one=True)
         if not info:
             return {}
-        appts = self.fetch("""
+        # Scope to this doctor's data when viewed by a doctor
+        doc_filter = ""
+        doc_params: tuple = ()
+        if doctor_email:
+            doc_filter = " AND e.email = %s"
+            doc_params = (doctor_email,)
+        appts = self.fetch(f"""
             SELECT a.appointment_id, a.appointment_date, a.appointment_time,
                    CONCAT(e.first_name,' ',e.last_name) AS doctor_name,
                    s.service_name, a.status, a.notes
             FROM appointments a
             INNER JOIN employees e ON a.doctor_id = e.employee_id
             INNER JOIN services s ON a.service_id = s.service_id
-            WHERE a.patient_id = %s ORDER BY a.appointment_date DESC
-        """, (patient_id,))
+            WHERE a.patient_id = %s{doc_filter} ORDER BY a.appointment_date DESC
+        """, (patient_id, *doc_params))
         invoices = self.fetch("""
             SELECT i.invoice_id, i.total_amount, i.amount_paid, i.status,
-                   i.created_at, COALESCE(pm.method_name,'—') AS payment_method,
+                   i.created_at, COALESCE(pm.method_name,'\u2014') AS payment_method,
                    GROUP_CONCAT(s.service_name SEPARATOR ', ') AS services
             FROM invoices i
             LEFT JOIN payment_methods pm ON i.method_id = pm.method_id
@@ -55,12 +61,12 @@ class PatientMixin:
             LEFT JOIN services s ON ii.service_id = s.service_id
             WHERE i.patient_id = %s GROUP BY i.invoice_id ORDER BY i.created_at DESC
         """, (patient_id,))
-        queue = self.fetch("""
+        queue = self.fetch(f"""
             SELECT q.queue_id, q.queue_time, q.purpose, q.status, q.created_at,
                    CONCAT(e.first_name,' ',e.last_name) AS doctor_name
             FROM queue_entries q INNER JOIN employees e ON q.doctor_id = e.employee_id
-            WHERE q.patient_id = %s ORDER BY q.created_at DESC, q.queue_time DESC
-        """, (patient_id,))
+            WHERE q.patient_id = %s{doc_filter} ORDER BY q.created_at DESC, q.queue_time DESC
+        """, (patient_id, *doc_params))
         return {"info": info, "appointments": appts, "invoices": invoices, "queue": queue}
 
     def _save_conditions(self, cur, patient_id, conditions_str):

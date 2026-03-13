@@ -1,12 +1,13 @@
 # Payroll page - Finance approves paycheck requests, HR submits/disburses
 
-from datetime import date
+from calendar import monthrange
+from datetime import date, timedelta
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QHeaderView, QScrollArea, QFrame,
     QComboBox, QDialog, QMessageBox, QTextEdit, QLineEdit, QDateEdit,
-    QFormLayout, QDialogButtonBox, QStackedWidget,
+    QFormLayout, QDialogButtonBox, QStackedWidget, QSpinBox,
 )
 from PyQt6.QtCore import Qt, QDate, QTimer, QSize
 from PyQt6.QtGui import QColor, QFont
@@ -27,16 +28,60 @@ class PayrollPage(QWidget):
         self._role = role
         self._user_email = user_email
         self._requests: list[dict] = []
-        self._build()
+        self._history: list[dict] = []
+        if self._role == "Doctor":
+            self._build_doctor()
+        else:
+            self._build()
         self._load_data()
         self._refresh_timer = QTimer(self)
         self._refresh_timer.timeout.connect(self._load_data)
         self._refresh_timer.start(10_000)
 
+    # ── Doctor-only build: read-only history view ────────────────
+    def _build_doctor(self):
+        scroll, lay = make_page_layout()
+        lay.setSpacing(16)
+
+        lay.addWidget(make_banner(
+            "My Paychecks",
+            "View your paycheck history and upcoming pay schedule"))
+
+        # Next paycheck info card
+        self._next_pay_card = make_card()
+        npc_lay = QVBoxLayout(self._next_pay_card)
+        npc_lay.setContentsMargins(20, 16, 20, 16)
+        npc_lay.setSpacing(8)
+        npc_title = QLabel("Next Paycheck")
+        npc_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #2C3E50;")
+        npc_lay.addWidget(npc_title)
+        self._next_pay_info = QLabel("Loading...")
+        self._next_pay_info.setStyleSheet("font-size: 13px; color: #555;")
+        self._next_pay_info.setWordWrap(True)
+        npc_lay.addWidget(self._next_pay_info)
+        lay.addWidget(self._next_pay_card)
+
+        # Summary
+        self._history_summary = QLabel()
+        self._history_summary.setObjectName("mutedSummary")
+        lay.addWidget(self._history_summary)
+
+        # History table
+        cols = ["Period", "Gross", "SSS", "PhilHealth", "Hospital",
+                "Net Amount", "Status", "Requested By", "Disbursed At"]
+        self._history_table = make_read_only_table(cols, min_h=350)
+        lay.addWidget(self._history_table)
+
+        lay.addStretch()
+        finish_page(self, scroll)
+
     def _load_data(self):
         if not self.isVisible():
             return
         if not self._backend:
+            return
+        if self._role == "Doctor":
+            self._load_doctor_history()
             return
         filt = self._status_filter.currentText()
         if filt == "Pending":
@@ -48,6 +93,78 @@ class PayrollPage(QWidget):
             else:
                 self._requests = [r for r in all_reqs if r.get("status") == filt]
         self._populate_table()
+
+    def _load_doctor_history(self):
+        emp_id = self._backend.get_employee_id_by_email(self._user_email)
+        if not emp_id:
+            self._next_pay_info.setText("Could not find your employee record.")
+            return
+        self._history = self._backend.get_paycheck_history(emp_id) or []
+        emp = self._backend.get_employee_by_id(emp_id)
+        salary = float(emp.get("salary", 0) or 0) if emp else 0
+
+        # Next paycheck calculation
+        last = self._backend.get_last_disbursed_paycheck(emp_id)
+        self._update_next_pay_label(last, salary)
+
+        # Populate history table
+        self._history_table.setRowCount(0)
+        for req in self._history:
+            r = self._history_table.rowCount()
+            self._history_table.insertRow(r)
+            gross = float(req.get("amount", 0) or 0)
+            sss = float(req.get("sss_deduction", 0) or 0)
+            phil = float(req.get("philhealth_deduction", 0) or 0)
+            hosp = float(req.get("hospital_share", 0) or 0)
+            net = float(req.get("net_amount", 0) or 0)
+            period = f"{req.get('period_from', '')} to {req.get('period_until', '')}"
+            disbursed = str(req.get("disbursed_at", "") or "—")
+            status = req.get("status", "")
+            values = [period, f"₱{gross:,.2f}", f"₱{sss:,.2f}", f"₱{phil:,.2f}",
+                      f"₱{hosp:,.2f}", f"₱{net:,.2f}", status,
+                      req.get("requested_by_name", ""), disbursed]
+            for c, val in enumerate(values):
+                item = QTableWidgetItem(str(val))
+                if c == 6:
+                    item.setForeground(QColor(status_color(val)))
+                    item.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+                if c in (1, 5):
+                    item.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+                self._history_table.setItem(r, c, item)
+
+        total = len(self._history)
+        disbursed_count = sum(1 for h in self._history if h.get("status") == "Disbursed")
+        self._history_summary.setText(
+            f"Showing {total} paycheck{'s' if total != 1 else ''} · "
+            f"{disbursed_count} disbursed")
+
+    def _update_next_pay_label(self, last_paycheck, salary):
+        today = date.today()
+        if last_paycheck and last_paycheck.get("period_until"):
+            last_until = last_paycheck["period_until"]
+            if isinstance(last_until, str):
+                from datetime import datetime
+                last_until = datetime.strptime(last_until, "%Y-%m-%d").date()
+            next_from = last_until + timedelta(days=1)
+            # Next period ends at end of next_from's month
+            _, days_in_month = monthrange(next_from.year, next_from.month)
+            next_until = date(next_from.year, next_from.month, days_in_month)
+            last_net = float(last_paycheck.get("net_amount", 0) or 0)
+            self._next_pay_info.setText(
+                f"Last paycheck disbursed: <b>{last_paycheck.get('disbursed_at', '—')}</b><br>"
+                f"Last period: {last_paycheck.get('period_from', '')} to {last_paycheck.get('period_until', '')}<br>"
+                f"Last net payout: <b>₱{last_net:,.2f}</b><br><br>"
+                f"Next expected period: <b>{next_from}</b> to <b>{next_until}</b><br>"
+                f"Base salary: <b>₱{salary:,.2f}</b>")
+        else:
+            # No previous paycheck
+            first_of_month = date(today.year, today.month, 1)
+            _, days_in_month = monthrange(today.year, today.month)
+            end_of_month = date(today.year, today.month, days_in_month)
+            self._next_pay_info.setText(
+                f"No previous paychecks found.<br>"
+                f"Expected first period: <b>{first_of_month}</b> to <b>{end_of_month}</b><br>"
+                f"Base salary: <b>₱{salary:,.2f}</b>")
 
     def _build(self):
         scroll, lay = make_page_layout()
@@ -61,8 +178,30 @@ class PayrollPage(QWidget):
             subtitle = "Submit paycheck requests and track disbursements"
 
         # Banner
-        banner_kwargs = {"btn_text": "+  Request Paycheck", "btn_slot": self._on_new_request} if self._role in ("HR", "Admin") else {}
+        banner_kwargs = {}
+        if self._role in ("HR", "Admin"):
+            banner_kwargs = {"btn_text": "+  Request Paycheck", "btn_slot": self._on_new_request}
         lay.addWidget(make_banner(title, subtitle, **banner_kwargs))
+
+        # Partial paycheck button for HR/Admin
+        if self._role in ("HR", "Admin"):
+            partial_card = make_card()
+            partial_lay = QHBoxLayout(partial_card)
+            partial_lay.setContentsMargins(16, 10, 16, 10)
+            partial_info = QLabel("Submit a prorated paycheck based on days worked in a period:")
+            partial_info.setStyleSheet("font-size: 12px; color: #555;")
+            partial_lay.addWidget(partial_info)
+            partial_lay.addStretch()
+            partial_btn = QPushButton("Partial Paycheck")
+            partial_btn.setMinimumHeight(34)
+            partial_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            partial_btn.setStyleSheet(
+                "QPushButton { background-color: #E8B931; color: #FFF; border: none;"
+                " border-radius: 8px; padding: 8px 20px; font-size: 12px; font-weight: bold; }"
+                " QPushButton:hover { background-color: #D4A72C; }")
+            partial_btn.clicked.connect(self._on_partial_request)
+            partial_lay.addWidget(partial_btn)
+            lay.addWidget(partial_card)
 
         # Filter bar
         bar_card = make_card()
@@ -121,11 +260,52 @@ class PayrollPage(QWidget):
         # Table
         cols = ["Employee", "Role", "Department", "Gross", "SSS", "PhilHealth",
                 "Hospital", "Net Amount", "Period", "Requested By", "Status", "Actions"]
-        self._table = make_action_table(cols, min_h=400, row_h=48, action_col_width=220)
+        self._table = make_action_table(cols, min_h=400, row_h=48, action_col_width=280)
         lay.addWidget(self._table)
+
+        # ── Employee Paycheck History Section ─────────────────────
+        hist_card = make_card()
+        hist_lay = QVBoxLayout(hist_card)
+        hist_lay.setContentsMargins(20, 16, 20, 16)
+        hist_lay.setSpacing(10)
+
+        hist_header = QHBoxLayout()
+        hist_title = QLabel("Employee Paycheck History")
+        hist_title.setStyleSheet("font-size: 14px; font-weight: bold; color: #2C3E50;")
+        hist_header.addWidget(hist_title)
+        hist_header.addStretch()
+
+        hist_header.addWidget(QLabel("Employee:"))
+        self._hist_emp_combo = QComboBox()
+        self._hist_emp_combo.setObjectName("formCombo")
+        self._hist_emp_combo.setMinimumHeight(36)
+        self._hist_emp_combo.setMinimumWidth(250)
+        self._hist_emp_combo.currentIndexChanged.connect(self._load_employee_history)
+        hist_header.addWidget(self._hist_emp_combo)
+        hist_lay.addLayout(hist_header)
+
+        # Next paycheck info for selected employee
+        self._hist_next_pay = QLabel("")
+        self._hist_next_pay.setStyleSheet("font-size: 12px; color: #555; padding: 4px 0;")
+        self._hist_next_pay.setWordWrap(True)
+        hist_lay.addWidget(self._hist_next_pay)
+
+        self._hist_summary = QLabel()
+        self._hist_summary.setObjectName("mutedSummary")
+        hist_lay.addWidget(self._hist_summary)
+
+        hist_cols = ["Period", "Gross", "SSS", "PhilHealth", "Hospital",
+                     "Net Amount", "Status", "Requested By", "Disbursed At"]
+        self._hist_table = make_read_only_table(hist_cols, min_h=250)
+        hist_lay.addWidget(self._hist_table)
+
+        lay.addWidget(hist_card)
 
         lay.addStretch()
         finish_page(self, scroll)
+
+        # Load employee list for history combo
+        self._populate_hist_employees()
 
     def _populate_table(self):
         self._table.setSortingEnabled(False)
@@ -508,6 +688,115 @@ class PayrollPage(QWidget):
             lines.append(f"Disbursed At: {req['disbursed_at']}")
         QMessageBox.information(self, "Paycheck Details", "\n".join(lines))
 
+    # ── Employee Paycheck History ────────────────────────────────
+
+    def _populate_hist_employees(self):
+        if not self._backend:
+            return
+        emps = self._backend.get_employees(detailed=True) or []
+        self._hist_employees = emps
+        self._hist_emp_combo.blockSignals(True)
+        self._hist_emp_combo.clear()
+        self._hist_emp_combo.addItem("Select an employee...", None)
+        for emp in emps:
+            label = f"{emp.get('full_name', '')} — {emp.get('role_name', '')} ({emp.get('department_name', '')})"
+            self._hist_emp_combo.addItem(label, emp.get("employee_id"))
+        self._hist_emp_combo.blockSignals(False)
+
+    def _load_employee_history(self, _=None):
+        emp_id = self._hist_emp_combo.currentData()
+        if not emp_id or not self._backend:
+            self._hist_table.setRowCount(0)
+            self._hist_summary.setText("")
+            self._hist_next_pay.setText("")
+            return
+
+        history = self._backend.get_paycheck_history(emp_id) or []
+        emp = self._backend.get_employee_by_id(emp_id)
+        salary = float(emp.get("salary", 0) or 0) if emp else 0
+
+        # Next paycheck info
+        last = self._backend.get_last_disbursed_paycheck(emp_id)
+        today = date.today()
+        if last and last.get("period_until"):
+            last_until = last["period_until"]
+            if isinstance(last_until, str):
+                from datetime import datetime
+                last_until = datetime.strptime(last_until, "%Y-%m-%d").date()
+            next_from = last_until + timedelta(days=1)
+            _, days_in_month = monthrange(next_from.year, next_from.month)
+            next_until = date(next_from.year, next_from.month, days_in_month)
+            last_net = float(last.get("net_amount", 0) or 0)
+            self._hist_next_pay.setText(
+                f"Last disbursed: {last.get('disbursed_at', '—')} | "
+                f"Last period: {last.get('period_from', '')} to {last.get('period_until', '')} | "
+                f"Last net: ₱{last_net:,.2f}  ·  "
+                f"Next expected: <b>{next_from} to {next_until}</b> | Base salary: ₱{salary:,.2f}")
+        else:
+            first_of_month = date(today.year, today.month, 1)
+            _, days_in_month = monthrange(today.year, today.month)
+            end_of_month = date(today.year, today.month, days_in_month)
+            self._hist_next_pay.setText(
+                f"No previous disbursements. Expected first period: "
+                f"<b>{first_of_month} to {end_of_month}</b> | Base salary: ₱{salary:,.2f}")
+
+        # Populate table
+        self._hist_table.setRowCount(0)
+        for req in history:
+            r = self._hist_table.rowCount()
+            self._hist_table.insertRow(r)
+            gross = float(req.get("amount", 0) or 0)
+            sss = float(req.get("sss_deduction", 0) or 0)
+            phil = float(req.get("philhealth_deduction", 0) or 0)
+            hosp = float(req.get("hospital_share", 0) or 0)
+            net = float(req.get("net_amount", 0) or 0)
+            period = f"{req.get('period_from', '')} to {req.get('period_until', '')}"
+            disbursed = str(req.get("disbursed_at", "") or "—")
+            status = req.get("status", "")
+            values = [period, f"₱{gross:,.2f}", f"₱{sss:,.2f}", f"₱{phil:,.2f}",
+                      f"₱{hosp:,.2f}", f"₱{net:,.2f}", status,
+                      req.get("requested_by_name", ""), disbursed]
+            for c, val in enumerate(values):
+                item = QTableWidgetItem(str(val))
+                if c == 6:
+                    item.setForeground(QColor(status_color(val)))
+                    item.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+                if c in (1, 5):
+                    item.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+                self._hist_table.setItem(r, c, item)
+
+        total = len(history)
+        disbursed_count = sum(1 for h in history if h.get("status") == "Disbursed")
+        pending_count = sum(1 for h in history if h.get("status") == "Pending")
+        self._hist_summary.setText(
+            f"Showing {total} paycheck{'s' if total != 1 else ''} · "
+            f"{disbursed_count} disbursed · {pending_count} pending")
+
+    # ── Partial (Prorated) Paycheck ──────────────────────────────
+
+    def _on_partial_request(self):
+        """HR submits a partial/prorated paycheck based on days worked."""
+        dlg = _PartialPaycheckDialog(self, backend=self._backend)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            data = dlg.get_data()
+            hr_emp_id = self._backend.get_employee_id_by_email(self._user_email)
+            if not hr_emp_id:
+                QMessageBox.warning(self, "Error", "Could not determine your employee ID.")
+                return
+            ok = self._backend.submit_partial_paycheck(
+                data["employee_id"], data["full_salary"],
+                data["days_worked"], data["total_days"],
+                data["period_from"], data["period_until"], hr_emp_id)
+            if ok is True:
+                prorated = round(data["full_salary"] * data["days_worked"] / data["total_days"], 2)
+                QMessageBox.information(self, "Success",
+                    f"Partial paycheck (₱{prorated:,.2f}) submitted for {data['employee_name']}.\n"
+                    f"({data['days_worked']}/{data['total_days']} days)")
+                self._load_data()
+            else:
+                err = ok if isinstance(ok, str) else ""
+                QMessageBox.warning(self, "Error", f"Failed to submit partial request.\n{err}")
+
 
 # ══════════════════════════════════════════════════════════════════════
 #  Paycheck Request Dialog (used by HR)
@@ -531,7 +820,7 @@ class _PaycheckRequestDialog(QDialog):
         self._emp_combo = QComboBox()
         self._emp_combo.setObjectName("formCombo")
         self._emp_combo.setMinimumHeight(40)
-        self._employees = self._backend.get_employees() if self._backend else []
+        self._employees = self._backend.get_employees(detailed=True) if self._backend else []
         for emp in self._employees:
             label = f"{emp.get('full_name', '')} — {emp.get('role_name', '')} ({emp.get('department_name', '')})"
             self._emp_combo.addItem(label, emp.get("employee_id"))
@@ -543,11 +832,28 @@ class _PaycheckRequestDialog(QDialog):
         self._salary_label.setStyleSheet("font-size: 13px; color: #388087; font-weight: bold;")
         form.addRow("Base Salary", self._salary_label)
 
+        # Deduction rates display
+        rates = self._backend.get_tax_rates() if self._backend else {}
+        sss_r = rates.get('sss_rate', 4.5)
+        phil_r = rates.get('philhealth_rate', 2.5)
+        hosp_r = rates.get('hospital_share_rate', 10.0)
+        self._deduction_label = QLabel(
+            f"SSS: {sss_r}%  |  PhilHealth: {phil_r}%  |  Hospital: {hosp_r}%  "
+            f"(Total: {sss_r + phil_r + hosp_r}%)")
+        self._deduction_label.setStyleSheet("font-size: 12px; color: #7F8C8D;")
+        form.addRow("Deductions", self._deduction_label)
+
+        # Net preview
+        self._net_preview = QLabel("—")
+        self._net_preview.setStyleSheet("font-size: 13px; color: #388087; font-weight: bold;")
+        form.addRow("Est. Net", self._net_preview)
+
         # Amount
         self._amount = QLineEdit()
         self._amount.setObjectName("formInput")
         self._amount.setMinimumHeight(40)
         self._amount.setPlaceholderText("Paycheck amount (₱)")
+        self._amount.textChanged.connect(self._update_net_preview)
         form.addRow("Amount", self._amount)
 
         # Period
@@ -579,10 +885,23 @@ class _PaycheckRequestDialog(QDialog):
         if self._emp_combo.count() > 0:
             self._on_employee_changed(0)
 
+    def _update_net_preview(self, _=None):
+        try:
+            gross = float(self._amount.text().replace(",", ""))
+            if gross > 0 and self._backend:
+                ded = self._backend.calculate_deductions(gross)
+                self._net_preview.setText(
+                    f"₱{ded['net_amount']:,.2f}  "
+                    f"(−₱{ded['total_deductions']:,.2f} deductions)")
+                return
+        except (ValueError, TypeError):
+            pass
+        self._net_preview.setText("—")
+
     def _on_employee_changed(self, index):
         emp_id = self._emp_combo.currentData()
         if emp_id and self._backend:
-            # Find salary from employee list
+            # Find salary from employee list (detailed=True includes salary)
             for emp in self._employees:
                 if emp.get("employee_id") == emp_id:
                     salary = emp.get("salary", 0) or 0
@@ -613,6 +932,193 @@ class _PaycheckRequestDialog(QDialog):
             "employee_id": emp_id,
             "employee_name": emp_name,
             "amount": float(self._amount.text().replace(",", "")),
+            "period_from": self._from_date.date().toString("yyyy-MM-dd"),
+            "period_until": self._until_date.date().toString("yyyy-MM-dd"),
+        }
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  Partial (Prorated) Paycheck Dialog
+# ══════════════════════════════════════════════════════════════════════
+class _PartialPaycheckDialog(QDialog):
+    """Submit a prorated paycheck, auto-computing amount based on days worked."""
+
+    def __init__(self, parent=None, backend=None):
+        super().__init__(parent)
+        self.setWindowTitle("Partial / Prorated Paycheck")
+        self.setMinimumWidth(520)
+        self._backend = backend
+
+        lay = QVBoxLayout(self)
+        lay.setSpacing(14)
+        lay.setContentsMargins(24, 20, 24, 20)
+
+        info = QLabel(
+            "Submit a prorated paycheck for an employee based on the number of "
+            "days worked in a period. The system will automatically compute the "
+            "partial amount from their base salary.")
+        info.setWordWrap(True)
+        info.setStyleSheet("font-size: 12px; color: #555; padding-bottom: 6px;")
+        lay.addWidget(info)
+
+        form = QFormLayout()
+        form.setSpacing(12)
+
+        # Employee selection
+        self._emp_combo = QComboBox()
+        self._emp_combo.setObjectName("formCombo")
+        self._emp_combo.setMinimumHeight(40)
+        self._employees = self._backend.get_employees(detailed=True) if self._backend else []
+        for emp in self._employees:
+            label = f"{emp.get('full_name', '')} — {emp.get('role_name', '')} ({emp.get('department_name', '')})"
+            self._emp_combo.addItem(label, emp.get("employee_id"))
+        self._emp_combo.currentIndexChanged.connect(self._on_employee_changed)
+        form.addRow("Employee", self._emp_combo)
+
+        # Salary display
+        self._salary_label = QLabel("—")
+        self._salary_label.setStyleSheet("font-size: 13px; color: #388087; font-weight: bold;")
+        form.addRow("Base Salary", self._salary_label)
+
+        # Period
+        self._from_date = QDateEdit()
+        self._from_date.setCalendarPopup(True)
+        self._from_date.setDate(QDate.currentDate().addMonths(-1))
+        self._from_date.setObjectName("formCombo")
+        self._from_date.setMinimumHeight(40)
+        self._from_date.dateChanged.connect(self._recalc)
+        form.addRow("Period From", self._from_date)
+
+        self._until_date = QDateEdit()
+        self._until_date.setCalendarPopup(True)
+        self._until_date.setDate(QDate.currentDate())
+        self._until_date.setObjectName("formCombo")
+        self._until_date.setMinimumHeight(40)
+        self._until_date.dateChanged.connect(self._recalc)
+        form.addRow("Period Until", self._until_date)
+
+        # Days worked / Total days
+        days_row = QHBoxLayout()
+        self._days_worked = QSpinBox()
+        self._days_worked.setMinimum(1)
+        self._days_worked.setMaximum(31)
+        self._days_worked.setValue(15)
+        self._days_worked.setMinimumHeight(40)
+        self._days_worked.setObjectName("formCombo")
+        self._days_worked.valueChanged.connect(self._recalc)
+        days_row.addWidget(QLabel("Days Worked:"))
+        days_row.addWidget(self._days_worked)
+
+        self._total_days = QSpinBox()
+        self._total_days.setMinimum(1)
+        self._total_days.setMaximum(31)
+        self._total_days.setMinimumHeight(40)
+        self._total_days.setObjectName("formCombo")
+        self._total_days.valueChanged.connect(self._recalc)
+        days_row.addWidget(QLabel("of Total:"))
+        days_row.addWidget(self._total_days)
+        form.addRow("Days", days_row)
+
+        # Computed amount
+        self._computed_label = QLabel("—")
+        self._computed_label.setStyleSheet("font-size: 14px; color: #388087; font-weight: bold;")
+        form.addRow("Prorated Amount", self._computed_label)
+
+        # Net after deductions
+        self._net_label = QLabel("—")
+        self._net_label.setStyleSheet("font-size: 13px; color: #388087; font-weight: bold;")
+        form.addRow("Est. Net", self._net_label)
+
+        # Deduction rates info
+        rates = self._backend.get_tax_rates() if self._backend else {}
+        sss_r = rates.get('sss_rate', 4.5)
+        phil_r = rates.get('philhealth_rate', 2.5)
+        hosp_r = rates.get('hospital_share_rate', 10.0)
+        ded_info = QLabel(
+            f"SSS: {sss_r}%  |  PhilHealth: {phil_r}%  |  Hospital: {hosp_r}%  "
+            f"(Total: {sss_r + phil_r + hosp_r}%)")
+        ded_info.setStyleSheet("font-size: 11px; color: #7F8C8D;")
+        form.addRow("Deductions", ded_info)
+
+        lay.addLayout(form)
+
+        btns = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        style_dialog_btns(btns)
+        btns.accepted.connect(self._validate_and_accept)
+        btns.rejected.connect(self.reject)
+        lay.addWidget(btns)
+
+        # Auto-fill total days from period & trigger initial calc
+        self._recalc()
+        if self._emp_combo.count() > 0:
+            self._on_employee_changed(0)
+
+    def _on_employee_changed(self, _=None):
+        emp_id = self._emp_combo.currentData()
+        if emp_id and self._backend:
+            for emp in self._employees:
+                if emp.get("employee_id") == emp_id:
+                    self._current_salary = float(emp.get("salary", 0) or 0)
+                    self._salary_label.setText(f"₱{self._current_salary:,.2f}")
+                    self._recalc()
+                    break
+        else:
+            self._current_salary = 0
+
+    def _recalc(self, _=None):
+        from_d = self._from_date.date().toPyDate()
+        until_d = self._until_date.date().toPyDate()
+        total_days = (until_d - from_d).days + 1
+        if total_days < 1:
+            total_days = 1
+        self._total_days.blockSignals(True)
+        self._total_days.setValue(total_days)
+        self._total_days.blockSignals(False)
+        if self._days_worked.value() > total_days:
+            self._days_worked.blockSignals(True)
+            self._days_worked.setValue(total_days)
+            self._days_worked.blockSignals(False)
+        self._days_worked.setMaximum(total_days)
+
+        salary = getattr(self, "_current_salary", 0)
+        if salary > 0 and total_days > 0:
+            prorated = round(salary * self._days_worked.value() / total_days, 2)
+            self._computed_label.setText(f"₱{prorated:,.2f}  ({self._days_worked.value()}/{total_days} days)")
+            if self._backend:
+                ded = self._backend.calculate_deductions(prorated)
+                self._net_label.setText(
+                    f"₱{ded['net_amount']:,.2f}  (−₱{ded['total_deductions']:,.2f})")
+        else:
+            self._computed_label.setText("—")
+            self._net_label.setText("—")
+
+    def _validate_and_accept(self):
+        if self._emp_combo.currentData() is None:
+            QMessageBox.warning(self, "Validation", "Please select an employee.")
+            return
+        salary = getattr(self, "_current_salary", 0)
+        if salary <= 0:
+            QMessageBox.warning(self, "Validation",
+                "Selected employee has no base salary set.\nPlease set their salary first.")
+            return
+        if self._from_date.date() > self._until_date.date():
+            QMessageBox.warning(self, "Validation", "Period 'From' must be before 'Until'.")
+            return
+        if self._days_worked.value() < 1:
+            QMessageBox.warning(self, "Validation", "Days worked must be at least 1.")
+            return
+        self.accept()
+
+    def get_data(self) -> dict:
+        emp_id = self._emp_combo.currentData()
+        emp_name = self._emp_combo.currentText().split(" — ")[0]
+        return {
+            "employee_id": emp_id,
+            "employee_name": emp_name,
+            "full_salary": getattr(self, "_current_salary", 0),
+            "days_worked": self._days_worked.value(),
+            "total_days": self._total_days.value(),
             "period_from": self._from_date.date().toString("yyyy-MM-dd"),
             "period_until": self._until_date.date().toString("yyyy-MM-dd"),
         }

@@ -94,7 +94,7 @@ class DatabaseBase:
                 # Add 'Triaged' to queue_entries status ENUM (nurse triage workflow)
                 cur.execute("SHOW COLUMNS FROM queue_entries LIKE 'status'")
                 col_info = cur.fetchone()
-                if col_info and 'Triaged' not in str(col_info.get('Type', '')):
+                if col_info and 'Triaged' not in str(col_info[1] if col_info else ''):
                     cur.execute("ALTER TABLE queue_entries MODIFY COLUMN status ENUM('Waiting','Triaged','In Progress','Completed','Cancelled') NOT NULL DEFAULT 'Waiting'")
                 # Ensure Nurse role exists
                 cur.execute("SELECT role_id FROM roles WHERE role_name='Nurse'")
@@ -161,6 +161,11 @@ class DatabaseBase:
                     if not cur.fetchone():
                         cur.execute(f"ALTER TABLE paycheck_requests ADD COLUMN {col} {typedef}")
 
+                # address column on employees
+                cur.execute("SHOW COLUMNS FROM employees LIKE 'address'")
+                if not cur.fetchone():
+                    cur.execute("ALTER TABLE employees ADD COLUMN address VARCHAR(300) DEFAULT ''")
+
                 # service_departments junction table (links services to departments)
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS service_departments (
@@ -173,18 +178,27 @@ class DatabaseBase:
                             ON DELETE CASCADE
                     )
                 """)
-                # Seed service_departments if table is empty
-                cur.execute("SELECT COUNT(*) AS cnt FROM service_departments")
-                sd_cnt = cur.fetchone()
-                if (sd_cnt.get("cnt", 0) if isinstance(sd_cnt, dict) else sd_cnt[0]) == 0:
-                    cur.execute("""
-                        INSERT IGNORE INTO service_departments (service_id, department_id)
-                        SELECT s.service_id, d.department_id
-                        FROM services s
-                        CROSS JOIN departments d
-                        WHERE (s.category = 'Lab'     AND d.department_name = 'Laboratory')
-                           OR (s.category = 'Dental'  AND d.department_name = 'Dentistry')
-                    """)
+                # Seed service_departments with comprehensive department→service mapping
+                # INSERT IGNORE ensures idempotency — safe to run on every startup
+                _DEPT_SERVICE_MAP = {
+                    'Cardiology':       ['ECG', 'Consultation', 'Follow-up Visit',
+                                         'General Checkup', 'Lab Results Review'],
+                    'Dentistry':        ['Dental Cleaning', 'X-Ray', 'Consultation'],
+                    'Laboratory':       ['Blood Work', 'Lab Tests – CBC',
+                                         'Lab Tests – Urinalysis'],
+                    'General Medicine': ['General Checkup', 'Consultation',
+                                         'Follow-up Visit', 'Physical Exam'],
+                    'Pediatrics':       ['General Checkup', 'Consultation',
+                                         'Follow-up Visit', 'Physical Exam'],
+                }
+                for dept_name, svc_names in _DEPT_SERVICE_MAP.items():
+                    for svc_name in svc_names:
+                        cur.execute("""
+                            INSERT IGNORE INTO service_departments (service_id, department_id)
+                            SELECT s.service_id, d.department_id
+                            FROM services s, departments d
+                            WHERE s.service_name = %s AND d.department_name = %s
+                        """, (svc_name, dept_name))
 
                 # Ensure default Finance employee + user account exists
                 cur.execute("SELECT role_id FROM roles WHERE role_name='Finance'")
