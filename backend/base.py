@@ -375,7 +375,8 @@ class DatabaseBase:
                          include_roles=None):
         where, params = ["1=1"], []
         if user_filter:
-            where.append("user_email = %s"); params.append(user_filter)
+            where.append("user_email LIKE %s")
+            params.append(f"%{user_filter}%")
         if action_filter:
             where.append("action = %s"); params.append(action_filter)
         if record_type_filter:

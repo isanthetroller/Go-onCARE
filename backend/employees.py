@@ -820,7 +820,8 @@ class EmployeeMixin:
                         SET time_out = NULL
                         WHERE attendance_id = %s
                     """, (existing["attendance_id"],))
-                    self.log_activity("Logged In", "Attendance", f"Resumed shift for employee ID {employee_id}")
+                    name = self._get_employee_name(employee_id) or str(employee_id)
+                    self.log_activity("Logged In", "Attendance", f"Resumed shift for {name}")
                     return True
                 except Exception as e:
                     traceback.print_exc()
@@ -831,7 +832,8 @@ class EmployeeMixin:
                 INSERT INTO attendance (employee_id, record_date, time_in, status)
                 VALUES (%s, CURDATE(), CURTIME(), 'Present')
             """, (employee_id,))
-            self.log_activity("Logged In", "Attendance", f"Automated clock-in for employee ID {employee_id}")
+            name = self._get_employee_name(employee_id) or str(employee_id)
+            self.log_activity("Logged In", "Attendance", f"Automated clock-in for {name}")
             return True
         except Exception as e:
             traceback.print_exc()
@@ -852,7 +854,8 @@ class EmployeeMixin:
                 SET time_out = CURTIME()
                 WHERE attendance_id = %s
             """, (existing["attendance_id"],))
-            self.log_activity("Logged Out", "Attendance", f"Automated clock-out for employee ID {employee_id}")
+            name = self._get_employee_name(employee_id) or str(employee_id)
+            self.log_activity("Logged Out", "Attendance", f"Automated clock-out for {name}")
             return True
         except Exception as e:
             traceback.print_exc()
@@ -873,7 +876,8 @@ class EmployeeMixin:
                 INSERT INTO attendance_breaks (attendance_id, break_start, break_reason)
                 VALUES (%s, CURTIME(), %s)
             """, (existing["attendance_id"], reason))
-            self.log_activity("Break", "Attendance", f"Started break ({reason}) for employee ID {employee_id}")
+            name = self._get_employee_name(employee_id) or str(employee_id)
+            self.log_activity("Break", "Attendance", f"Started break ({reason}) for {name}")
             return True
         except Exception as e:
             traceback.print_exc()
@@ -889,10 +893,12 @@ class EmployeeMixin:
 
         try:
             self.exec("""
-                UPDATE attendance_breaks 
+                UPDATE attendance_breaks
                 SET break_end = CURTIME()
                 WHERE attendance_id = %s AND break_end IS NULL
             """, (existing["attendance_id"],))
+            name = self._get_employee_name(employee_id) or str(employee_id)
+            self.log_activity("Resumed Work", "Attendance", f"Ended break for {name}")
             return True
         except Exception as e:
             traceback.print_exc()
