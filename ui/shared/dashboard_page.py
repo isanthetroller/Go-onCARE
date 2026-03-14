@@ -118,30 +118,29 @@ class DashboardPage(QWidget):
         act_row.addStretch()
         lay.addLayout(act_row)
 
-        if self._role not in ("HR",):
-            leave_card = make_card()
-            lv_lay = QVBoxLayout(leave_card)
-            lv_lay.setContentsMargins(20, 18, 20, 14); lv_lay.setSpacing(12)
+        leave_card = make_card()
+        lv_lay = QVBoxLayout(leave_card)
+        lv_lay.setContentsMargins(20, 18, 20, 14); lv_lay.setSpacing(12)
 
-            lv_hdr = QHBoxLayout()
-            lv_title = QLabel("My Leave Requests")
-            lv_title.setObjectName("cardTitle")
-            lv_hdr.addWidget(lv_title); lv_hdr.addStretch()
-            req_btn = QPushButton("Request Leave")
-            req_btn.setIcon(get_icon("edit", color=QColor("#FFFFFF")))
-            req_btn.setIconSize(QSize(18, 18))
-            req_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            req_btn.setObjectName("actionBtn")
-            req_btn.setMinimumHeight(44)
-            req_btn.clicked.connect(self._on_request_leave)
-            lv_hdr.addWidget(req_btn)
-            lv_lay.addLayout(lv_hdr)
+        lv_hdr = QHBoxLayout()
+        lv_title = QLabel("My Leave Requests")
+        lv_title.setObjectName("cardTitle")
+        lv_hdr.addWidget(lv_title); lv_hdr.addStretch()
+        req_btn = QPushButton("Request Leave")
+        req_btn.setIcon(get_icon("edit", color=QColor("#FFFFFF")))
+        req_btn.setIconSize(QSize(18, 18))
+        req_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        req_btn.setObjectName("actionBtn")
+        req_btn.setMinimumHeight(44)
+        req_btn.clicked.connect(self._on_request_leave)
+        lv_hdr.addWidget(req_btn)
+        lv_lay.addLayout(lv_hdr)
 
-            self._my_leave_table = make_read_only_table(
-                ["From", "Until", "Reason", "Status", "HR Note", "Submitted"],
-                min_h=140, max_h=220, row_h=44)
-            lv_lay.addWidget(self._my_leave_table)
-            lay.addWidget(leave_card)
+        self._my_leave_table = make_read_only_table(
+            ["From", "Until", "Reason", "Status", "HR Note", "Submitted"],
+            min_h=140, max_h=220, row_h=44)
+        lv_lay.addWidget(self._my_leave_table)
+        lay.addWidget(leave_card)
 
         cols = QHBoxLayout(); cols.setSpacing(16)
         if self._role == "Nurse":
@@ -703,10 +702,10 @@ class DashboardPage(QWidget):
             self._refresh_chart()
         if self._role in ("Receptionist", "Admin"):
             self._refresh_doctor_schedules()
-        if self._role in ("Admin",):
+        if self._role in ("Manager", "Admin"):
             self._refresh_recent_activity()
-        if self._role not in ("HR",):
-            self._refresh_my_leave()
+        
+        self._refresh_my_leave()
 
     # ── Leave Request (for non-admin/non-HR roles) ────────────────
     def _get_my_employee_id(self):
