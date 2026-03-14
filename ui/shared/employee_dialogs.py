@@ -30,8 +30,8 @@ class EmployeeDialog(QDialog):
         self._fired = False
 
         # Size appropriately - removed screen ratio calculation as it stretches fields awkwardly on wide monitors
-        self.resize(800, 680)
-        self.setMinimumSize(700, 600)
+        self.resize(760, 560)
+        self.setMinimumSize(700, 480)
 
         main_lay = QVBoxLayout(self)
         main_lay.setContentsMargins(28, 20, 28, 18)
@@ -89,7 +89,10 @@ class EmployeeDialog(QDialog):
         self._right_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
 
         self._right_vbox.addLayout(self._right_form)
+        columns.addLayout(self._right_vbox, 1)
 
+        main_lay.addLayout(columns)
+        
         self._build_fields(None)
         self._build_buttons(main_lay, data)
         if data:
@@ -303,11 +306,8 @@ class EmployeeDialog(QDialog):
         self.role_combo.currentTextChanged.connect(
             lambda txt: self._schedule_group.setVisible(txt == "Doctor"))
         
-        self._left_vbox.addStretch()
-        self._right_vbox.addStretch()
-
-    def _build_buttons(self, parent_lay, data):
-        btn_row = QHBoxLayout(); btn_row.setSpacing(12)
+        self._left_vbox.addStretch(1)
+        self._right_vbox.addStretch(1)
         if data:
             fire_btn = QPushButton("Fire")
             fire_btn.setMinimumHeight(32); fire_btn.setCursor(Qt.CursorShape.PointingHandCursor)

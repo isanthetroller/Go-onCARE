@@ -52,6 +52,7 @@ class AnalyticsPage(QWidget):
                 "retention":      self._backend.get_patient_retention(6),
                 "cancel_trend":   self._backend.get_cancellation_rate_trend(6),
                 "period_cmp":     self._backend.get_period_comparison(),
+                "attendance":     self._backend.get_employee_attendance_stats() if hasattr(self._backend, 'get_employee_attendance_stats') else {},
             }
 
     # ── Build ─────────────────────────────────────────────────────
@@ -114,6 +115,35 @@ class AnalyticsPage(QWidget):
                                           "Age group distribution",
                                           demo_data or [("No data", 1, "#CCC")]))
             lay.addLayout(row2)
+            
+            # ── Row 3: Live Employee Attendance ───────────
+            att = data.get("attendance", {})
+            row3 = QHBoxLayout(); row3.setSpacing(20)
+            
+            absent_val = att.get("absent", 0)
+            present_val = att.get("present", 0)
+            overall_att_data = []
+            if absent_val or present_val:
+                overall_att_data = [
+                    ("Present", present_val, "#2ECC71"),
+                    ("Absent", absent_val, "#E74C3C")
+                ]
+            row3.addWidget(self._pie_card("Today's Attendance",
+                                          "Overall present vs absent employees",
+                                          overall_att_data or [("No data", 1, "#CCC")]))
+                                          
+            dept_att_raw = att.get("dept_attendance", [])
+            dept_att_data = []
+            for i, d in enumerate(dept_att_raw):
+                dept_att_data.append((
+                    d["department_name"], 
+                    d["present_count"], 
+                    DEPT_COLORS[i % len(DEPT_COLORS)]
+                ))
+            row3.addWidget(self._pie_card("Present by Department",
+                                          "Present employees by department",
+                                          dept_att_data or [("No data", 1, "#CCC")]))
+            lay.addLayout(row3)
 
             # ── Patient Retention ─────────────────────────────────
             lay.addWidget(self._retention_card(data.get("retention", [])))

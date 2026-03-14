@@ -272,13 +272,30 @@ class HREmployeesPage(QWidget):
         hdr.addWidget(title)
         hdr.addStretch()
         
+        self._att_date = QDateEdit()
+        self._att_date.setCalendarPopup(True)
+        self._att_date.setDate(QDate.currentDate())
+        self._att_date.setMinimumHeight(32)
+        self._att_date.setFixedWidth(120)
+        self._att_date.setDisplayFormat("MM/dd/yyyy")
+        self._att_date.setStyleSheet("QDateEdit::drop-down { image: none; }") # remove default arrow
+        self._att_date.dateChanged.connect(lambda: self._filter_attendance())
+        
+        # Add calendar icon as a separate button or inside, let's just use it on a layout next to it
+        date_icon_btn = QPushButton()
+        date_icon_btn.setIcon(get_icon("calendar", color=QColor("#555555")))
+        date_icon_btn.setFixedSize(32, 32)
+        date_icon_btn.setFlat(True)
+        # clicking the icon opens the calendar
+        date_icon_btn.clicked.connect(lambda: self._att_date.calendarWidget().show() if self._att_date.calendarWidget() else None)
+
+        hdr.addWidget(self._att_date)
+
         self._att_search = QLineEdit()
         self._att_search.setPlaceholderText("Search employee...")
         self._att_search.setMinimumHeight(32)
         self._att_search.setFixedWidth(200)
-        self._att_search.textChanged.connect(self._filter_attendance)
-        hdr.addWidget(self._att_search)
-        
+        self._att_search.textChanged.connect(lambda txt: self._filter_attendance())
         c_lay.addLayout(hdr)
 
         self._attendance_table = make_read_only_table(
@@ -294,7 +311,7 @@ class HREmployeesPage(QWidget):
             return
         rows = self._backend.get_all_attendance() or []
         self._att_all_rows = rows
-        self._filter_attendance(self._att_search.text())
+        self._filter_attendance()
 
     def _populate_attendance_table(self, rows):
         self._attendance_table.setRowCount(0)
@@ -318,11 +335,21 @@ class HREmployeesPage(QWidget):
             
             self._attendance_table.setItem(r, 7, QTableWidgetItem(row.get("notes", "")))
 
-    def _filter_attendance(self, text):
+    def _filter_attendance(self, *_):
         if not hasattr(self, "_att_all_rows"): return
+        text = self._att_search.text()
         needle = text.strip().lower()
-        rows = [r for r in self._att_all_rows if needle in (r.get("employee_name", "") + " " + r.get("role_name", "")).lower()]
-        self._populate_attendance_table(rows)
+        target_date = self._att_date.date().toString("yyyy-MM-dd")
+
+        filtered_rows = []
+        for r in self._att_all_rows:
+            d = (r.get("employee_name", "") + " " + r.get("role_name", "")).lower()
+            date_match = target_date in str(r.get("record_date", "") or r.get("clock_in_time", ""))
+            
+            if needle in d and date_match:
+                filtered_rows.append(r)
+                
+        self._populate_attendance_table(filtered_rows)
 
     def _build_leave_tab(self):
         inner, lay = self._make_tab_content()
@@ -465,15 +492,6 @@ class HREmployeesPage(QWidget):
         ua_title.setObjectName("cardTitle")
         ua_header.addWidget(ua_title)
         ua_header.addStretch()
-
-        create_btn = QPushButton("Create Account")
-        create_btn.setIcon(get_icon("plus", color=QColor("#FFFFFF")))
-        create_btn.setIconSize(QSize(18, 18))
-        create_btn.setObjectName("actionBtn"); create_btn.setMinimumHeight(38)
-        create_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        create_btn.setToolTip("Create a new user account for an employee")
-        create_btn.clicked.connect(self._on_create_account)
-        ua_header.addWidget(create_btn)
 
         reset_btn = QPushButton("Reset Password")
         reset_btn.setIcon(get_icon("key", color=QColor("#FFFFFF")))
@@ -762,19 +780,6 @@ class HREmployeesPage(QWidget):
             else:
                 mcp_item.setForeground(QColor("#5CB85C"))
             self._users_table.setItem(r, 4, mcp_item)
-
-    def _on_create_account(self):
-        dlg = UserAccountDialog(self, backend=self._backend)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            d = dlg.get_data()
-            if self._backend:
-                ok, msg = self._backend.admin_create_user_account(
-                    d["full_name"], d["email"], d["password"], d["role_name"])
-                if ok:
-                    QMessageBox.information(self, "Success", msg)
-                    self._load_user_accounts()
-                else:
-                    QMessageBox.warning(self, "Error", msg)
 
     def _on_reset_password(self):
         if not hasattr(self, "_users_table"):

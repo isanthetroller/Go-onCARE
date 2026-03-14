@@ -1105,14 +1105,11 @@ QMessageBox, QInputDialog {
     background-color: #FFFFFF;
     border: 1px solid #BADFE7;
     border-radius: 14px;
-    min-width: 380px;
 }
 
 QMessageBox QLabel, QInputDialog QLabel {
     color: #2C3E50;
     font-size: 13px;
-    min-width: 340px;
-    min-height: 40px;
     padding: 6px 4px;
 }
 
