@@ -771,7 +771,9 @@ class DashboardPage(QWidget):
         att = self._backend.get_today_attendance(emp_id)
         if not att: return
         
-        from PyQt6.QtWidgets import QInputDialog
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QLabel, QComboBox, QPushButton, QHBoxLayout, QMessageBox
+        from PyQt6.QtCore import Qt
+
         if att.get("break_start") and not att.get("break_end"):
             # End break
             res = self._backend.end_break(emp_id)
@@ -782,15 +784,56 @@ class DashboardPage(QWidget):
                 QMessageBox.warning(self, "Error", f"Failed to end break: {res}")
         else:
             # Start Break
+            dialog = QDialog(self)
+            dialog.setWindowTitle("Take A Break")
+            dialog.setFixedSize(350, 200)
+            
+            layout = QVBoxLayout(dialog)
+            layout.setSpacing(15)
+            layout.setContentsMargins(20, 20, 20, 20)
+            
+            lbl = QLabel("Select Break Reason:")
+            lbl.setStyleSheet("font-size: 14px; font-weight: bold; color: #333;")
+            layout.addWidget(lbl)
+            
+            combo = QComboBox()
+            combo.setObjectName("formCombo")
             reasons = ["Lunch Break", "Coffee Break", "Rest Break", "Personal Emergency", "Other"]
-            item, ok = QInputDialog.getItem(self, "Take A Break", "Select Break Reason:", reasons, 0, False)
-            if ok and item:
-                res = self._backend.start_break(emp_id, item)
-                if res is True:
-                    QMessageBox.information(self, "Break Started", f"Enjoy your {item.lower()}! Activity logged.")
-                    self._refresh_attendance_btn()
-                else:
-                    QMessageBox.warning(self, "Error", f"Failed to start break: {res}")
+            combo.addItems(reasons)
+            layout.addWidget(combo)
+            
+            layout.addStretch()
+            
+            btn_layout = QHBoxLayout()
+            btn_layout.setSpacing(10)
+            
+            ok_btn = QPushButton("OK")
+            ok_btn.setObjectName("actionBtn")
+            ok_btn.setMinimumHeight(40)
+            ok_btn.clicked.connect(dialog.accept)
+            
+            cancel_btn = QPushButton("Cancel")
+            cancel_btn.setObjectName("actionBtn")
+            cancel_btn.setMinimumHeight(40)
+            cancel_btn.setStyleSheet("""
+                QPushButton { background-color: #95A5A6; color: white; border-radius: 6px; font-weight: bold; }
+                QPushButton:hover { background-color: #7F8C8D; }
+            """)
+            cancel_btn.clicked.connect(dialog.reject)
+            
+            btn_layout.addWidget(ok_btn)
+            btn_layout.addWidget(cancel_btn)
+            layout.addLayout(btn_layout)
+            
+            if dialog.exec():
+                item = combo.currentText()
+                if item:
+                    res = self._backend.start_break(emp_id, item)
+                    if res is True:
+                        QMessageBox.information(self, "Break Started", f"Enjoy your {item.lower()}! Activity logged.")
+                        self._refresh_attendance_btn()
+                    else:
+                        QMessageBox.warning(self, "Error", f"Failed to start break: {res}")
     # ── Leave Request (for non-admin/non-HR roles) ────────────────
     def _get_my_employee_id(self):
         if not self._backend or not self._user_email:
