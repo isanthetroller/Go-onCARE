@@ -3,9 +3,9 @@
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QTableWidgetItem, QHeaderView, QStackedWidget, QScrollArea, QFrame,
-    QComboBox, QDialog, QMessageBox, QTextEdit, QInputDialog,
+    QComboBox, QDialog, QMessageBox, QTextEdit, QInputDialog, QDateEdit,
 )
-from PyQt6.QtCore import Qt, QTimer, QSize
+from PyQt6.QtCore import Qt, QTimer, QSize, QDate
 from PyQt6.QtGui import QColor
 from ui.styles import (
     make_table_btn, make_banner,
@@ -273,22 +273,14 @@ class HREmployeesPage(QWidget):
         hdr.addStretch()
         
         self._att_date = QDateEdit()
+        self._att_date.setObjectName("formCombo")
         self._att_date.setCalendarPopup(True)
         self._att_date.setDate(QDate.currentDate())
-        self._att_date.setMinimumHeight(32)
-        self._att_date.setFixedWidth(120)
-        self._att_date.setDisplayFormat("MM/dd/yyyy")
-        self._att_date.setStyleSheet("QDateEdit::drop-down { image: none; }") # remove default arrow
+        self._att_date.setMinimumHeight(38)
+        self._att_date.setFixedWidth(130)
+        self._att_date.setDisplayFormat("M/dd/yyyy")
         self._att_date.dateChanged.connect(lambda: self._filter_attendance())
         
-        # Add calendar icon as a separate button or inside, let's just use it on a layout next to it
-        date_icon_btn = QPushButton()
-        date_icon_btn.setIcon(get_icon("calendar", color=QColor("#555555")))
-        date_icon_btn.setFixedSize(32, 32)
-        date_icon_btn.setFlat(True)
-        # clicking the icon opens the calendar
-        date_icon_btn.clicked.connect(lambda: self._att_date.calendarWidget().show() if self._att_date.calendarWidget() else None)
-
         hdr.addWidget(self._att_date)
 
         self._att_search = QLineEdit()

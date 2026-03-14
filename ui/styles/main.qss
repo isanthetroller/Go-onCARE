@@ -624,10 +624,8 @@ QCalendarWidget {
     background-color: #FFFFFF;
     border: 2px solid #BADFE7;
     border-radius: 12px;
-}
-
-/* Navigation bar (month/year header) */
-QCalendarWidget QWidget#qt_calendar_navigationbar {
+      min-width: 300px;
+      min-height: 240px;
     background-color: #388087;
     border-top-left-radius: 10px;
     border-top-right-radius: 10px;
