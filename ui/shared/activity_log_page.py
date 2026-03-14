@@ -82,7 +82,11 @@ class ActivityLogPage(QWidget):
 
         # ── Table ────────────────────────────────────────────────
         self._table = make_read_only_table(
-            ["Timestamp", "User", "Role", "Action", "Type", "Detail"])
+            ["Timestamp", "User", "Role", "Action", "Type", "Detail"])        
+        # Adjust column sizing so details take the most space
+        header = self._table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)  # Detail column stretches
         lay.addWidget(self._table)
 
         lay.addStretch()
@@ -127,6 +131,9 @@ class ActivityLogPage(QWidget):
                 if c == 3:
                     clr = action_colors.get(val, "#2C3E50")
                     item.setForeground(QColor(clr))
+                if c == 5 and val:
+                    # Provide an immediate tooltip so the user can hover over long text without issue
+                    item.setToolTip(val)
                 self._table.setItem(r, c, item)
         # Update the last-seen log_id so the timer only refreshes on new entries
         if rows:
