@@ -884,12 +884,14 @@ class DashboardPage(QWidget):
         from_date.setDate(QDate.currentDate().addDays(1))
         from_date.setMinimumDate(QDate.currentDate().addDays(1))
         from_date.setObjectName("formCombo"); from_date.setMinimumHeight(38)
+        from_date.setDisplayFormat("M/d/yyyy")
 
         until_date = QDateEdit()
         until_date.setCalendarPopup(True)
         until_date.setDate(QDate.currentDate().addDays(7))
         until_date.setMinimumDate(QDate.currentDate().addDays(1))
         until_date.setObjectName("formCombo"); until_date.setMinimumHeight(38)
+        until_date.setDisplayFormat("M/d/yyyy")
 
         reason_edit = QTextEdit()
         reason_edit.setMaximumHeight(100)

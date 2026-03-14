@@ -137,7 +137,7 @@ class PatientDialog(QDialog):
         self.dob_edit = QDateEdit(); self.dob_edit.setCalendarPopup(True)
         self.dob_edit.setDate(QDate.currentDate()); self.dob_edit.setObjectName("formCombo")
         self.dob_edit.setMaximumDate(QDate.currentDate())
-        self.dob_edit.setDisplayFormat("MMMM d, yyyy")
+        self.dob_edit.setDisplayFormat("M/d/yyyy")
         self.dob_edit.setMinimumHeight(38)
 
         # Phone: +63 prefix frame

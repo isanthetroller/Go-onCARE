@@ -227,6 +227,7 @@ class EmployeeDialog(QDialog):
         self.hire_date.setDate(QDate.currentDate()); self.hire_date.setObjectName("formCombo")
         self.hire_date.setMaximumDate(QDate.currentDate())
         self.hire_date.setMinimumHeight(38)
+        self.hire_date.setDisplayFormat("M/d/yyyy")
 
         self.salary_edit = QLineEdit()
         self.salary_edit.setStyleSheet(self._INPUT_STYLE)

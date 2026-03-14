@@ -278,7 +278,7 @@ class HREmployeesPage(QWidget):
         self._att_date.setDate(QDate.currentDate())
         self._att_date.setMinimumHeight(38)
         self._att_date.setFixedWidth(130)
-        self._att_date.setDisplayFormat("M/dd/yyyy")
+        self._att_date.setDisplayFormat("M/d/yyyy")
         self._att_date.dateChanged.connect(lambda: self._filter_attendance())
         
         hdr.addWidget(self._att_date)

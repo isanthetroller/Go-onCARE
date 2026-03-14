@@ -624,8 +624,12 @@ QCalendarWidget {
     background-color: #FFFFFF;
     border: 2px solid #BADFE7;
     border-radius: 12px;
-      min-width: 300px;
-      min-height: 240px;
+    min-width: 350px;
+    min-height: 250px;
+}
+
+/* Navigation bar (month/year header) */
+QCalendarWidget QWidget#qt_calendar_navigationbar {
     background-color: #388087;
     border-top-left-radius: 10px;
     border-top-right-radius: 10px;
@@ -717,6 +721,16 @@ QCalendarWidget QSpinBox::down-button {
 
 /* Day-of-week header row */
 QCalendarWidget QWidget { alternate-background-color: #F6F6F2; }
+
+QCalendarWidget QHeaderView::section {
+    padding: 2px 0px;
+    margin: 0px;
+    background-color: transparent;
+    border: none;
+    color: #2C3E50;
+    font-size: 13px;
+    font-weight: normal;
+}
 
 QCalendarWidget QAbstractItemView:enabled {
     color: #2C3E50;

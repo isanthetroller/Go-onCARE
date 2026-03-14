@@ -874,6 +874,7 @@ class _PaycheckRequestDialog(QDialog):
         self._from_date.setDate(QDate.currentDate().addMonths(-1))
         self._from_date.setObjectName("formCombo")
         self._from_date.setMinimumHeight(40)
+        self._from_date.setDisplayFormat("M/d/yyyy")
         form.addRow("Period From", self._from_date)
 
         self._until_date = QDateEdit()
@@ -881,6 +882,7 @@ class _PaycheckRequestDialog(QDialog):
         self._until_date.setDate(QDate.currentDate())
         self._until_date.setObjectName("formCombo")
         self._until_date.setMinimumHeight(40)
+        self._until_date.setDisplayFormat("M/d/yyyy")
         form.addRow("Period Until", self._until_date)
 
         lay.addLayout(form)
@@ -998,6 +1000,7 @@ class _PartialPaycheckDialog(QDialog):
         self._from_date.setDate(QDate.currentDate().addMonths(-1))
         self._from_date.setObjectName("formCombo")
         self._from_date.setMinimumHeight(40)
+        self._from_date.setDisplayFormat("M/d/yyyy")
         self._from_date.dateChanged.connect(self._recalc)
         form.addRow("Period From", self._from_date)
 
@@ -1006,6 +1009,7 @@ class _PartialPaycheckDialog(QDialog):
         self._until_date.setDate(QDate.currentDate())
         self._until_date.setObjectName("formCombo")
         self._until_date.setMinimumHeight(40)
+        self._until_date.setDisplayFormat("M/d/yyyy")
         self._until_date.dateChanged.connect(self._recalc)
         form.addRow("Period Until", self._until_date)
 

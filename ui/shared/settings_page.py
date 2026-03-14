@@ -230,6 +230,7 @@ class SettingsPage(QWidget):
         self.cutoff_date = QDateEdit(); self.cutoff_date.setCalendarPopup(True)
         self.cutoff_date.setDate(QDate.currentDate().addMonths(-3))
         self.cutoff_date.setObjectName("formCombo"); self.cutoff_date.setMinimumHeight(38)
+        self.cutoff_date.setDisplayFormat("M/d/yyyy")
         self.cutoff_date.setToolTip("Only appointments completed before this date will be removed")
         c1.addWidget(self.cutoff_date)
         btn1 = self._action_btn("Remove Old Data"); btn1.clicked.connect(self._cleanup_completed)
