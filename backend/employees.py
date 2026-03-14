@@ -750,3 +750,84 @@ class EmployeeMixin:
         prorated = round(float(full_salary) * days_worked / total_days, 2)
         return self.submit_paycheck_request(
             employee_id, prorated, period_from, period_until, requested_by_id)
+
+    # ── Attendance System ──────────────────────────────────────────────────
+
+    def get_all_attendance(self):
+        """Fetch all attendance records for HR."""
+        return self.fetch("""
+            SELECT a.attendance_id, a.employee_id, 
+                   CONCAT(e.first_name, ' ', e.last_name) AS employee_name,
+                   r.role_name,
+                   a.record_date, a.time_in, a.time_out, 
+                   a.status, a.notes
+            FROM attendance a
+            INNER JOIN employees e ON a.employee_id = e.employee_id
+            INNER JOIN roles r ON e.role_id = r.role_id
+            ORDER BY a.record_date DESC, a.time_in DESC
+        """)
+
+    def get_employee_attendance(self, employee_id):
+        return self.fetch("""
+            SELECT attendance_id, record_date, time_in, time_out, status, notes
+            FROM attendance
+            WHERE employee_id = %s
+            ORDER BY record_date DESC
+        """, (employee_id,))
+
+    def get_today_attendance(self, employee_id):
+        """Check if an employee has an attendance record for today."""
+        return self.fetch("""
+            SELECT attendance_id, time_in, time_out, status
+            FROM attendance
+            WHERE employee_id = %s AND record_date = CURDATE()
+            LIMIT 1
+        """, (employee_id,), one=True)
+
+    def clock_in(self, employee_id):
+        """Clock in an employee for today."""
+        existing = self.get_today_attendance(employee_id)
+        if existing:
+            return "Already checked in today."
+        
+        try:
+            self.exec("""
+                INSERT INTO attendance (employee_id, record_date, time_in, status)
+                VALUES (%s, CURDATE(), CURTIME(), 'Present')
+            """, (employee_id,))
+            return True
+        except Exception as e:
+            traceback.print_exc()
+            return str(e)
+
+    def clock_out(self, employee_id):
+        """Clock out an employee for today."""
+        existing = self.get_today_attendance(employee_id)
+        if not existing:
+            return "No check-in found for today."
+        if existing['time_out']:
+            return "Already checked out today."
+            
+        try:
+            self.exec("""
+                UPDATE attendance
+                SET time_out = CURTIME()
+                WHERE employee_id = %s AND record_date = CURDATE()
+            """, (employee_id,))
+            return True
+        except Exception as e:
+            traceback.print_exc()
+            return str(e)
+            
+    def update_attendance(self, attendance_id, status, notes=""):
+        """HR manually update an attendance status/note."""
+        try:
+            self.exec("""
+                UPDATE attendance
+                SET status = %s, notes = %s
+                WHERE attendance_id = %s
+            """, (status, notes, attendance_id))
+            return True
+        except Exception as e:
+            traceback.print_exc()
+            return str(e)

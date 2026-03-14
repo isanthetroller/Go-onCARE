@@ -116,6 +116,23 @@ class DashboardPage(QWidget):
             btn.clicked.connect(lambda checked, p=pi: self.navigate_to.emit(p))
             act_row.addWidget(btn)
         act_row.addStretch()
+
+        # Attendance Button
+        self._attendance_btn = QPushButton("Clock In")
+        self._attendance_btn.setIcon(get_icon("clock", color=_W))
+        self._attendance_btn.setIconSize(QSize(18, 18))
+        self._attendance_btn.setMinimumHeight(44)
+        self._attendance_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._attendance_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2ECC71; color: white;
+                font-weight: bold; padding: 0 16px; border-radius: 6px;
+            }
+            QPushButton:hover { background-color: #27AE60; }
+        """)
+        self._attendance_btn.clicked.connect(self._on_attendance_toggle)
+        act_row.addWidget(self._attendance_btn)
+
         lay.addLayout(act_row)
 
         leave_card = make_card()
@@ -705,8 +722,60 @@ class DashboardPage(QWidget):
         if self._role in ("Manager", "Admin"):
             self._refresh_recent_activity()
         
-        self._refresh_my_leave()
+        self._refresh_my_leave()        self._refresh_attendance_btn()
 
+    # ── Attendance ─────────────────────────────────────────────────────────
+
+    def _refresh_attendance_btn(self):
+        if hasattr(self, "_attendance_btn"):
+            emp_id = self._get_my_employee_id()
+            if not emp_id:
+                self._attendance_btn.hide()
+                return
+            att = self._backend.get_today_attendance(emp_id)
+            if not att:
+                self._attendance_btn.setText("Clock In")
+                self._attendance_btn.setStyleSheet("""
+                    QPushButton { background-color: #2ECC71; color: white; font-weight: bold; padding: 0 16px; border-radius: 6px; }
+                    QPushButton:hover { background-color: #27AE60; }
+                """)
+                self._attendance_btn.show()
+                self._attendance_btn.setEnabled(True)
+            elif att.get("time_out") is None:
+                self._attendance_btn.setText("Clock Out")
+                self._attendance_btn.setStyleSheet("""
+                    QPushButton { background-color: #E74C3C; color: white; font-weight: bold; padding: 0 16px; border-radius: 6px; }
+                    QPushButton:hover { background-color: #C0392B; }
+                """)
+                self._attendance_btn.show()
+                self._attendance_btn.setEnabled(True)
+            else:
+                self._attendance_btn.setText("Clocked Out")
+                self._attendance_btn.setStyleSheet("""
+                    QPushButton { background-color: #95A5A6; color: white; font-weight: bold; padding: 0 16px; border-radius: 6px; }
+                """)
+                self._attendance_btn.show()
+                self._attendance_btn.setEnabled(False)
+
+    def _on_attendance_toggle(self):
+        emp_id = self._get_my_employee_id()
+        if not emp_id: return
+        att = self._backend.get_today_attendance(emp_id)
+        if not att:
+            # Clock in
+            res = self._backend.clock_in(emp_id)
+            if res is True:
+                QMessageBox.information(self, "Clock IN", "You have successfully clocked in for today!")
+                self._refresh_attendance_btn()
+            else:
+                QMessageBox.warning(self, "Error", f"Failed to clock in: {res}")
+        elif att.get("time_out") is None:
+            res = self._backend.clock_out(emp_id)
+            if res is True:
+                QMessageBox.information(self, "Clock OUT", "You have successfully clocked out.")
+                self._refresh_attendance_btn()
+            else:
+                QMessageBox.warning(self, "Error", f"Failed to clock out: {res}")
     # ── Leave Request (for non-admin/non-HR roles) ────────────────
     def _get_my_employee_id(self):
         if not self._backend or not self._user_email:

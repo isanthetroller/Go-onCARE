@@ -294,6 +294,20 @@ CREATE TABLE paycheck_requests (
     FOREIGN KEY (finance_decided_by) REFERENCES employees(employee_id)
 );
 
+-- Attendance (Employee clock-in/out records)
+CREATE TABLE attendance (
+    attendance_id INT AUTO_INCREMENT PRIMARY KEY,
+    employee_id   INT NOT NULL,
+    record_date   DATE NOT NULL,
+    time_in       TIME DEFAULT NULL,
+    time_out      TIME DEFAULT NULL,
+    status        ENUM('Present', 'Absent', 'Late', 'Half-day') NOT NULL DEFAULT 'Present',
+    notes         TEXT,
+    created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (employee_id) REFERENCES employees(employee_id),
+    UNIQUE KEY uq_attendance (employee_id, record_date)
+);
+
 -- Tax / deduction settings (admin-configurable rates)
 CREATE TABLE tax_settings (
     setting_id  INT AUTO_INCREMENT PRIMARY KEY,

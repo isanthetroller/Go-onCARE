@@ -193,6 +193,22 @@ class DatabaseBase:
                 if not cur.fetchone():
                     cur.execute("ALTER TABLE employees ADD COLUMN address VARCHAR(300) DEFAULT ''")
 
+                # attendance table
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS attendance (
+                        attendance_id INT AUTO_INCREMENT PRIMARY KEY,
+                        employee_id   INT NOT NULL,
+                        record_date   DATE NOT NULL,
+                        time_in       TIME DEFAULT NULL,
+                        time_out      TIME DEFAULT NULL,
+                        status        ENUM('Present', 'Absent', 'Late', 'Half-day') NOT NULL DEFAULT 'Present',
+                        notes         TEXT,
+                        created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (employee_id) REFERENCES employees(employee_id),
+                        UNIQUE KEY uq_attendance (employee_id, record_date)
+                    )
+                """)
+
                 # service_departments junction table (links services to departments)
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS service_departments (

@@ -118,6 +118,10 @@ class HREmployeesPage(QWidget):
         # Leave requests
         self._load_leave_requests()
 
+        # Attendance tracking
+        if hasattr(self, "_attendance_table"):
+            self._load_attendance()
+
         # Paycheck requests
         if hasattr(self, "_pr_table"):
             self._load_paycheck_requests()
@@ -155,8 +159,9 @@ class HREmployeesPage(QWidget):
         tab_row.setSpacing(8)
         tab_row.setContentsMargins(0, 4, 0, 0)
 
-        tab_labels = ["Employees", "Leave Management", "Payroll && Staffing"]
+        tab_labels = ["Employees", "Attendance Logs", "Leave Management", "Payroll & Staffing"]
         self._stack.addWidget(self._build_employees_tab())
+        self._stack.addWidget(self._build_attendance_tab())
         self._stack.addWidget(self._build_leave_tab())
         self._stack.addWidget(self._build_payroll_tab())
         if self._role == "Admin":
@@ -254,6 +259,70 @@ class HREmployeesPage(QWidget):
 
         lay.addStretch()
         return inner
+
+    def _build_attendance_tab(self):
+        inner, lay = self._make_tab_content()
+        card = make_card(min_height=400)
+        c_lay = QVBoxLayout(card)
+        c_lay.setContentsMargins(16, 14, 16, 14); c_lay.setSpacing(10)
+        
+        hdr = QHBoxLayout()
+        title = QLabel("Daily Attendance Logs")
+        title.setObjectName("cardTitle")
+        hdr.addWidget(title)
+        hdr.addStretch()
+        
+        self._att_search = QLineEdit()
+        self._att_search.setPlaceholderText("Search employee...")
+        self._att_search.setMinimumHeight(32)
+        self._att_search.setFixedWidth(200)
+        self._att_search.textChanged.connect(self._filter_attendance)
+        hdr.addWidget(self._att_search)
+        
+        c_lay.addLayout(hdr)
+
+        self._attendance_table = make_read_only_table(
+            ["#", "Employee", "Role", "Date", "In", "Out", "Status", "Notes"],
+            min_h=300, row_h=44)
+        c_lay.addWidget(self._attendance_table)
+        lay.addWidget(card)
+        lay.addStretch()
+        return inner
+
+    def _load_attendance(self):
+        if not self._backend or not hasattr(self, "_attendance_table"):
+            return
+        rows = self._backend.get_all_attendance() or []
+        self._att_all_rows = rows
+        self._filter_attendance(self._att_search.text())
+
+    def _populate_attendance_table(self, rows):
+        self._attendance_table.setRowCount(0)
+        for r, row in enumerate(rows):
+            self._attendance_table.insertRow(r)
+            self._attendance_table.setItem(r, 0, QTableWidgetItem(str(row.get("attendance_id", ""))))
+            self._attendance_table.setItem(r, 1, QTableWidgetItem(row.get("employee_name", "")))
+            self._attendance_table.setItem(r, 2, QTableWidgetItem(row.get("role_name", "")))
+            self._attendance_table.setItem(r, 3, QTableWidgetItem(str(row.get("record_date", ""))))
+            self._attendance_table.setItem(r, 4, QTableWidgetItem(str(row.get("time_in", ""))))
+            self._attendance_table.setItem(r, 5, QTableWidgetItem(str(row.get("time_out", ""))))
+            
+            status = row.get("status", "")
+            item = QTableWidgetItem(status)
+            item.setForeground(Qt.GlobalColor.white)
+            if status == "Present": item.setBackground(QColor("#2ECC71"))
+            elif status == "Absent": item.setBackground(QColor("#E74C3C"))
+            elif status == "Late": item.setBackground(QColor("#F39C12"))
+            else: item.setBackground(QColor("#95A5A6"))
+            self._attendance_table.setItem(r, 6, item)
+            
+            self._attendance_table.setItem(r, 7, QTableWidgetItem(row.get("notes", "")))
+
+    def _filter_attendance(self, text):
+        if not hasattr(self, "_att_all_rows"): return
+        needle = text.strip().lower()
+        rows = [r for r in self._att_all_rows if needle in (r.get("employee_name", "") + " " + r.get("role_name", "")).lower()]
+        self._populate_attendance_table(rows)
 
     def _build_leave_tab(self):
         inner, lay = self._make_tab_content()
