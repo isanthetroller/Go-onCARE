@@ -414,9 +414,15 @@ class MainWindow(QMainWindow):
                 for n in notifs:
                     messages.append(f"• {n.get('message', '')}")
                 self._backend.mark_notifications_read(self._employee_id)
-                QMessageBox.information(
-                    self, "Leave Request Update",
-                    "\n\n".join(messages))
+                msg_box = QMessageBox(self)
+                msg_box.setWindowTitle("System Notification")
+                
+                formatted_messages = "<br><br>".join(messages)
+                msg_box.setText(f"<div style='min-width: 350px; white-space: normal; word-wrap: break-word;'>{formatted_messages}</div>")
+                
+                msg_box.setIcon(QMessageBox.Icon.Information)
+                msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+                msg_box.exec()
         except Exception:
             pass
 
