@@ -83,9 +83,14 @@ class ActivityLogPage(QWidget):
         # ── Table ────────────────────────────────────────────────
         self._table = make_read_only_table(
             ["Timestamp", "User", "Role", "Action", "Type", "Detail"])        
-        # Adjust column sizing so details take the most space
+        # Adjust column sizing without using ResizeToContents which causes massive lag on 500+ rows
         header = self._table.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        self._table.setColumnWidth(0, 160)  # Timestamp
+        self._table.setColumnWidth(1, 200)  # User
+        self._table.setColumnWidth(2, 100)  # Role
+        self._table.setColumnWidth(3, 120)  # Action
+        self._table.setColumnWidth(4, 120)  # Type
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)  # Detail column stretches
         lay.addWidget(self._table)
 
@@ -98,6 +103,9 @@ class ActivityLogPage(QWidget):
     def refresh(self):
         if not self._backend:
             return
+            
+        self._table.setUpdatesEnabled(False)  # Immediately stop UI repaints while generating 500 rows to prevent freezing
+
         user = self._user_filter.text().strip()
         action = self._action_combo.currentText()
         rtype = self._type_combo.currentText()
@@ -135,8 +143,11 @@ class ActivityLogPage(QWidget):
                     # Provide an immediate tooltip so the user can hover over long text without issue
                     item.setToolTip(val)
                 self._table.setItem(r, c, item)
+                
         # Update the last-seen log_id so the timer only refreshes on new entries
         if rows:
             max_id = max(r.get("log_id", 0) for r in rows)
             if max_id > self._last_log_id:
                 self._last_log_id = max_id
+                
+        self._table.setUpdatesEnabled(True)  # Resume UI repaints
