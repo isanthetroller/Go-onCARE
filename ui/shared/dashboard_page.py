@@ -722,7 +722,8 @@ class DashboardPage(QWidget):
         if self._role in ("Manager", "Admin"):
             self._refresh_recent_activity()
         
-        self._refresh_my_leave()        self._refresh_attendance_btn()
+        self._refresh_my_leave()
+        self._refresh_attendance_btn()
 
     # ── Attendance ─────────────────────────────────────────────────────────
 
