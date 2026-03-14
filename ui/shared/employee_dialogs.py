@@ -65,9 +65,9 @@ class EmployeeDialog(QDialog):
         self._left_form.setSpacing(10)
         self._left_form.setContentsMargins(0, 0, 0, 0)
         self._left_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        
+        self._left_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+
         self._left_vbox.addLayout(self._left_form)
-        self._left_vbox.addStretch()
         columns.addLayout(self._left_vbox, 1)
 
         # Vertical divider
@@ -86,13 +86,9 @@ class EmployeeDialog(QDialog):
         self._right_form.setSpacing(10)
         self._right_form.setContentsMargins(0, 0, 0, 0)
         self._right_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        
-        self._right_vbox.addLayout(self._right_form)
-        self._right_vbox.addStretch()
-        columns.addLayout(self._right_vbox, 1)
+        self._right_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
 
-        main_lay.addLayout(columns, 1)
-        main_lay.addSpacing(8)
+        self._right_vbox.addLayout(self._right_form)
 
         self._build_fields(None)
         self._build_buttons(main_lay, data)
@@ -133,6 +129,8 @@ class EmployeeDialog(QDialog):
         )
         self._phone_frame.setStyleSheet(self._phone_normal_ss)
         self._phone_frame.setFixedHeight(44)
+        from PyQt6.QtWidgets import QSizePolicy
+        self._phone_frame.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         phone_lay = QHBoxLayout(self._phone_frame)
         phone_lay.setContentsMargins(0, 0, 0, 0)
         phone_lay.setSpacing(0)
@@ -254,7 +252,7 @@ class EmployeeDialog(QDialog):
             "QGroupBox::title { subcontrol-origin: margin; left: 14px; padding: 0 6px; }"
         )
         # Add schedule to right VBox below the main form layout
-        self._right_vbox.insertWidget(self._right_vbox.count() - 1, self._schedule_group)
+        self._right_vbox.addWidget(self._schedule_group)
 
         sched_main = QVBoxLayout(self._schedule_group)
         sched_main.setSpacing(10)
@@ -287,9 +285,9 @@ class EmployeeDialog(QDialog):
             lbl = QLabel(day); lbl.setMinimumWidth(80)
             lbl.setStyleSheet("font-size: 12px; color: #2C3E50;")
             st = QTimeEdit(); st.setTime(QTime(8, 0)); st.setDisplayFormat("hh:mm AP")
-            st.setObjectName("formCombo"); st.setMinimumHeight(32)
+            st.setObjectName("formCombo"); st.setMinimumHeight(34); st.setMinimumWidth(100)
             en = QTimeEdit(); en.setTime(QTime(17, 0)); en.setDisplayFormat("hh:mm AP")
-            en.setObjectName("formCombo"); en.setMinimumHeight(32)
+            en.setObjectName("formCombo"); en.setMinimumHeight(34); en.setMinimumWidth(100)
             rl.addWidget(lbl)
             rl.addWidget(QLabel("from")); rl.addWidget(st)
             rl.addWidget(QLabel("to")); rl.addWidget(en)
@@ -304,7 +302,9 @@ class EmployeeDialog(QDialog):
         self._schedule_group.setVisible(self.role_combo.currentText() == "Doctor")
         self.role_combo.currentTextChanged.connect(
             lambda txt: self._schedule_group.setVisible(txt == "Doctor"))
-        # Removed setting right.addRow(self._schedule_group) since it is now in the VBox
+        
+        self._left_vbox.addStretch()
+        self._right_vbox.addStretch()
 
     def _build_buttons(self, parent_lay, data):
         btn_row = QHBoxLayout(); btn_row.setSpacing(12)
