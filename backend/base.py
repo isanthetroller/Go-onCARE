@@ -21,8 +21,35 @@ class DatabaseBase:
     # ── Connection ────────────────────────────────────────────────
     def _get_connection(self):
         if self._conn is None or not self._conn.is_connected():
-            self._conn = mysql.connector.connect(**self.DB_CONFIG)
+            try:
+                self._conn = mysql.connector.connect(**self.DB_CONFIG)
+            except Error as e:
+                # 1049 is ER_BAD_DB_ERROR (Unknown database)
+                if e.errno == 1049:
+                    self._create_database_and_tables()
+                    self._conn = mysql.connector.connect(**self.DB_CONFIG)
+                else:
+                    raise
         return self._conn
+        
+    def _create_database_and_tables(self):
+        """Automatically create the database and tables from carecrud.sql if missing."""
+        import os
+        config = self.DB_CONFIG.copy()
+        db_name = config.pop("database", None)
+        conn = mysql.connector.connect(**config)
+        
+        sql_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "database", "carecrud.sql")
+        
+        with open(sql_path, "r", encoding="utf-8") as f:
+            sql_script = f.read()
+
+        cursor = conn.cursor()
+        for result in cursor.execute(sql_script, multi=True):
+            pass
+        conn.commit()
+        cursor.close()
+        conn.close()
 
     def close(self):
         if self._conn and self._conn.is_connected():
