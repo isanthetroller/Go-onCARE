@@ -800,10 +800,15 @@ class HREmployeesPage(QWidget):
             parts = []
             status = req.get("status", "")
             if status == "Approved":
-                disburse_btn = make_table_btn("Disburse")
-                disburse_btn.setObjectName("tblSuccessBtn")
-                disburse_btn.clicked.connect(lambda checked, ri=r: self._on_disburse_paycheck(ri))
-                parts.append(disburse_btn)
+                if self._role == "Admin":
+                    lbl = QLabel("Awaiting HR Disburse")
+                    lbl.setStyleSheet("font-size: 11px; color: #7F8C8D;")
+                    parts.append(lbl)
+                else:
+                    disburse_btn = make_table_btn("Disburse")
+                    disburse_btn.setObjectName("tblSuccessBtn")
+                    disburse_btn.clicked.connect(lambda checked, ri=r: self._on_disburse_paycheck(ri))
+                    parts.append(disburse_btn)
             elif status in ("Rejected", "Disbursed"):
                 note = req.get("finance_note", "") or ""
                 decided = str(req.get("decided_at", "") or "")

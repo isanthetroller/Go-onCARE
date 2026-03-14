@@ -29,11 +29,9 @@ class EmployeeDialog(QDialog):
         self.setWindowTitle(title)
         self._fired = False
 
-        # Size to 70% of screen width, 80% height — no scroll needed
-        from PyQt6.QtWidgets import QApplication
-        screen = QApplication.primaryScreen().availableGeometry()
-        self.resize(int(screen.width() * 0.55), int(screen.height() * 0.78))
-        self.setMinimumWidth(700)
+        # Size appropriately - removed screen ratio calculation as it stretches fields awkwardly on wide monitors
+        self.resize(800, 680)
+        self.setMinimumSize(700, 600)
 
         main_lay = QVBoxLayout(self)
         main_lay.setContentsMargins(28, 20, 28, 18)
@@ -58,11 +56,19 @@ class EmployeeDialog(QDialog):
         columns.setSpacing(28)
 
         # Left column — Personal Information
+        self._left_vbox = QVBoxLayout()
+        self._left_vbox.setContentsMargins(0, 0, 0, 0)
+        self._left_vbox.setSpacing(10)
+        self._left_vbox.addWidget(self._section_label("Personal Information"))
+
         self._left_form = QFormLayout()
         self._left_form.setSpacing(10)
         self._left_form.setContentsMargins(0, 0, 0, 0)
         self._left_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        columns.addLayout(self._left_form, 1)
+        
+        self._left_vbox.addLayout(self._left_form)
+        self._left_vbox.addStretch()
+        columns.addLayout(self._left_vbox, 1)
 
         # Vertical divider
         vdiv = QFrame()
@@ -71,11 +77,19 @@ class EmployeeDialog(QDialog):
         columns.addWidget(vdiv)
 
         # Right column — Employment Details
+        self._right_vbox = QVBoxLayout()
+        self._right_vbox.setContentsMargins(0, 0, 0, 0)
+        self._right_vbox.setSpacing(10)
+        self._right_vbox.addWidget(self._section_label("Employment Details"))
+
         self._right_form = QFormLayout()
         self._right_form.setSpacing(10)
         self._right_form.setContentsMargins(0, 0, 0, 0)
         self._right_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        columns.addLayout(self._right_form, 1)
+        
+        self._right_vbox.addLayout(self._right_form)
+        self._right_vbox.addStretch()
+        columns.addLayout(self._right_vbox, 1)
 
         main_lay.addLayout(columns, 1)
         main_lay.addSpacing(8)
@@ -99,8 +113,6 @@ class EmployeeDialog(QDialog):
         right = self._right_form
 
         # ── Left Column: Personal Information ─────────────────────
-        left.addRow(self._section_label("Personal Information"))
-
         self.name_edit = QLineEdit()
         self.name_edit.setStyleSheet(self._INPUT_STYLE)
         self.name_edit.setPlaceholderText("Full name")
@@ -168,14 +180,23 @@ class EmployeeDialog(QDialog):
         left.addRow("Emergency Contact", self.emergency_edit)
 
         # Notes at bottom of left column
-        left.addRow(self._section_label("Additional"))
+        # Moved out of the QFormLayout into the parent VBoxLayout to avoid layout stretching issues
+        self._left_vbox.addWidget(self._section_label("Additional"))
+        
         self.notes_edit = QTextEdit()
         self.notes_edit.setStyleSheet(self._INPUT_STYLE)
         self.notes_edit.setMaximumHeight(70)
-        left.addRow("Notes", self.notes_edit)
+        
+        notes_form = QFormLayout()
+        notes_form.setSpacing(10)
+        notes_form.setContentsMargins(0, 0, 0, 0)
+        notes_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        notes_form.addRow("Notes", self.notes_edit)
+        
+        # We need to insert this before the stretch element at the end of the vbox
+        self._left_vbox.insertLayout(self._left_vbox.count() - 1, notes_form)
 
         # ── Right Column: Employment Details ──────────────────────
-        right.addRow(self._section_label("Employment Details"))
 
         self.role_combo = QComboBox(); self.role_combo.setObjectName("formCombo")
         self.role_combo.addItems(["Doctor", "Nurse", "Receptionist", "Admin", "HR", "Finance"])
@@ -232,6 +253,9 @@ class EmployeeDialog(QDialog):
             " border-radius: 10px; margin-top: 10px; padding-top: 18px; }"
             "QGroupBox::title { subcontrol-origin: margin; left: 14px; padding: 0 6px; }"
         )
+        # Add schedule to right VBox below the main form layout
+        self._right_vbox.insertWidget(self._right_vbox.count() - 1, self._schedule_group)
+
         sched_main = QVBoxLayout(self._schedule_group)
         sched_main.setSpacing(10)
 
@@ -280,7 +304,7 @@ class EmployeeDialog(QDialog):
         self._schedule_group.setVisible(self.role_combo.currentText() == "Doctor")
         self.role_combo.currentTextChanged.connect(
             lambda txt: self._schedule_group.setVisible(txt == "Doctor"))
-        right.addRow(self._schedule_group)
+        # Removed setting right.addRow(self._schedule_group) since it is now in the VBox
 
     def _build_buttons(self, parent_lay, data):
         btn_row = QHBoxLayout(); btn_row.setSpacing(12)

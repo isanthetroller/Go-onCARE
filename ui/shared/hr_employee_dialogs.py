@@ -38,6 +38,7 @@ class HREmployeeDialog(EmployeeDialog):
         for r in range(right.rowCount()):
             lbl = right.itemAt(r, QFormLayout.ItemRole.LabelRole)
             if lbl and hasattr(lbl, 'widget') and lbl.widget() and lbl.widget().text() == "Salary":
+                lbl.widget().setVisible(False)  # Hide the original "Salary" label
                 right.insertRow(r + 1, "Monthly Salary", self.salary_spin)
                 return
         # Fallback: append

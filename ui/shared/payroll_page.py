@@ -1,4 +1,4 @@
-# Payroll page - Finance approves paycheck requests, HR submits/disburses
+﻿# Payroll page - Finance approves paycheck requests, HR submits/disburses
 
 from calendar import monthrange
 from datetime import date, timedelta
@@ -118,7 +118,11 @@ class PayrollPage(QWidget):
             hosp = float(req.get("hospital_share", 0) or 0)
             net = float(req.get("net_amount", 0) or 0)
             period = f"{req.get('period_from', '')} to {req.get('period_until', '')}"
-            disbursed = str(req.get("disbursed_at", "") or "—")
+            disbursed_raw = req.get("disbursed_at")
+            if disbursed_raw:
+                disbursed = disbursed_raw.strftime("%Y-%m-%d %I:%M %p") if hasattr(disbursed_raw, "strftime") else str(disbursed_raw)
+            else:
+                disbursed = "—"
             status = req.get("status", "")
             values = [period, f"₱{gross:,.2f}", f"₱{sss:,.2f}", f"₱{phil:,.2f}",
                       f"₱{hosp:,.2f}", f"₱{net:,.2f}", status,
@@ -357,11 +361,15 @@ class PayrollPage(QWidget):
                 reject_btn = make_table_btn_danger("Reject")
                 reject_btn.clicked.connect(lambda checked, ri=r: self._on_reject(ri))
                 parts.append(reject_btn)
-            elif self._role in ("HR", "Admin") and status == "Approved":
+            elif self._role == "HR" and status == "Approved":
                 disburse_btn = make_table_btn("Disburse")
                 disburse_btn.setObjectName("tblSuccessBtn")
                 disburse_btn.clicked.connect(lambda checked, ri=r: self._on_disburse(ri))
                 parts.append(disburse_btn)
+            elif self._role == "Admin" and status == "Approved":
+                lbl = QLabel("Awaiting HR")
+                lbl.setStyleSheet("font-size: 11px; color: #7F8C8D;")
+                parts.append(lbl)
             elif self._role in ("HR", "Admin") and status == "Pending":
                 review_btn = make_table_btn("Review")
                 review_btn.clicked.connect(lambda checked, ri=r: self._on_review(ri))
@@ -751,7 +759,11 @@ class PayrollPage(QWidget):
             hosp = float(req.get("hospital_share", 0) or 0)
             net = float(req.get("net_amount", 0) or 0)
             period = f"{req.get('period_from', '')} to {req.get('period_until', '')}"
-            disbursed = str(req.get("disbursed_at", "") or "—")
+            disbursed_raw = req.get("disbursed_at")
+            if disbursed_raw:
+                disbursed = disbursed_raw.strftime("%Y-%m-%d %I:%M %p") if hasattr(disbursed_raw, "strftime") else str(disbursed_raw)
+            else:
+                disbursed = "—"
             status = req.get("status", "")
             values = [period, f"₱{gross:,.2f}", f"₱{sss:,.2f}", f"₱{phil:,.2f}",
                       f"₱{hosp:,.2f}", f"₱{net:,.2f}", status,

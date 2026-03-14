@@ -870,7 +870,8 @@ QLabel#bannerTitle {
     font-weight: bold;
     color: #FFFFFF;
     background: transparent;
-    padding: 2px 0px 6px 0px;
+    padding: 0px;
+    min-height: 36px;
 }
 
 /* Banner date line – more prominent than description */
