@@ -735,15 +735,21 @@ class DashboardPage(QWidget):
                 return
             att = self._backend.get_today_attendance(emp_id)
             if not att:
-                self._attendance_btn.setText("Clock In")
+                self._attendance_btn.setText("Not Logged In")
                 self._attendance_btn.setStyleSheet("""
-                    QPushButton { background-color: #2ECC71; color: white; font-weight: bold; padding: 0 16px; border-radius: 6px; }
-                    QPushButton:hover { background-color: #27AE60; }
+                    QPushButton { background-color: #95A5A6; color: white; font-weight: bold; padding: 0 16px; border-radius: 6px; }
                 """)
                 self._attendance_btn.show()
-                self._attendance_btn.setEnabled(True)
-            elif att.get("time_out") is None:
-                self._attendance_btn.setText("Clock Out")
+                self._attendance_btn.setEnabled(False)
+            elif att.get("time_out") is not None:
+                self._attendance_btn.setText("Logged Out")
+                self._attendance_btn.setStyleSheet("""
+                    QPushButton { background-color: #95A5A6; color: white; font-weight: bold; padding: 0 16px; border-radius: 6px; }
+                """)
+                self._attendance_btn.show()
+                self._attendance_btn.setEnabled(False)
+            elif att.get("break_start") and not att.get("break_end"):
+                self._attendance_btn.setText("End Break")
                 self._attendance_btn.setStyleSheet("""
                     QPushButton { background-color: #E74C3C; color: white; font-weight: bold; padding: 0 16px; border-radius: 6px; }
                     QPushButton:hover { background-color: #C0392B; }
@@ -751,32 +757,40 @@ class DashboardPage(QWidget):
                 self._attendance_btn.show()
                 self._attendance_btn.setEnabled(True)
             else:
-                self._attendance_btn.setText("Clocked Out")
+                self._attendance_btn.setText("Take Break")
                 self._attendance_btn.setStyleSheet("""
-                    QPushButton { background-color: #95A5A6; color: white; font-weight: bold; padding: 0 16px; border-radius: 6px; }
+                    QPushButton { background-color: #F39C12; color: white; font-weight: bold; padding: 0 16px; border-radius: 6px; }
+                    QPushButton:hover { background-color: #D68910; }
                 """)
                 self._attendance_btn.show()
-                self._attendance_btn.setEnabled(False)
+                self._attendance_btn.setEnabled(True)
 
     def _on_attendance_toggle(self):
         emp_id = self._get_my_employee_id()
         if not emp_id: return
         att = self._backend.get_today_attendance(emp_id)
-        if not att:
-            # Clock in
-            res = self._backend.clock_in(emp_id)
+        if not att: return
+        
+        from PyQt6.QtWidgets import QInputDialog
+        if att.get("break_start") and not att.get("break_end"):
+            # End break
+            res = self._backend.end_break(emp_id)
             if res is True:
-                QMessageBox.information(self, "Clock IN", "You have successfully clocked in for today!")
+                QMessageBox.information(self, "Break Ended", "Welcome back! Activity logged.")
                 self._refresh_attendance_btn()
             else:
-                QMessageBox.warning(self, "Error", f"Failed to clock in: {res}")
-        elif att.get("time_out") is None:
-            res = self._backend.clock_out(emp_id)
-            if res is True:
-                QMessageBox.information(self, "Clock OUT", "You have successfully clocked out.")
-                self._refresh_attendance_btn()
-            else:
-                QMessageBox.warning(self, "Error", f"Failed to clock out: {res}")
+                QMessageBox.warning(self, "Error", f"Failed to end break: {res}")
+        else:
+            # Start Break
+            reasons = ["Lunch Break", "Coffee Break", "Rest Break", "Personal Emergency", "Other"]
+            item, ok = QInputDialog.getItem(self, "Take A Break", "Select Break Reason:", reasons, 0, False)
+            if ok and item:
+                res = self._backend.start_break(emp_id, item)
+                if res is True:
+                    QMessageBox.information(self, "Break Started", f"Enjoy your {item.lower()}! Activity logged.")
+                    self._refresh_attendance_btn()
+                else:
+                    QMessageBox.warning(self, "Error", f"Failed to start break: {res}")
     # ── Leave Request (for non-admin/non-HR roles) ────────────────
     def _get_my_employee_id(self):
         if not self._backend or not self._user_email:

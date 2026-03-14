@@ -201,6 +201,9 @@ class DatabaseBase:
                         record_date   DATE NOT NULL,
                         time_in       TIME DEFAULT NULL,
                         time_out      TIME DEFAULT NULL,
+                        break_start   TIME DEFAULT NULL,
+                        break_end     TIME DEFAULT NULL,
+                        break_reason  VARCHAR(150) DEFAULT NULL,
                         status        ENUM('Present', 'Absent', 'Late', 'Half-day') NOT NULL DEFAULT 'Present',
                         notes         TEXT,
                         created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -208,6 +211,16 @@ class DatabaseBase:
                         UNIQUE KEY uq_attendance (employee_id, record_date)
                     )
                 """)
+                
+                # migration for break columns if attendance table already existed
+                for col, typedef in [
+                    ('break_start', 'TIME DEFAULT NULL'),
+                    ('break_end', 'TIME DEFAULT NULL'),
+                    ('break_reason', 'VARCHAR(150) DEFAULT NULL')
+                ]:
+                    cur.execute(f"SHOW COLUMNS FROM attendance LIKE '{col}'")
+                    if not cur.fetchone():
+                        cur.execute(f"ALTER TABLE attendance ADD COLUMN {col} {typedef}")
 
                 # service_departments junction table (links services to departments)
                 cur.execute("""

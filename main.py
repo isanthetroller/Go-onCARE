@@ -54,9 +54,15 @@ class App:
     # ── Slots ──────────────────────────────────────────────────────────
     def _on_login(self, email: str, role: str, full_name: str):
         try:
+            # Auto clock-in employee when they log in to the App
+            emp_id = self._backend.get_employee_id_by_email(email)
+            if emp_id:
+                self._backend.clock_in(emp_id)
+
             self.auth_win.hide()
             set_active_palette(False)
             self._apply_light_palette()
+            self.current_user_email = email
             self.main_win = MainWindow(user_email=email, user_role=role, user_name=full_name)
             self.main_win.logout_requested.connect(self._on_logout)
             self.main_win.showMaximized()
@@ -66,6 +72,13 @@ class App:
             self.auth_win.show()
 
     def _on_logout(self):
+        # Auto clock-out employee when they log out of the App
+        if hasattr(self, 'current_user_email') and self.current_user_email:
+            emp_id = self._backend.get_employee_id_by_email(self.current_user_email)
+            if emp_id:
+                self._backend.clock_out(emp_id)
+            self.current_user_email = None
+
         set_active_palette(False)
         self._apply_light_palette()
         self.auth_win = AuthWindow()
@@ -75,7 +88,15 @@ class App:
             self.main_win.close()
             self.main_win = None
 
+    def _on_app_quit(self):
+        # Ensure they are clocked out if they just close the app window
+        if hasattr(self, 'current_user_email') and self.current_user_email:
+            emp_id = self._backend.get_employee_id_by_email(self.current_user_email)
+            if emp_id:
+                self._backend.clock_out(emp_id)
+
     def run(self) -> int:
+        self.qapp.aboutToQuit.connect(self._on_app_quit)
         ret = self.qapp.exec()
         return ret
 

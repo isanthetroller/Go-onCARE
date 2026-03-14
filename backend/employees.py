@@ -759,7 +759,8 @@ class EmployeeMixin:
             SELECT a.attendance_id, a.employee_id, 
                    CONCAT(e.first_name, ' ', e.last_name) AS employee_name,
                    r.role_name,
-                   a.record_date, a.time_in, a.time_out, 
+                   a.record_date, a.time_in, a.time_out,
+                   a.break_start, a.break_end, a.break_reason,
                    a.status, a.notes
             FROM attendance a
             INNER JOIN employees e ON a.employee_id = e.employee_id
@@ -769,7 +770,7 @@ class EmployeeMixin:
 
     def get_employee_attendance(self, employee_id):
         return self.fetch("""
-            SELECT attendance_id, record_date, time_in, time_out, status, notes
+            SELECT attendance_id, record_date, time_in, time_out, break_start, break_end, break_reason, status, notes
             FROM attendance
             WHERE employee_id = %s
             ORDER BY record_date DESC
@@ -778,7 +779,7 @@ class EmployeeMixin:
     def get_today_attendance(self, employee_id):
         """Check if an employee has an attendance record for today."""
         return self.fetch("""
-            SELECT attendance_id, time_in, time_out, status
+            SELECT attendance_id, time_in, time_out, break_start, break_end, break_reason, status
             FROM attendance
             WHERE employee_id = %s AND record_date = CURDATE()
             LIMIT 1
@@ -795,6 +796,7 @@ class EmployeeMixin:
                 INSERT INTO attendance (employee_id, record_date, time_in, status)
                 VALUES (%s, CURDATE(), CURTIME(), 'Present')
             """, (employee_id,))
+            self.log_activity("Logged In", "Attendance", f"Automated clock-in for employee ID {employee_id}")
             return True
         except Exception as e:
             traceback.print_exc()
@@ -804,6 +806,7 @@ class EmployeeMixin:
         """Clock out an employee for today."""
         existing = self.get_today_attendance(employee_id)
         if not existing:
+            # For automatic clock out on end-of-day or logout, if not clocked in, silently ignore.
             return "No check-in found for today."
         if existing['time_out']:
             return "Already checked out today."
@@ -814,6 +817,49 @@ class EmployeeMixin:
                 SET time_out = CURTIME()
                 WHERE employee_id = %s AND record_date = CURDATE()
             """, (employee_id,))
+            self.log_activity("Logged Out", "Attendance", f"Automated clock-out for employee ID {employee_id}")
+            return True
+        except Exception as e:
+            traceback.print_exc()
+            return str(e)
+            
+    def start_break(self, employee_id, reason):
+        """Log a break start for a clocked-in employee."""
+        existing = self.get_today_attendance(employee_id)
+        if not existing:
+            return "Must be clocked in to take a break."
+        if existing['time_out']:
+            return "Cannot take a break after clocking out."
+        if existing['break_start'] and not existing['break_end']:
+            return "Already on a break."
+            
+        try:
+            self.exec("""
+                UPDATE attendance
+                SET break_start = CURTIME(), break_reason = %s
+                WHERE employee_id = %s AND record_date = CURDATE()
+            """, (reason, employee_id))
+            self.log_activity("Break", "Attendance", f"Started break ({reason}) for employee ID {employee_id}")
+            return True
+        except Exception as e:
+            traceback.print_exc()
+            return str(e)
+            
+    def end_break(self, employee_id):
+        """End an ongoing break."""
+        existing = self.get_today_attendance(employee_id)
+        if not existing or not existing['break_start']:
+            return "Not currently on break."
+        if existing['break_end']:
+            return "Break already ended."
+            
+        try:
+            self.exec("""
+                UPDATE attendance
+                SET break_end = CURTIME()
+                WHERE employee_id = %s AND record_date = CURDATE()
+            """, (employee_id,))
+            self.log_activity("Resumed Work", "Attendance", f"Ended break for employee ID {employee_id}")
             return True
         except Exception as e:
             traceback.print_exc()
