@@ -304,9 +304,15 @@ class EmployeeMixin:
     # ── Leave Request System ──────────────────────────────────────
 
     def get_employee_id_by_email(self, email):
-        """Look up employee_id from email."""
-        row = self.fetch("SELECT employee_id FROM employees WHERE email=%s",
-                         (email,), one=True)
+        """Look up employee_id from email (or matching user's full_name)."""
+        row = self.fetch("""
+            SELECT e.employee_id 
+            FROM employees e 
+            LEFT JOIN users u ON u.email = %s
+            WHERE e.email = %s 
+               OR CONCAT(e.first_name, ' ', e.last_name) = u.full_name
+            LIMIT 1
+        """, (email, email), one=True)
         return row["employee_id"] if row else None
 
     def submit_leave_request(self, employee_id, leave_from, leave_until, reason):
@@ -513,8 +519,8 @@ class EmployeeMixin:
         return self.fetch("""
             SELECT e.employee_id, CONCAT(e.first_name,' ',e.last_name) AS doctor_name,
                    ds.day_of_week,
-                   DATE_FORMAT(ds.start_time, '%%h:%%i %%p') AS start_display,
-                   DATE_FORMAT(ds.end_time, '%%h:%%i %%p') AS end_display
+                   TIME_FORMAT(ds.start_time, '%h:%i %p') AS start_display,
+                   TIME_FORMAT(ds.end_time, '%h:%i %p') AS end_display
             FROM employees e
             INNER JOIN roles r ON e.role_id = r.role_id
             INNER JOIN doctor_schedules ds ON e.employee_id = ds.doctor_id

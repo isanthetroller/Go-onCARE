@@ -66,7 +66,11 @@ class AppointmentMixin:
                    ds.day_of_week,
                    TIME_FORMAT(ds.start_time, '%h:%i %p') AS sched_start,
                    TIME_FORMAT(ds.end_time, '%h:%i %p')   AS sched_end,
-                   IF(ds.schedule_id IS NOT NULL, 'Available', 'Not Available') AS availability,
+                   CASE 
+                       WHEN lr.request_id IS NOT NULL THEN 'On Leave'
+                       WHEN ds.schedule_id IS NOT NULL THEN 'Available'
+                       ELSE 'Not Available'
+                   END AS availability,
                    COALESCE(ac.appt_count, 0) AS appt_count
             FROM employees e
             INNER JOIN roles r ON e.role_id = r.role_id
@@ -74,6 +78,10 @@ class AppointmentMixin:
             LEFT  JOIN doctor_schedules ds
                        ON e.employee_id = ds.doctor_id
                       AND ds.day_of_week = DAYNAME(CURDATE())
+            LEFT  JOIN leave_requests lr
+                       ON e.employee_id = lr.employee_id
+                      AND lr.status = 'Approved'
+                      AND CURDATE() BETWEEN lr.leave_from AND lr.leave_until
             LEFT  JOIN (
                 SELECT doctor_id, COUNT(*) AS appt_count
                 FROM appointments
@@ -81,7 +89,13 @@ class AppointmentMixin:
                 GROUP BY doctor_id
             ) ac ON e.employee_id = ac.doctor_id
             WHERE r.role_name = 'Doctor' AND e.status = 'Active'
-            ORDER BY (ds.schedule_id IS NOT NULL) DESC, e.first_name
+            ORDER BY 
+                CASE 
+                    WHEN lr.request_id IS NOT NULL THEN 0 
+                    WHEN ds.schedule_id IS NOT NULL THEN 1 
+                    ELSE 0 
+                END DESC, 
+                e.first_name
         """)
 
     def get_services_list(self, active_only=True):
