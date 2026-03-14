@@ -222,6 +222,23 @@ class DatabaseBase:
                     if not cur.fetchone():
                         cur.execute(f"ALTER TABLE attendance ADD COLUMN {col} {typedef}")
 
+                # Dedicated breaks table
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS attendance_breaks (
+                        break_id INT AUTO_INCREMENT PRIMARY KEY,
+                        attendance_id INT NOT NULL,
+                        break_start TIME NOT NULL,
+                        break_end TIME DEFAULT NULL,
+                        break_reason VARCHAR(100) DEFAULT NULL,
+                        FOREIGN KEY (attendance_id) REFERENCES attendance(attendance_id) ON DELETE CASCADE
+                    )
+                """)
+
+                # Improve performance of activity logs
+                cur.execute("SHOW INDEX FROM activity_log WHERE Key_name = 'idx_activity_log_created_at'")
+                if not cur.fetchone():
+                    cur.execute("CREATE INDEX idx_activity_log_created_at ON activity_log (created_at)")
+
                 # service_departments junction table (links services to departments)
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS service_departments (
@@ -364,9 +381,9 @@ class DatabaseBase:
         if record_type_filter:
             where.append("record_type = %s"); params.append(record_type_filter)
         if from_date:
-            where.append("DATE(created_at) >= %s"); params.append(from_date)
+            where.append("created_at >= %s"); params.append(f"{from_date} 00:00:00")
         if to_date:
-            where.append("DATE(created_at) <= %s"); params.append(to_date)
+            where.append("created_at <= %s"); params.append(f"{to_date} 23:59:59")
         if include_roles:
             placeholders = ",".join(["%s"] * len(include_roles))
             where.append(f"user_role IN ({placeholders})")

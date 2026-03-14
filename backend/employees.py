@@ -777,20 +777,55 @@ class EmployeeMixin:
         """, (employee_id,))
 
     def get_today_attendance(self, employee_id):
-        """Check if an employee has an attendance record for today."""
-        return self.fetch("""
-            SELECT attendance_id, time_in, time_out, break_start, break_end, break_reason, status
+        """Check if an employee has an attendance record for today and include active break status."""
+        att = self.fetch("""
+            SELECT attendance_id, time_in, time_out, status
             FROM attendance
             WHERE employee_id = %s AND record_date = CURDATE()
             LIMIT 1
         """, (employee_id,), one=True)
+        if not att:
+            return None
+            
+        # Check for any active breaks
+        active_break = self.fetch("""
+            SELECT break_start, break_end, break_reason 
+            FROM attendance_breaks 
+            WHERE attendance_id = %s AND break_end IS NULL
+            ORDER BY break_id DESC LIMIT 1
+        """, (att["attendance_id"],), one=True)
+        
+        if active_break:
+            att["break_start"] = active_break["break_start"]
+            att["break_end"] = active_break["break_end"]
+            att["break_reason"] = active_break["break_reason"]
+        else:
+            att["break_start"] = None
+            att["break_end"] = None
+            att["break_reason"] = None
+            
+        return att
 
     def clock_in(self, employee_id):
-        """Clock in an employee for today."""
+        """Clock in an employee for today. Resumes shift if previously checked out."""
         existing = self.get_today_attendance(employee_id)
         if existing:
-            return "Already checked in today."
-        
+            if existing['time_out'] is None:
+                return "Already checked in today."
+            else:
+                # Resume tracking if they were clocked out (e.g. app crash/accidental close)
+                try:
+                    self.exec("""
+                        UPDATE attendance
+                        SET time_out = NULL
+                        WHERE attendance_id = %s
+                    """, (existing["attendance_id"],))
+                    self.log_activity("Logged In", "Attendance", f"Resumed shift for employee ID {employee_id}")
+                    return True
+                except Exception as e:
+                    traceback.print_exc()
+                    return str(e)
+
         try:
             self.exec("""
                 INSERT INTO attendance (employee_id, record_date, time_in, status)
@@ -810,19 +845,19 @@ class EmployeeMixin:
             return "No check-in found for today."
         if existing['time_out']:
             return "Already checked out today."
-            
+
         try:
             self.exec("""
                 UPDATE attendance
                 SET time_out = CURTIME()
-                WHERE employee_id = %s AND record_date = CURDATE()
-            """, (employee_id,))
+                WHERE attendance_id = %s
+            """, (existing["attendance_id"],))
             self.log_activity("Logged Out", "Attendance", f"Automated clock-out for employee ID {employee_id}")
             return True
         except Exception as e:
             traceback.print_exc()
             return str(e)
-            
+
     def start_break(self, employee_id, reason):
         """Log a break start for a clocked-in employee."""
         existing = self.get_today_attendance(employee_id)
@@ -830,36 +865,34 @@ class EmployeeMixin:
             return "Must be clocked in to take a break."
         if existing['time_out']:
             return "Cannot take a break after clocking out."
-        if existing['break_start'] and not existing['break_end']:
+        if existing.get('break_start') and not existing.get('break_end'):
             return "Already on a break."
-            
+
         try:
             self.exec("""
-                UPDATE attendance
-                SET break_start = CURTIME(), break_reason = %s
-                WHERE employee_id = %s AND record_date = CURDATE()
-            """, (reason, employee_id))
+                INSERT INTO attendance_breaks (attendance_id, break_start, break_reason)
+                VALUES (%s, CURTIME(), %s)
+            """, (existing["attendance_id"], reason))
             self.log_activity("Break", "Attendance", f"Started break ({reason}) for employee ID {employee_id}")
             return True
         except Exception as e:
             traceback.print_exc()
             return str(e)
-            
+
     def end_break(self, employee_id):
         """End an ongoing break."""
         existing = self.get_today_attendance(employee_id)
-        if not existing or not existing['break_start']:
+        if not existing or not existing.get('break_start'):
             return "Not currently on break."
-        if existing['break_end']:
+        if existing.get('break_end'):
             return "Break already ended."
-            
+
         try:
             self.exec("""
-                UPDATE attendance
+                UPDATE attendance_breaks 
                 SET break_end = CURTIME()
-                WHERE employee_id = %s AND record_date = CURDATE()
-            """, (employee_id,))
-            self.log_activity("Resumed Work", "Attendance", f"Ended break for employee ID {employee_id}")
+                WHERE attendance_id = %s AND break_end IS NULL
+            """, (existing["attendance_id"],))
             return True
         except Exception as e:
             traceback.print_exc()
