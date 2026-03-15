@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
     QDialog, QFormLayout, QLineEdit, QTextEdit, QComboBox,
     QDialogButtonBox, QTableWidget, QTableWidgetItem, QHeaderView,
     QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSpinBox,
-    QDoubleSpinBox, QCheckBox, QFrame, QMessageBox,
+    QDoubleSpinBox, QCheckBox, QFrame, QMessageBox, QWidget,
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
@@ -12,62 +12,160 @@ from ui.styles import configure_table, style_dialog_btns
 from ui.validators import PriceValidator, validate_required, validate_price
 
 
+def _svg_icon(filename: str):
+    """Load an SVG icon widget with fallback."""
+    import os
+    path = os.path.join(
+        os.path.dirname(__file__), "..", "styles", filename)
+    try:
+        from PyQt6.QtSvgWidgets import QSvgWidget
+        w = QSvgWidget(os.path.normpath(path))
+        w.setFixedSize(28, 28)
+        w.setStyleSheet("background: transparent;")
+        return w
+    except ImportError:
+        lbl = QLabel("\U0001F4CB")
+        lbl.setFixedSize(28, 28)
+        lbl.setStyleSheet(
+            "font-size: 20px; background: transparent;")
+        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        return lbl
+
+
+def _gradient_header(title: str, subtitle: str,
+                     icon_file: str = "icon-service.svg"):
+    """Build a reusable gradient header bar."""
+    bar = QFrame()
+    bar.setStyleSheet(
+        "QFrame { background: qlineargradient(x1:0,y1:0,x2:1,y2:0,"
+        " stop:0 #388087, stop:1 #6FB3B8); }")
+    bar.setFixedHeight(52)
+    lay = QHBoxLayout(bar)
+    lay.setContentsMargins(24, 0, 24, 0)
+    lay.addWidget(_svg_icon(icon_file))
+    lay.addSpacing(10)
+    t = QLabel(title)
+    t.setStyleSheet(
+        "font-size: 18px; font-weight: bold; color: #FFFFFF;"
+        " background: transparent;")
+    s = QLabel(subtitle)
+    s.setStyleSheet(
+        "font-size: 11px; color: rgba(255,255,255,0.8);"
+        " background: transparent;")
+    col = QVBoxLayout(); col.setSpacing(0)
+    col.addWidget(t); col.addWidget(s)
+    lay.addLayout(col); lay.addStretch()
+    return bar
+
+
+def _footer_buttons(dialog, save_text="Save",
+                    on_save=None, on_cancel=None):
+    """Build a reusable footer button bar that matches V3 style."""
+    sep = QFrame()
+    sep.setFixedHeight(1)
+    sep.setStyleSheet("background: #E8F0F1;")
+
+    bar = QWidget()
+    bar.setObjectName("btnBar")
+    bar.setStyleSheet("QWidget#btnBar { background: #FAFBFB; }")
+    row = QHBoxLayout(bar)
+    row.setContentsMargins(24, 10, 24, 10)
+    row.setSpacing(14)
+    row.addStretch()
+
+    cancel = QPushButton("Cancel")
+    cancel.setMinimumHeight(38); cancel.setMinimumWidth(120)
+    cancel.setCursor(Qt.CursorShape.PointingHandCursor)
+    cancel.setObjectName("dialogCancelBtn")
+    cancel.clicked.connect(on_cancel or dialog.reject)
+
+    save = QPushButton(save_text)
+    save.setMinimumHeight(38); save.setMinimumWidth(120)
+    save.setCursor(Qt.CursorShape.PointingHandCursor)
+    save.setObjectName("dialogSaveBtn")
+    save.clicked.connect(on_save or dialog.accept)
+
+    row.addWidget(cancel); row.addWidget(save)
+    return sep, bar
+
+
+_INPUT_SS = (
+    "QLineEdit, QTextEdit { padding: 8px 14px; border: 2px solid #BADFE7;"
+    " border-radius: 10px; font-size: 13px; background: #FFF;"
+    " color: #2C3E50; }"
+    "QLineEdit:focus, QTextEdit:focus { border: 2px solid #388087; }"
+)
+
+
 # ══════════════════════════════════════════════════════════════════════
-#  Queue Edit Dialog
+#  Queue Edit Dialog — V3
 # ══════════════════════════════════════════════════════════════════════
 class QueueEditDialog(QDialog):
-    """Dialog to edit a patient queue entry (status, purpose, notes)."""
+    """Dialog to edit a patient queue entry."""
 
     def __init__(self, parent=None, data=None):
         super().__init__(parent)
         self.setWindowTitle("Edit Queue Entry")
-        self.setMinimumWidth(560)
-        form = QFormLayout(self)
-        form.setSpacing(14)
-        form.setContentsMargins(28, 28, 28, 28)
+        self.setMinimumWidth(580)
 
-        self.queue_num = QLineEdit(data.get("queue", "") if data else "")
-        self.queue_num.setObjectName("formInput"); self.queue_num.setMinimumHeight(38)
-        self.queue_num.setReadOnly(True)
-        self.patient_edit = QLineEdit(data.get("patient", "") if data else "")
-        self.patient_edit.setObjectName("formInput"); self.patient_edit.setMinimumHeight(38)
-        self.patient_edit.setReadOnly(True)
-        self.time_edit = QLineEdit(data.get("time", "") if data else "")
-        self.time_edit.setObjectName("formInput"); self.time_edit.setMinimumHeight(38)
-        self.time_edit.setReadOnly(True)
-        self.doctor_edit = QLineEdit(data.get("doctor", "") if data else "")
-        self.doctor_edit.setObjectName("formInput"); self.doctor_edit.setMinimumHeight(38)
-        self.doctor_edit.setReadOnly(True)
-        self.purpose_edit = QLineEdit(data.get("purpose", "") if data else "")
-        self.purpose_edit.setObjectName("formInput"); self.purpose_edit.setMinimumHeight(38)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        outer.addWidget(_gradient_header(
+            "Edit Queue Entry",
+            "Update status, purpose or notes"))
+
+        content = QWidget()
+        content.setStyleSheet("background: #FFFFFF;")
+        form = QFormLayout(content)
+        form.setSpacing(12)
+        form.setContentsMargins(28, 20, 28, 16)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        form.setFieldGrowthPolicy(
+            QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+
+        d = data or {}
+        self.queue_num = QLineEdit(d.get("queue", ""))
+        self.queue_num.setStyleSheet(_INPUT_SS)
+        self.queue_num.setMinimumHeight(40); self.queue_num.setReadOnly(True)
+        self.patient_edit = QLineEdit(d.get("patient", ""))
+        self.patient_edit.setStyleSheet(_INPUT_SS)
+        self.patient_edit.setMinimumHeight(40); self.patient_edit.setReadOnly(True)
+        self.time_edit = QLineEdit(d.get("time", ""))
+        self.time_edit.setStyleSheet(_INPUT_SS)
+        self.time_edit.setMinimumHeight(40); self.time_edit.setReadOnly(True)
+        self.doctor_edit = QLineEdit(d.get("doctor", ""))
+        self.doctor_edit.setStyleSheet(_INPUT_SS)
+        self.doctor_edit.setMinimumHeight(40); self.doctor_edit.setReadOnly(True)
+        self.purpose_edit = QLineEdit(d.get("purpose", ""))
+        self.purpose_edit.setStyleSheet(_INPUT_SS)
+        self.purpose_edit.setMinimumHeight(40)
         self.purpose_edit.setMaxLength(200)
         self.status_combo = QComboBox()
         self.status_combo.setObjectName("formCombo")
-        self.status_combo.addItems(["Waiting", "In Progress", "Completed", "Cancelled"])
-        self.status_combo.setMinimumHeight(38)
-        if data and data.get("status"):
-            idx = self.status_combo.findText(data["status"])
-            if idx >= 0:
-                self.status_combo.setCurrentIndex(idx)
+        self.status_combo.addItems(
+            ["Waiting", "In Progress", "Completed", "Cancelled"])
+        self.status_combo.setMinimumHeight(40)
+        if d.get("status"):
+            idx = self.status_combo.findText(d["status"])
+            if idx >= 0: self.status_combo.setCurrentIndex(idx)
         self.notes_edit = QTextEdit()
-        self.notes_edit.setObjectName("formInput")
+        self.notes_edit.setStyleSheet(_INPUT_SS)
         self.notes_edit.setMaximumHeight(70)
-        self.notes_edit.setPlainText(data.get("notes", "") if data else "")
+        self.notes_edit.setPlainText(d.get("notes", ""))
 
-        form.addRow("Queue #", self.queue_num)
-        form.addRow("Patient", self.patient_edit)
-        form.addRow("Time", self.time_edit)
-        form.addRow("Doctor", self.doctor_edit)
-        form.addRow("Purpose", self.purpose_edit)
-        form.addRow("Status", self.status_combo)
-        form.addRow("Notes", self.notes_edit)
-        btns = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
-        )
-        style_dialog_btns(btns)
-        btns.accepted.connect(self.accept)
-        btns.rejected.connect(self.reject)
-        form.addRow(btns)
+        form.addRow("Queue #",  self.queue_num)
+        form.addRow("Patient",  self.patient_edit)
+        form.addRow("Time",     self.time_edit)
+        form.addRow("Doctor",   self.doctor_edit)
+        form.addRow("Purpose",  self.purpose_edit)
+        form.addRow("Status",   self.status_combo)
+        form.addRow("Notes",    self.notes_edit)
+        outer.addWidget(content, 1)
+
+        s, b = _footer_buttons(self)
+        outer.addWidget(s); outer.addWidget(b)
 
     def get_data(self) -> dict:
         return {
@@ -82,29 +180,76 @@ class QueueEditDialog(QDialog):
 
 
 # ══════════════════════════════════════════════════════════════════════
-#  Service Edit Dialog (V2 – category, active toggle)
+#  Service Edit Dialog — V3 (gradient header, polished form)
 # ══════════════════════════════════════════════════════════════════════
 class ServiceEditDialog(QDialog):
     """Dialog to add/edit a service with category and active toggle."""
 
     def __init__(self, parent=None, data=None, categories=None):
         super().__init__(parent)
-        self.setWindowTitle("Edit Service" if data else "Add Service")
-        self.setMinimumWidth(520)
-        form = QFormLayout(self)
+        is_edit = data is not None
+        self.setWindowTitle("Edit Service" if is_edit else "Add Service")
+        self.setMinimumWidth(540)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        outer.addWidget(_gradient_header(
+            "Edit Service" if is_edit else "Add Service",
+            "Update service details" if is_edit
+            else "Create a new service offering",
+            "icon-service.svg"))
+
+        content = QWidget()
+        content.setStyleSheet("background: #FFFFFF;")
+        form = QFormLayout(content)
         form.setSpacing(14)
-        form.setContentsMargins(28, 28, 28, 28)
+        form.setContentsMargins(28, 24, 28, 16)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        form.setFieldGrowthPolicy(
+            QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
 
         self.name_edit = QLineEdit(data.get("name", "") if data else "")
-        self.name_edit.setObjectName("formInput"); self.name_edit.setMinimumHeight(38)
+        self.name_edit.setStyleSheet(_INPUT_SS)
+        self.name_edit.setMinimumHeight(40)
         self.name_edit.setMaxLength(150)
-        self.price_edit = QLineEdit(data.get("price", "") if data else "")
-        self.price_edit.setObjectName("formInput"); self.price_edit.setMinimumHeight(38)
+        self.name_edit.setPlaceholderText("Service name")
+
+        # Price with peso prefix frame
+        self._price_frame = QFrame()
+        self._price_frame.setObjectName("priceFrame")
+        self._price_frame.setStyleSheet(
+            "QFrame#priceFrame { border: 2px solid #BADFE7;"
+            " border-radius: 10px; background: #FFFFFF; }")
+        self._price_frame.setFixedHeight(42)
+        from PyQt6.QtWidgets import QSizePolicy
+        self._price_frame.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        pl = QHBoxLayout(self._price_frame)
+        pl.setContentsMargins(0, 0, 0, 0); pl.setSpacing(0)
+        prefix = QLabel("\u20b1")
+        prefix.setStyleSheet(
+            "QLabel { padding: 0 10px; border: none; font-size: 14px;"
+            " font-weight: bold; background: #F0F7F8;"
+            " border-top-left-radius: 8px;"
+            " border-bottom-left-radius: 8px; color: #2C3E50; }")
+        self.price_edit = QLineEdit(
+            data.get("price", "") if data else "")
+        self.price_edit.setStyleSheet(
+            "QLineEdit { padding: 0 14px; border: none;"
+            " font-size: 13px; background: transparent;"
+            " color: #2C3E50; }")
+        self.price_edit.setPlaceholderText("0.00")
         self.price_edit.setValidator(PriceValidator())
         self.price_edit.setMaxLength(12)
-        self.cat_combo = QComboBox(); self.cat_combo.setObjectName("formCombo")
+        pl.addWidget(prefix)
+        pl.addWidget(self.price_edit, 1)
+
+        self.cat_combo = QComboBox()
+        self.cat_combo.setObjectName("formCombo")
         self.cat_combo.setEditable(True)
-        self.cat_combo.setMinimumHeight(38)
+        self.cat_combo.setMinimumHeight(40)
         cats = categories or ["General"]
         self.cat_combo.addItems(cats)
         if data and data.get("category"):
@@ -113,20 +258,27 @@ class ServiceEditDialog(QDialog):
                 self.cat_combo.setCurrentIndex(idx)
             else:
                 self.cat_combo.setCurrentText(data["category"])
+
         self.active_check = QCheckBox("Active")
-        self.active_check.setChecked(data.get("is_active", True) if data else True)
+        self.active_check.setChecked(
+            data.get("is_active", True) if data else True)
+        self.active_check.setStyleSheet(
+            "QCheckBox { font-size: 13px; spacing: 8px; }"
+            " QCheckBox::indicator { width: 18px; height: 18px;"
+            " border: 2px solid #BADFE7; border-radius: 4px; }"
+            " QCheckBox::indicator:checked { background: #388087;"
+            " border-color: #388087; }")
 
         form.addRow("Service Name", self.name_edit)
-        form.addRow("Price", self.price_edit)
-        form.addRow("Category", self.cat_combo)
-        form.addRow("", self.active_check)
-        btns = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
-        )
-        style_dialog_btns(btns)
-        btns.accepted.connect(self._validate_and_accept)
-        btns.rejected.connect(self.reject)
-        form.addRow(btns)
+        form.addRow("Price",        self._price_frame)
+        form.addRow("Category",     self.cat_combo)
+        form.addRow("",             self.active_check)
+        outer.addWidget(content, 1)
+
+        s, b = _footer_buttons(
+            self, save_text="Save",
+            on_save=self._validate_and_accept)
+        outer.addWidget(s); outer.addWidget(b)
 
     def _validate_and_accept(self):
         err = validate_required(self.name_edit.text(), "Service Name")

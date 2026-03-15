@@ -17,48 +17,19 @@ from ui.shared.employee_dialogs import EmployeeDialog
 #  emergency contact fields)
 # ══════════════════════════════════════════════════════════════════════
 class HREmployeeDialog(EmployeeDialog):
+    """HR variant — inherits all improvements from EmployeeDialog.
+
+    The base class now uses QDoubleSpinBox for salary natively,
+    so this subclass only needs to ensure notes are pre-filled.
+    """
 
     def __init__(self, parent=None, *, title="Add Employee", data=None):
         super().__init__(parent, title=title, data=data)
 
-    # ── Override hooks ────────────────────────────────────────────
-    def _build_fields(self, _unused):
-        super()._build_fields(_unused)
-        # Replace the plain salary_edit with a QDoubleSpinBox on the right column
-        right = self._right_form
-        self.salary_edit.setVisible(False)
-        self.salary_spin = QDoubleSpinBox()
-        self.salary_spin.setObjectName("formCombo")
-        self.salary_spin.setRange(0, 999999.99)
-        self.salary_spin.setDecimals(2)
-        self.salary_spin.setPrefix("₱ ")
-        self.salary_spin.setSingleStep(1000)
-        self.salary_spin.setMinimumHeight(38)
-        # Find and replace salary row in right form
-        for r in range(right.rowCount()):
-            lbl = right.itemAt(r, QFormLayout.ItemRole.LabelRole)
-            if lbl and hasattr(lbl, 'widget') and lbl.widget() and lbl.widget().text() == "Salary":
-                lbl.widget().setVisible(False)  # Hide the original "Salary" label
-                right.insertRow(r + 1, "Monthly Salary", self.salary_spin)
-                return
-        # Fallback: append
-        right.addRow("Monthly Salary", self.salary_spin)
-
     def _prefill(self, data):
         super()._prefill(data)
-        try:
-            self.salary_spin.setValue(float(data.get("salary", 0) or 0))
-        except (ValueError, TypeError):
-            self.salary_spin.setValue(0)
         if data.get("notes"):
             self.notes_edit.setPlainText(data["notes"])
-
-    def get_data(self) -> dict:
-        d = super().get_data()
-        sal = self.salary_spin.value()
-        d["salary"] = sal if sal > 0 else None
-        d["emergency_contact"] = self.emergency_edit.text()
-        return d
 
 
 # ══════════════════════════════════════════════════════════════════════

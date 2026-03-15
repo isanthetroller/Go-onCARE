@@ -938,10 +938,11 @@ QPushButton#dialogSaveBtn {
     color: #FFFFFF;
     border: none;
     border-radius: 8px;
-    padding: 7px 22px;
-    font-size: 12px;
+    padding: 8px 24px;
+    font-size: 13px;
     font-weight: bold;
-    min-height: 32px;
+    min-height: 38px;
+    min-width: 100px;
 }
 
 QPushButton#dialogSaveBtn:hover {
@@ -954,14 +955,15 @@ QPushButton#dialogSaveBtn:pressed {
 
 /* Cancel button inside dialog button-box */
 QPushButton#dialogCancelBtn {
-    background-color: transparent;
+    background-color: #F6F6F2;
     color: #2C3E50;
     border: 2px solid #BADFE7;
     border-radius: 8px;
-    padding: 7px 22px;
-    font-size: 12px;
+    padding: 8px 24px;
+    font-size: 13px;
     font-weight: bold;
-    min-height: 32px;
+    min-height: 38px;
+    min-width: 100px;
 }
 
 QPushButton#dialogCancelBtn:hover {
