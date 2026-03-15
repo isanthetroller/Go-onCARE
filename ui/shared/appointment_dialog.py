@@ -113,10 +113,10 @@ class AppointmentDialog(QDialog):
         from PyQt6.QtWidgets import QApplication
         screen = QApplication.primaryScreen()
         avail = screen.availableGeometry() if screen else None
-        max_h = int(avail.height() * 0.88) if avail else 850
-        max_w = int(avail.width() * 0.65) if avail else 960
-        self.resize(min(960, max_w), min(720, max_h))
-        self.setMinimumSize(820, 500)
+        max_h = int(avail.height() * 0.82) if avail else 680
+        max_w = int(avail.width() * 0.60) if avail else 900
+        self.resize(min(900, max_w), min(600, max_h))
+        self.setMinimumSize(780, 460)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -152,14 +152,18 @@ class AppointmentDialog(QDialog):
         content_w = QWidget()
         content_w.setStyleSheet("background: #FFFFFF;")
         root = QHBoxLayout(content_w)
-        root.setSpacing(20)
-        root.setContentsMargins(28, 20, 28, 12)
+        root.setSpacing(24)
+        root.setContentsMargins(28, 16, 28, 8)
 
-        # ── Left: form ──
+        # ── Left: form (compact — no vertical stretch) ──
         left = QWidget()
         left.setStyleSheet("background: transparent;")
-        form = QFormLayout(left)
-        form.setSpacing(14)
+        left_vbox = QVBoxLayout(left)
+        left_vbox.setContentsMargins(0, 0, 0, 0)
+        left_vbox.setSpacing(0)
+
+        form = QFormLayout()
+        form.setSpacing(10)
         form.setContentsMargins(0, 0, 0, 0)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         form.setFieldGrowthPolicy(
@@ -179,7 +183,7 @@ class AppointmentDialog(QDialog):
 
         self.patient_combo = QComboBox()
         self.patient_combo.setObjectName("formCombo")
-        self.patient_combo.setMinimumHeight(40)
+        self.patient_combo.setMinimumHeight(38)
         self.patient_combo.setEditable(True)
         self.patient_combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self.patient_combo.lineEdit().setPlaceholderText(
@@ -200,7 +204,7 @@ class AppointmentDialog(QDialog):
 
         self.doctor_combo = QComboBox()
         self.doctor_combo.setObjectName("formCombo")
-        self.doctor_combo.setMinimumHeight(40)
+        self.doctor_combo.setMinimumHeight(38)
         preselect_idx = 0
         _my_emp_id = None
         if (self._user_role == "Doctor" and self._user_email
@@ -222,24 +226,24 @@ class AppointmentDialog(QDialog):
         self.time_edit.setTime(QTime(9, 0))
         self.time_edit.setObjectName("formCombo")
         self.time_edit.setDisplayFormat("hh:mm AP")
-        self.time_edit.setMinimumHeight(40)
+        self.time_edit.setMinimumHeight(38)
 
         self._no_slots_label = QLabel()
         self._no_slots_label.setStyleSheet(
             "font-size: 12px; font-weight: bold; color: #D9534F;"
-            " padding: 4px 0;")
+            " padding: 2px 0;")
         self._no_slots_label.setWordWrap(True)
         self._no_slots_label.setVisible(False)
 
         self.purpose_combo = QComboBox()
         self.purpose_combo.setObjectName("formCombo")
-        self.purpose_combo.setMinimumHeight(40)
+        self.purpose_combo.setMinimumHeight(38)
         self.purpose_combo.addItem("Select a service\u2026", None)
         self.purpose_combo.setCurrentIndex(0)
 
         self.notes_edit = QTextEdit()
         self.notes_edit.setStyleSheet(self._INPUT_STYLE)
-        self.notes_edit.setMaximumHeight(70)
+        self.notes_edit.setMaximumHeight(60)
         self.notes_edit.setPlaceholderText("Optional notes\u2026")
 
         self._cancel_reason_label = QLabel("Cancel Reason")
@@ -247,7 +251,7 @@ class AppointmentDialog(QDialog):
         self.cancel_reason.setStyleSheet(self._INPUT_STYLE)
         self.cancel_reason.setPlaceholderText(
             "Reason for cancellation")
-        self.cancel_reason.setMinimumHeight(40)
+        self.cancel_reason.setMinimumHeight(38)
         self.cancel_reason.setMaxLength(300)
         self._cancel_reason_label.setVisible(False)
         self.cancel_reason.setVisible(False)
@@ -256,7 +260,7 @@ class AppointmentDialog(QDialog):
         self.status_combo.setObjectName("formCombo")
         self.status_combo.addItems(
             ["Confirmed", "Cancelled", "Completed"])
-        self.status_combo.setMinimumHeight(40)
+        self.status_combo.setMinimumHeight(38)
         self.status_combo.currentTextChanged.connect(
             self._on_status_changed)
 
@@ -271,6 +275,9 @@ class AppointmentDialog(QDialog):
             form.addRow("Status", self.status_combo)
             form.addRow(self._cancel_reason_label,
                         self.cancel_reason)
+
+        left_vbox.addLayout(form)
+        left_vbox.addStretch()  # keeps form compact at top
 
         root.addWidget(left, 3)
 

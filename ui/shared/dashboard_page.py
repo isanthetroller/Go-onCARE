@@ -867,75 +867,123 @@ class DashboardPage(QWidget):
 
         dlg = QDialog(self)
         dlg.setWindowTitle("Request Leave")
-        dlg.setMinimumWidth(460)
-        d_lay = QVBoxLayout(dlg)
-        d_lay.setSpacing(14); d_lay.setContentsMargins(28, 24, 28, 24)
+        dlg.setMinimumWidth(480)
+        d_outer = QVBoxLayout(dlg)
+        d_outer.setContentsMargins(0, 0, 0, 0)
+        d_outer.setSpacing(0)
 
-        title = QLabel("Submit Leave Request")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #388087;")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        d_lay.addWidget(title)
-        d_lay.addSpacing(8)
+        # Gradient header
+        hdr = QFrame()
+        hdr.setStyleSheet(
+            "QFrame { background: qlineargradient(x1:0,y1:0,x2:1,y2:0,"
+            " stop:0 #388087, stop:1 #6FB3B8); }")
+        hdr.setFixedHeight(52)
+        hdr_lay = QHBoxLayout(hdr)
+        hdr_lay.setContentsMargins(24, 0, 24, 0)
+        h_lbl = QLabel("Request Leave")
+        h_lbl.setStyleSheet(
+            "font-size: 18px; font-weight: bold; color: #FFFFFF;"
+            " background: transparent;")
+        h_sub = QLabel("Submit a leave request to HR")
+        h_sub.setStyleSheet(
+            "font-size: 11px; color: rgba(255,255,255,0.8);"
+            " background: transparent;")
+        h_col = QVBoxLayout(); h_col.setSpacing(0)
+        h_col.addWidget(h_lbl); h_col.addWidget(h_sub)
+        hdr_lay.addLayout(h_col); hdr_lay.addStretch()
+        d_outer.addWidget(hdr)
 
-        form = QFormLayout(); form.setSpacing(12)
+        # Content
+        content = QWidget()
+        content.setStyleSheet("background: #FFFFFF;")
+        form = QFormLayout(content)
+        form.setSpacing(14)
+        form.setContentsMargins(28, 20, 28, 16)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        form.setFieldGrowthPolicy(
+            QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
 
         from_date = QDateEdit()
         from_date.setCalendarPopup(True)
         from_date.setDate(QDate.currentDate().addDays(1))
         from_date.setMinimumDate(QDate.currentDate().addDays(1))
-        from_date.setObjectName("formCombo"); from_date.setMinimumHeight(38)
+        from_date.setObjectName("formCombo")
+        from_date.setMinimumHeight(40)
         from_date.setDisplayFormat("M/d/yyyy")
 
         until_date = QDateEdit()
         until_date.setCalendarPopup(True)
         until_date.setDate(QDate.currentDate().addDays(7))
         until_date.setMinimumDate(QDate.currentDate().addDays(1))
-        until_date.setObjectName("formCombo"); until_date.setMinimumHeight(38)
+        until_date.setObjectName("formCombo")
+        until_date.setMinimumHeight(40)
         until_date.setDisplayFormat("M/d/yyyy")
 
         reason_edit = QTextEdit()
-        reason_edit.setMaximumHeight(100)
-        reason_edit.setPlaceholderText("Reason for leave request…")
+        reason_edit.setMaximumHeight(90)
+        reason_edit.setPlaceholderText(
+            "Reason for leave request\u2026")
         reason_edit.setStyleSheet(
-            "QTextEdit { padding: 10px; border: 2px solid #BADFE7;"
-            " border-radius: 10px; font-size: 13px; background: #FFF; }")
+            "QTextEdit { padding: 8px 14px;"
+            " border: 2px solid #BADFE7;"
+            " border-radius: 10px; font-size: 13px;"
+            " background: #FFF; color: #2C3E50; }"
+            "QTextEdit:focus { border: 2px solid #388087; }")
 
-        form.addRow("Leave From:", from_date)
-        form.addRow("Leave Until:", until_date)
-        form.addRow("Reason:", reason_edit)
-        d_lay.addLayout(form)
+        form.addRow("Leave From", from_date)
+        form.addRow("Leave Until", until_date)
+        form.addRow("Reason", reason_edit)
+        d_outer.addWidget(content, 1)
 
-        btn_row = QHBoxLayout(); btn_row.setSpacing(10)
+        # Footer buttons
+        btn_sep = QFrame()
+        btn_sep.setFixedHeight(1)
+        btn_sep.setStyleSheet("background: #E8F0F1;")
+        d_outer.addWidget(btn_sep)
+
+        btn_bar = QWidget()
+        btn_bar.setObjectName("btnBar")
+        btn_bar.setStyleSheet(
+            "QWidget#btnBar { background: #FAFBFB; }")
+        btn_row = QHBoxLayout(btn_bar)
+        btn_row.setContentsMargins(24, 10, 24, 10)
+        btn_row.setSpacing(14)
         btn_row.addStretch()
-        cancel_btn = QPushButton("Cancel"); cancel_btn.setMinimumHeight(36)
+
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.setMinimumHeight(38)
+        cancel_btn.setMinimumWidth(120)
         cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        cancel_btn.setStyleSheet(
-            "QPushButton { background-color: #FFFFFF; color: #2C3E50; border: 2px solid #BADFE7;"
-            " border-radius: 8px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
-            " QPushButton:hover { background-color: #F0F7F8; border-color: #388087; }")
+        cancel_btn.setObjectName("dialogCancelBtn")
         cancel_btn.clicked.connect(dlg.reject)
-        submit_btn = QPushButton("Submit Request"); submit_btn.setMinimumHeight(36)
+
+        submit_btn = QPushButton("Submit Request")
+        submit_btn.setMinimumHeight(38)
+        submit_btn.setMinimumWidth(140)
         submit_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        submit_btn.setStyleSheet(
-            "QPushButton { background-color: #388087; color: #FFF; border: none;"
-            " border-radius: 8px; padding: 8px 24px; font-size: 13px; font-weight: bold; }"
-            " QPushButton:hover { background-color: #2C6A70; }")
+        submit_btn.setObjectName("dialogSaveBtn")
 
         def _do_submit():
             reason_text = reason_edit.toPlainText().strip()
             if not reason_text:
-                QMessageBox.warning(dlg, "Validation", "Please enter a reason for your leave request.")
+                QMessageBox.warning(
+                    dlg, "Validation",
+                    "Please enter a reason for your leave request.")
                 return
             f_date = from_date.date()
             u_date = until_date.date()
             if u_date < f_date:
-                QMessageBox.warning(dlg, "Validation", "'Leave Until' must be on or after 'Leave From'.")
+                QMessageBox.warning(
+                    dlg, "Validation",
+                    "'Leave Until' must be on or after"
+                    " 'Leave From'.")
                 return
             dlg.accept()
 
         submit_btn.clicked.connect(_do_submit)
-        btn_row.addWidget(cancel_btn); btn_row.addWidget(submit_btn)
-        d_lay.addLayout(btn_row)
+        btn_row.addWidget(cancel_btn)
+        btn_row.addWidget(submit_btn)
+        d_outer.addWidget(btn_bar)
 
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
