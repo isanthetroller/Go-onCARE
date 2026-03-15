@@ -309,6 +309,9 @@ class EmployeeDialog(QDialog):
         
         self._left_vbox.addStretch(1)
         self._right_vbox.addStretch(1)
+
+    def _build_buttons(self, parent_lay, data):
+        btn_row = QHBoxLayout()
         if data:
             fire_btn = QPushButton("Fire")
             fire_btn.setMinimumHeight(32); fire_btn.setCursor(Qt.CursorShape.PointingHandCursor)
