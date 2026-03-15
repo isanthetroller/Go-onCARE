@@ -149,51 +149,72 @@ Read this section first. Every technical word used later in the document is expl
 | **Styling** | QSS (Qt Style Sheets) | CSS-like, controls how every widget looks |
 | **Charts** | Custom QWidget painting | Drawn using QPainter for bar charts and pie charts |
 
-### Project Structure
+### Project Structure (v20 — Clean)
 ```
-main.py                  ← Entry point (starts the app)
-backend/
-  base.py                ← Database connection + helper methods (fetch, exec)
-  __init__.py            ← Combines all backend mixins into one class
-  auth.py                ← Login, password management
-  patients.py            ← Patient CRUD operations
-  appointments.py        ← Appointment CRUD + conflict checking
-  clinical.py            ← Queue management, invoicing, services
-  employees.py           ← Employee CRUD + leave system
-  dashboard.py           ← Dashboard KPI queries
-  analytics.py           ← Charts and report data
-  settings.py            ← Admin settings, discount types, cleanup
-  search.py              ← Global search across tables
-ui/
-  auth_window.py         ← Login screen
-  main_window.py         ← Main app window (sidebar + pages)
-  styles.py              ← Reusable UI helper functions
-  validators.py          ← Input validators (name, phone, price)
-  icons.py               ← SVG icon data for sidebar/buttons
-  styles/
-    auth.qss             ← Login screen stylesheet
-    main.qss             ← Main app stylesheet
-  shared/                ← All page widgets (used by multiple roles)
-    dashboard_page.py
-    patients_page.py
-    patient_dialogs.py
-    appointments_page.py
-    appointment_dialog.py
-    clinical_page.py
-    clinical_dialogs.py
-    employees_page.py
-    employee_dialogs.py
-    hr_employees_page.py
-    hr_employee_dialogs.py
-    payroll_page.py          ← Finance payroll approval page
-    analytics_page.py
-    settings_page.py
-    activity_log_page.py
-    chart_widgets.py
-database/
-  carecrud.sql           ← Full database schema + seed data
-  sample_data.sql        ← Additional sample data
-  drop_all_data.sql      ← Reset script
+CareCRUDV1/
+├── main.py                    ← Entry point (starts the app)
+├── run.bat                    ← Quick launcher (Windows)
+├── requirements.txt           ← Python dependencies
+├── .gitignore                 ← Git ignore rules
+│
+├── backend/                   ← Business logic & database layer
+│   ├── __init__.py            ← Combines all backend mixins into AuthBackend
+│   ├── base.py                ← Database connection + helper methods (fetch, exec, exec_many)
+│   ├── db_config.py           ← MySQL connection credentials
+│   ├── auth.py                ← Login, password management
+│   ├── patients.py            ← Patient CRUD operations
+│   ├── appointments.py        ← Appointment CRUD + conflict checking
+│   ├── clinical.py            ← Queue management, invoicing, services
+│   ├── employees.py           ← Employee CRUD + leave + payroll + attendance
+│   ├── dashboard.py           ← Dashboard KPI queries + financial summary
+│   ├── analytics.py           ← Charts and report data
+│   ├── settings.py            ← Admin settings, discount types, cleanup
+│   └── search.py              ← Global search across tables
+│
+├── ui/                        ← Presentation layer (PyQt6)
+│   ├── __init__.py
+│   ├── auth_window.py         ← Login screen (split-panel with brand panel)
+│   ├── main_window.py         ← Main app window (sidebar + stacked pages)
+│   ├── styles.py              ← Reusable UI helper functions (make_card, make_banner, etc.)
+│   ├── validators.py          ← Input validators (NameValidator, PhoneDigitsValidator, PriceValidator)
+│   ├── icons.py               ← SVG icon data for sidebar/buttons
+│   ├── styles/                ← Stylesheets & SVG assets
+│   │   ├── auth.qss           ← Login screen stylesheet
+│   │   ├── main.qss           ← Main app stylesheet
+│   │   ├── icon-appointment.svg
+│   │   ├── icon-employee.svg
+│   │   ├── icon-patient.svg
+│   │   ├── icon-service.svg
+│   │   ├── calendar.svg
+│   │   ├── arrow-up.svg
+│   │   └── arrow-down.svg
+│   └── shared/                ← All page widgets & dialogs
+│       ├── dashboard_page.py        ← Role-specific dashboard (Admin/Doctor/Nurse/HR/Finance)
+│       ├── patients_page.py         ← Patient list page
+│       ├── patient_dialogs.py       ← Add/Edit Patient (V3), Profile, Merge dialogs
+│       ├── appointments_page.py     ← Appointment list + Doctor Availability tab
+│       ├── appointment_dialog.py    ← New Walk-in / Edit Appointment (V3, side-by-side schedule)
+│       ├── clinical_page.py         ← Queue + Billing + Services tabs
+│       ├── clinical_dialogs.py      ← Vitals, Invoice, Payment, Service, BulkPrice dialogs (V3)
+│       ├── employees_page.py        ← Admin employee management page
+│       ├── employee_dialogs.py      ← Add/Edit Employee (V3) + Profile dialog
+│       ├── hr_employees_page.py     ← HR module (Employees, Leave, Payroll, User Accounts)
+│       ├── hr_employee_dialogs.py   ← HR-specific Employee, Profile, UserAccount dialogs
+│       ├── payroll_page.py          ← Finance payroll approval/rejection page
+│       ├── analytics_page.py        ← Data analytics (Admin hospital-wide / Doctor own stats)
+│       ├── settings_page.py         ← Settings & Admin tools (password, discounts, cleanup)
+│       ├── activity_log_page.py     ← Activity log viewer with filters
+│       └── chart_widgets.py         ← Custom BarChart, PieChart, HBarChart widgets
+│
+├── database/                  ← SQL files
+│   ├── carecrud.sql           ← Full database schema + seed data
+│   ├── sample_data.sql        ← Additional sample data
+│   └── drop_all_data.sql      ← Reset script
+│
+├── SYSTEM_REVIEWER.md         ← This document (defense reviewer guide)
+├── SYSTEM_REVIEWER.pdf        ← PDF export of this document
+├── USER_MANUAL.md             ← End-user manual
+└── USER_MANUAL.pdf            ← PDF export of user manual
 ```
 
 ---
@@ -447,9 +468,11 @@ This is a **walk-in clinic** — all appointments are for today only. When a rec
 
 **How creating a walk-in appointment works:**
 1. User clicks "+ New Appointment"
-2. Dialog opens with: Patient (searchable dropdown), Doctor, Time, Service, Notes
+2. The **V3 UI Dialog** opens with a two-panel layout:
+   - **Left Panel (Form)**: Patient (searchable dropdown), Doctor, Time, Service, Notes
+   - **Right Panel (Schedule)**: A dynamic table showing the selected doctor's weekly schedule and remaining available slots for the day
 3. **Patient search**: Editable combo box with autocomplete — user types a name, suggestions filter as they type
-4. **Doctor availability check**: Only shows doctors who are available today (based on `doctor_schedules.day_of_week`)
+4. **Doctor availability check**: The right panel updates instantly when a doctor is selected, showing their working hours. The system automatically restricts the time picker to fit within their shift and ensures slots haven't passed.
 5. **Conflict detection**: Before saving, checks if the doctor already has an appointment at the same time
    ```sql
    SELECT COUNT(*) FROM appointments 
@@ -965,8 +988,9 @@ Backend.add_patient(data)  ← SQL INSERT
 Table refreshes to show new patient
 ```
 
-### Styling:
-- **QSS files** (`auth.qss`, `main.qss`) define the look — colors, borders, fonts, etc.
+### Styling & V3 UI Structure:
+- **V3 UI Architecture**: All major popup dialogs (Add Patient, New Walk-in Appointment, Request Leave, Invoices, Employee Edit) have been upgraded to the **V3 UI Design**. This features a modern gradient header (`qlineargradient` from Teal to Light Blue), embedded SVG icons, polished input fields (`border-radius: 10px`), and a consistent footer button bar. This makes the desktop app feel polished and premium.
+- **QSS files** (`auth.qss`, `main.qss`) define the global look — colors, borders, fonts, etc.
 - **`styles.py`** has helper functions like `make_card()`, `make_banner()`, `make_table_btn()` that create consistently styled widgets
 - **Color palette**: Teal (#388087), Light blue (#BADFE7), Off-white (#F6F6F2), Dark text (#2C3E50)
 
