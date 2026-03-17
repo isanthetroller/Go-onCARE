@@ -601,38 +601,56 @@ class AppointmentDialog(QDialog):
             self.cancel_reason.clear()
 
     def _on_patient_selected(self, text):
-        idx = self.patient_combo.findText(
-            text, Qt.MatchFlag.MatchExactly)
-        if idx >= 0:
+        match_idx = -1
+        for i in range(self.patient_combo.count()):
+            if self.patient_combo.itemText(i).strip().lower() == text.strip().lower():
+                match_idx = i
+                break
+                
+        if match_idx >= 0:
             self.patient_combo.blockSignals(True)
-            self.patient_combo.setCurrentIndex(idx)
+            self.patient_combo.setCurrentIndex(match_idx)
             self.patient_combo.blockSignals(False)
-            self._selected_patient_text = text
-            self._selected_patient_id = (
-                self.patient_combo.itemData(idx))
+            self._selected_patient_text = self.patient_combo.itemText(match_idx)
+            self._selected_patient_id = self.patient_combo.itemData(match_idx)
 
     def _check_patient_validity(self):
         text = self.patient_combo.currentText().strip()
         if not text:
             return
-        idx = self.patient_combo.findText(text, Qt.MatchFlag.MatchExactly)
-        if idx < 0:
+        
+        # Case-insensitive search
+        match_idx = -1
+        for i in range(self.patient_combo.count()):
+            if self.patient_combo.itemText(i).strip().lower() == text.lower():
+                match_idx = i
+                break
+                
+        if match_idx < 0:
             self.patient_combo.blockSignals(True)
             self.patient_combo.setCurrentText("")
             self.patient_combo.setCurrentIndex(-1)
             self.patient_combo.blockSignals(False)
             self._selected_patient_text = ""
             self._selected_patient_id = None
+        else:
+            self.patient_combo.blockSignals(True)
+            self.patient_combo.setCurrentIndex(match_idx)
+            self.patient_combo.blockSignals(False)
+            self._selected_patient_text = self.patient_combo.itemText(match_idx)
+            self._selected_patient_id = self.patient_combo.itemData(match_idx)
 
     def _get_patient_id(self):
         pid = self.patient_combo.currentData()
         if pid is not None:
             return pid
         text = self.patient_combo.currentText().strip()
-        idx = self.patient_combo.findText(
-            text, Qt.MatchFlag.MatchExactly)
-        if idx >= 0:
-            return self.patient_combo.itemData(idx)
+        
+        # Case-insensitive search
+        for i in range(self.patient_combo.count()):
+            if self.patient_combo.itemText(i).strip().lower() == text.lower():
+                return self.patient_combo.itemData(i)
+                
         if text and text == self._selected_patient_text:
             return self._selected_patient_id
         return None
