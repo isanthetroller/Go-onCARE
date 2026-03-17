@@ -203,6 +203,7 @@ class AppointmentDialog(QDialog):
         completer.setFilterMode(Qt.MatchFlag.MatchContains)
         completer.activated.connect(self._on_patient_selected)
         self.patient_combo.setCompleter(completer)
+        self.patient_combo.lineEdit().editingFinished.connect(self._check_patient_validity)
         self._selected_patient_text = ""
         self._selected_patient_id = None
         if not data:
@@ -609,6 +610,19 @@ class AppointmentDialog(QDialog):
             self._selected_patient_text = text
             self._selected_patient_id = (
                 self.patient_combo.itemData(idx))
+
+    def _check_patient_validity(self):
+        text = self.patient_combo.currentText().strip()
+        if not text:
+            return
+        idx = self.patient_combo.findText(text, Qt.MatchFlag.MatchExactly)
+        if idx < 0:
+            self.patient_combo.blockSignals(True)
+            self.patient_combo.setCurrentText("")
+            self.patient_combo.setCurrentIndex(-1)
+            self.patient_combo.blockSignals(False)
+            self._selected_patient_text = ""
+            self._selected_patient_id = None
 
     def _get_patient_id(self):
         pid = self.patient_combo.currentData()
