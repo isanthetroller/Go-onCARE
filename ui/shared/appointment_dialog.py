@@ -169,17 +169,23 @@ class AppointmentDialog(QDialog):
         form.setFieldGrowthPolicy(
             QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
 
-        # Date label
+        # Date label/picker
+        self.date_edit = QDateEdit()
+        self.date_edit.setObjectName("formCombo")
+        self.date_edit.setMinimumHeight(38)
+        self.date_edit.setCalendarPopup(True)
+        self.date_edit.setDisplayFormat("MMMM d, yyyy")
+        self.date_edit.setMinimumDate(QDate.currentDate())
         if self._is_edit and self._original_date:
-            date_display = _pretty_date(self._original_date)
-            rel = _relative_label(self._original_date)
-            if rel:
-                date_display += f"  ({rel})"
+            try:
+                appt_d = datetime.strptime(self._original_date, "%Y-%m-%d").date()
+                self.date_edit.setDate(QDate(appt_d.year, appt_d.month, appt_d.day))
+            except Exception:
+                self.date_edit.setDate(QDate.currentDate())
         else:
-            date_display = f"{_pretty_date(date.today().isoformat())}  (Today)"
-        self._today_label = QLabel(date_display)
-        self._today_label.setStyleSheet(
-            "font-size: 14px; font-weight: bold; color: #388087;")
+            self.date_edit.setDate(QDate.currentDate())
+        
+        self.date_edit.dateChanged.connect(self._on_date_changed)
 
         self.patient_combo = QComboBox()
         self.patient_combo.setObjectName("formCombo")
@@ -264,7 +270,7 @@ class AppointmentDialog(QDialog):
         self.status_combo.currentTextChanged.connect(
             self._on_status_changed)
 
-        form.addRow("Date",    self._today_label)
+        form.addRow("Date",    self.date_edit)
         form.addRow("Patient", self.patient_combo)
         form.addRow("Doctor",  self.doctor_combo)
         form.addRow("Time",    self.time_edit)
@@ -437,7 +443,11 @@ class AppointmentDialog(QDialog):
                     self.purpose_combo.setCurrentIndex(i); return
         self.purpose_combo.setCurrentIndex(0)
 
-    # ── Doctor change ─────────────────────────────────────────────
+    # ── Date/Doctor change ─────────────────────────────────────────────
+    def _on_date_changed(self, new_date: QDate):
+        if self.doctor_combo.count() > 0:
+            self._on_doctor_changed(self.doctor_combo.currentIndex())
+
     def _on_doctor_changed(self, index):
         doc_id = self.doctor_combo.currentData()
         if not doc_id or not self._backend:
@@ -455,14 +465,9 @@ class AppointmentDialog(QDialog):
         schedules = self._backend.get_doctor_schedules(doc_id) or []
 
         self._sched_table.setRowCount(len(schedules))
-        if self._is_edit and self._original_date:
-            try:
-                appt_d = datetime.strptime(
-                    self._original_date, "%Y-%m-%d").date()
-            except Exception:
-                appt_d = date.today()
-        else:
-            appt_d = date.today()
+        
+        selected_date = self.date_edit.date().toPyDate()
+        appt_d = selected_date
         target_day = _DAY_NAMES[appt_d.weekday()]
         today_start = None
         today_end = None
@@ -539,7 +544,8 @@ class AppointmentDialog(QDialog):
 
             self.time_edit.setEnabled(True)
             self._no_slots_label.setVisible(False)
-            self.time_edit.setTimeRange(effective_start, t_end)
+            self.time_edit.setMinimumTime(effective_start)
+            self.time_edit.setMaximumTime(t_end)
             if self.time_edit.time() < effective_start:
                 self.time_edit.setTime(effective_start)
             elif self.time_edit.time() > t_end:
@@ -571,20 +577,15 @@ class AppointmentDialog(QDialog):
             "You can still create the appointment.")
         self.time_edit.setEnabled(True)
         self._no_slots_label.setVisible(False)
-        self.time_edit.setTimeRange(QTime(0, 0), QTime(23, 59))
+        self.time_edit.clearMinimumTime()
+        self.time_edit.clearMaximumTime()
 
     def _refresh_time_range(self):
         if (not self._sched_start_hhmm
                 or not self._sched_end_hhmm):
             return
-        if self._is_edit and self._original_date:
-            try:
-                appt_d = datetime.strptime(
-                    self._original_date, "%Y-%m-%d").date()
-            except Exception:
-                appt_d = date.today()
-        else:
-            appt_d = date.today()
+        
+        appt_d = self.date_edit.date().toPyDate()
         if appt_d == date.today():
             target_day = _DAY_NAMES[appt_d.weekday()]
             self._apply_time_range(
@@ -670,18 +671,11 @@ class AppointmentDialog(QDialog):
                     "Please provide a cancellation reason.")
                 self.cancel_reason.setFocus(); return
 
-        appt_date = (
-            self._original_date
-            if self._is_edit and self._original_date
-            else date.today().isoformat())
+        appt_date = self.date_edit.date().toString("yyyy-MM-dd")
         selected_time = self.time_edit.time()
-        try:
-            appt_d = datetime.strptime(
-                appt_date, "%Y-%m-%d").date()
-        except Exception:
-            appt_d = date.today()
+        appt_d = self.date_edit.date().toPyDate()
 
-        if appt_d == date.today():
+        if appt_d == date.today() and not self._is_edit:
             now = QTime.currentTime()
             if selected_time <= now:
                 QMessageBox.warning(
@@ -693,6 +687,19 @@ class AppointmentDialog(QDialog):
                     " Please choose a later time.")
                 self.time_edit.setFocus()
                 self._refresh_time_range(); return
+
+        if self._sched_start_hhmm and self._sched_end_hhmm:
+            t_start = QTime.fromString(self._sched_start_hhmm, "HH:mm")
+            t_end = QTime.fromString(self._sched_end_hhmm, "HH:mm")
+            if t_start.isValid() and t_end.isValid():
+                if selected_time < t_start or selected_time > t_end:
+                    QMessageBox.warning(
+                        self, "Outside Working Hours",
+                        f"The selected time ({selected_time.toString('hh:mm AP')}) is outside "
+                        f"the doctor's working hours for this day "
+                        f"({_format_time_display(self._sched_start_hhmm or '')} \u2014 {_format_time_display(self._sched_end_hhmm or '')}).")
+                    self.time_edit.setFocus()
+                    return
 
         if self._backend and doc_id:
             dt = appt_date
@@ -708,16 +715,26 @@ class AppointmentDialog(QDialog):
                     | QMessageBox.StandardButton.No)
                 if reply != QMessageBox.StandardButton.Yes:
                     return
+
+            # Check daily quota
+            if hasattr(self._backend, 'check_daily_quota'):
+                under_quota, count, max_quota = self._backend.check_daily_quota(doc_id, dt, exclude_id)
+                if not under_quota:
+                    reply = QMessageBox.warning(
+                        self, "Daily Quota Reached",
+                        f"This doctor already has {count} appointments on this day, reaching the recommended daily quota of {max_quota}.\nSave anyway?",
+                        QMessageBox.StandardButton.Yes
+                        | QMessageBox.StandardButton.No)
+                    if reply != QMessageBox.StandardButton.Yes:
+                        return
+                        
         self.accept()
 
     def get_data(self) -> dict:
         doc_text = self.doctor_combo.currentText()
         if "  (" in doc_text:
             doc_text = doc_text.split("  (")[0]
-        appt_date = (
-            self._original_date
-            if self._is_edit and self._original_date
-            else date.today().isoformat())
+        appt_date = self.date_edit.date().toString("yyyy-MM-dd")
         return {
             "patient_name": self.patient_combo.currentText(),
             "patient_id":   self._get_patient_id(),

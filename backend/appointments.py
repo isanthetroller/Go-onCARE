@@ -135,6 +135,19 @@ class AppointmentMixin:
         row = self.fetch(q, params, one=True)
         return row["cnt"] > 0 if row else False
 
+    def check_daily_quota(self, doctor_id, date, exclude_id=None):
+        q = """SELECT COUNT(*) AS cnt FROM appointments
+               WHERE doctor_id=%s AND appointment_date=%s
+               AND status NOT IN ('Cancelled')"""
+        params = [doctor_id, date]
+        if exclude_id:
+            q += " AND appointment_id != %s"
+            params.append(exclude_id)
+        row = self.fetch(q, params, one=True)
+        count = row["cnt"] if row else 0
+        max_quota = 20
+        return (count < max_quota, count, max_quota)
+
     def _validate_appointment_date(self, date_str):
         """Return (ok, error_msg). Date must be today or later, within current or next month."""
         from datetime import date, datetime
@@ -158,9 +171,11 @@ class AppointmentMixin:
         return True, ""
 
     def add_appointment(self, data):
-        # Walk-in: always today, auto-confirmed
-        from datetime import date as _date
-        appt_date = _date.today().strftime("%Y-%m-%d")
+        appt_date = data.get("date")
+        if not appt_date:
+            from datetime import date as _date
+            appt_date = _date.today().strftime("%Y-%m-%d")
+
         pid = data.get("patient_id") or self._lookup_patient_id(data["patient_name"])
         if not pid:
             return False
@@ -181,8 +196,12 @@ class AppointmentMixin:
             doctor_name = data.get('doctor', '')
             if not doctor_name and data.get('doctor_id'):
                 doctor_name = self._get_employee_name(data['doctor_id'])
+            
+            from datetime import date as _date
+            is_today = appt_date == _date.today().strftime("%Y-%m-%d")
+            log_type = "Walk-in" if is_today else "Scheduled Appointment"
             self.log_activity("Created", "Appointment",
-                              f"Walk-in #{appt_id} for {data['patient_name']} with Dr. {doctor_name}")
+                              f"{log_type} #{appt_id} for {data['patient_name']} with Dr. {doctor_name}")
             return True
         except Exception:
             try:
