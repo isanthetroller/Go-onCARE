@@ -63,6 +63,7 @@ class ClinicalMixin:
 
     def create_invoice_from_queue(self, queue_id):
         """Auto-create an unpaid invoice when a queue entry is completed."""
+        conn = None
         try:
             conn = self._get_connection()
             with conn.cursor(dictionary=True) as cur:
@@ -124,12 +125,17 @@ class ClinicalMixin:
                 conn.commit()
             self.log_activity("Created", "Invoice", f"Invoice #{inv_id} auto-created from queue #{queue_id}")
             return True
-        except Exception:
+        except Exception as e:
+            import traceback; traceback.print_exc()
             try:
-                conn.rollback()
+                if conn:
+                    conn.rollback()
             except Exception:
                 pass
             return False
+        finally:
+            if conn:
+                conn.close()
 
     def complete_appointment_from_queue(self, queue_id):
         """Mark the appointment linked to a queue entry as Completed."""
@@ -148,6 +154,7 @@ class ClinicalMixin:
         return False
 
     def sync_today_appointments_to_queue(self):
+        conn = None
         try:
             conn = self._get_connection()
             with conn.cursor(dictionary=True) as cur:
@@ -167,14 +174,20 @@ class ClinicalMixin:
             if rows:
                 self.log_activity("Created", "Queue", f"Synced {len(rows)} appointments to queue")
             return len(rows)
-        except Exception:
+        except Exception as e:
+            import traceback; traceback.print_exc()
             try:
-                conn.rollback()
+                if conn:
+                    conn.rollback()
             except Exception:
                 pass
             return 0
+        finally:
+            if conn:
+                conn.close()
 
     def call_next_queue(self, doctor_id=None, role=None):
+        conn = None
         try:
             conn = self._get_connection()
             entry = None
@@ -205,12 +218,17 @@ class ClinicalMixin:
             if entry:
                 self.log_activity("Edited", "Queue", f"Called next: {entry['patient_name']} (queue #{entry['queue_id']})")
             return entry or {}
-        except Exception:
+        except Exception as e:
+            import traceback; traceback.print_exc()
             try:
-                conn.rollback()
+                if conn:
+                    conn.rollback()
             except Exception:
                 pass
             return {}
+        finally:
+            if conn:
+                conn.close()
 
     def get_avg_consultation_minutes(self):
         row = self.fetch("""
@@ -240,6 +258,7 @@ class ClinicalMixin:
         """)
 
     def add_invoice(self, data):
+        conn = None
         try:
             conn = self._get_connection()
             with conn.cursor() as cur:
@@ -290,14 +309,20 @@ class ClinicalMixin:
                 conn.commit()
             self.log_activity("Created", "Invoice", f"Invoice #{inv_id} for {data['patient_name']}")
             return True
-        except Exception:
+        except Exception as e:
+            import traceback; traceback.print_exc()
             try:
-                conn.rollback()
+                if conn:
+                    conn.rollback()
             except Exception:
                 pass
             return False
+        finally:
+            if conn:
+                conn.close()
 
     def add_payment(self, invoice_id, amount, method_id=None):
+        conn = None
         try:
             conn = self._get_connection()
             with conn.cursor() as cur:
@@ -321,12 +346,17 @@ class ClinicalMixin:
                 conn.commit()
             self.log_activity("Edited", "Invoice", f"Payment added to invoice #{invoice_id}")
             return True
-        except Exception:
+        except Exception as e:
+            import traceback; traceback.print_exc()
             try:
-                conn.rollback()
+                if conn:
+                    conn.rollback()
             except Exception:
                 pass
             return False
+        finally:
+            if conn:
+                conn.close()
 
     def void_invoice(self, invoice_id):
         ok = self.exec("UPDATE invoices SET status='Voided' WHERE invoice_id=%s", (invoice_id,))
@@ -368,18 +398,73 @@ class ClinicalMixin:
         return self.fetch("SELECT method_id, method_name FROM payment_methods ORDER BY method_name")
 
     # ── Services ───────────────────────────────────────────────────────
-    def add_service(self, name, price, category="General"):
-        ok = self.exec("INSERT INTO services (service_name, price, category) VALUES (%s,%s,%s)", (name, price, category))
-        if ok:
+    def add_service(self, name, price, category="General", departments=None):
+        """Insert a new service and link departments in a single transaction."""
+        conn = None
+        try:
+            conn = self._get_connection()
+            with conn.cursor(dictionary=True) as cur:
+                cur.execute(
+                    "INSERT INTO services (service_name, price, category) VALUES (%s,%s,%s)",
+                    (name, price, category),
+                )
+                new_id = cur.lastrowid
+                if new_id and departments:
+                    for d_id in departments:
+                        cur.execute(
+                            "INSERT INTO service_departments (service_id, department_id) VALUES (%s, %s)",
+                            (new_id, d_id),
+                        )
+                conn.commit()
             self.log_activity("Created", "Service", name)
-        return ok
+            return True
+        except Exception as e:
+            import traceback; traceback.print_exc()
+            try:
+                if conn:
+                    conn.rollback()
+            except Exception:
+                pass
+            return False
+        finally:
+            if conn:
+                conn.close()
 
-    def update_service_full(self, service_id, name, price, category="General", is_active=1):
-        ok = self.exec("UPDATE services SET service_name=%s, price=%s, category=%s, is_active=%s WHERE service_id=%s",
-                       (name, price, category, is_active, service_id))
-        if ok:
+    def update_service_full(self, service_id, name, price, category="General", is_active=1, departments=None):
+        """Update a service and its department links in a single transaction."""
+        conn = None
+        try:
+            conn = self._get_connection()
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE services SET service_name=%s, price=%s, category=%s, is_active=%s WHERE service_id=%s",
+                    (name, price, category, is_active, service_id),
+                )
+                if departments is not None:
+                    cur.execute("DELETE FROM service_departments WHERE service_id=%s", (service_id,))
+                    for d_id in departments:
+                        cur.execute(
+                            "INSERT INTO service_departments (service_id, department_id) VALUES (%s, %s)",
+                            (service_id, d_id),
+                        )
+                conn.commit()
             self.log_activity("Edited", "Service", name)
-        return ok
+            return True
+        except Exception as e:
+            import traceback; traceback.print_exc()
+            try:
+                if conn:
+                    conn.rollback()
+            except Exception:
+                pass
+            return False
+        finally:
+            if conn:
+                conn.close()
+
+    def get_service_departments(self, service_id):
+        rows = self.fetch("SELECT department_id FROM service_departments WHERE service_id=%s", (service_id,))
+        return [r["department_id"] for r in rows] if rows else []
 
     def bulk_update_prices(self, updates):
         queries = [("UPDATE services SET price=%s WHERE service_id=%s", (price, sid)) for sid, price in updates]

@@ -105,10 +105,10 @@ class AppointmentsPage(QWidget):
         appt_lay = QVBoxLayout(self._appt_page); appt_lay.setContentsMargins(0,0,0,0); appt_lay.setSpacing(16)
 
         # Banner
-        btn_text = "+  New Walk-in" if self._role in ("Admin", "Receptionist") else ""
+        btn_text = "+  New Appointment" if self._role in ("Admin", "Receptionist") else ""
         appt_lay.addWidget(make_banner(
-            "Walk-in Appointments",
-            "View and manage today's walk-in consultations",
+            "Appointments",
+            "View and manage appointments",
             btn_text=btn_text, btn_slot=self._on_new,
         ))
 
@@ -369,7 +369,7 @@ class AppointmentsPage(QWidget):
         else:
             doctors = self._backend.get_doctors() if self._backend else []
         services = self._backend.get_services_list() if self._backend else []
-        dlg = AppointmentDialog(self, title="New Walk-in",
+        dlg = AppointmentDialog(self, title="New Appointment",
                                 patients=self._patients,
                                 doctors=doctors, services=services, backend=self._backend,
                                 user_email=self._user_email, user_role=self._role)

@@ -90,6 +90,7 @@ class PatientMixin:
             "FROM patients WHERE " + " OR ".join(clauses), params) or []
 
     def add_patient(self, data):
+        conn = None
         try:
             conn = self._get_connection()
             with conn.cursor() as cur:
@@ -112,12 +113,17 @@ class PatientMixin:
             return True
         except Exception:
             try:
-                conn.rollback()
+                if conn:
+                    conn.rollback()
             except Exception:
                 pass
             return False
+        finally:
+            if conn:
+                conn.close()
 
     def update_patient(self, patient_id, data):
+        conn = None
         try:
             conn = self._get_connection()
             with conn.cursor() as cur:
@@ -139,10 +145,14 @@ class PatientMixin:
             return True
         except Exception:
             try:
-                conn.rollback()
+                if conn:
+                    conn.rollback()
             except Exception:
                 pass
             return False
+        finally:
+            if conn:
+                conn.close()
 
     def delete_patient(self, patient_id):
         nm = self.fetch("SELECT CONCAT(first_name,' ',last_name) AS n FROM patients WHERE patient_id=%s",

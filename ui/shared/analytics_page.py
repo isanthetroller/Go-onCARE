@@ -299,6 +299,15 @@ class AnalyticsPage(QWidget):
     def _on_refresh(self):
         if not self.isVisible():
             return
+            
+        v_scroll = 0
+        from PyQt6.QtWidgets import QScrollArea
+        scroll_area = self.findChild(QScrollArea)
+        if scroll_area:
+            v_scrollbar = scroll_area.verticalScrollBar()
+            if v_scrollbar:
+                v_scroll = v_scrollbar.value()
+                
         old = self.layout()
         if old:
             while old.count():
@@ -308,7 +317,16 @@ class AnalyticsPage(QWidget):
                     w.deleteLater()
             from PyQt6.QtWidgets import QWidget as _QW
             _QW().setLayout(old)
+            
         self._build()
+        
+        if v_scroll > 0:
+            from PyQt6.QtCore import QTimer
+            def restore():
+                s_area = self.findChild(QScrollArea)
+                if s_area and s_area.verticalScrollBar():
+                    s_area.verticalScrollBar().setValue(v_scroll)
+            QTimer.singleShot(50, restore)
 
     # ── Pie card ──────────────────────────────────────────────────
     @staticmethod
@@ -495,6 +513,7 @@ class AnalyticsPage(QWidget):
         ]
         cols = ["Metric", "Value"]
         tbl = make_read_only_table(cols)
+        tbl.setRowCount(len(summary))
         for r, (metric, value) in enumerate(summary):
             tbl.setItem(r, 0, QTableWidgetItem(metric))
             vi = QTableWidgetItem(value); vi.setForeground(QColor("#2C3E50"))

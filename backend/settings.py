@@ -13,6 +13,7 @@ class SettingsMixin:
             "paycheck_requests", "tax_settings",
         ]
         results = []
+        conn = None
         try:
             conn = self._get_connection()
             with conn.cursor() as cur:
@@ -24,6 +25,9 @@ class SettingsMixin:
                         results.append((t, 0))
         except Exception:
             pass
+        finally:
+            if conn:
+                conn.close()
         return results
 
     def _cleanup_appointments(self, status, before_date=None):
@@ -33,6 +37,7 @@ class SettingsMixin:
         if before_date:
             cond += " AND a.appointment_date<%s"
             params = (before_date,)
+        conn = None
         try:
             conn = self._get_connection()
             with conn.cursor() as cur:
@@ -50,10 +55,14 @@ class SettingsMixin:
             return removed
         except Exception:
             try:
-                conn.rollback()
+                if conn:
+                    conn.rollback()
             except Exception:
                 pass
             return 0
+        finally:
+            if conn:
+                conn.close()
 
     def cleanup_completed_appointments(self, before_date):
         return self._cleanup_appointments("Completed", before_date)
@@ -62,6 +71,7 @@ class SettingsMixin:
         return self._cleanup_appointments("Cancelled")
 
     def cleanup_inactive_patients(self):
+        conn = None
         try:
             conn = self._get_connection()
             with conn.cursor() as cur:
@@ -80,15 +90,20 @@ class SettingsMixin:
             return removed
         except Exception:
             try:
-                conn.rollback()
+                if conn:
+                    conn.rollback()
             except Exception:
                 pass
             return 0
+        finally:
+            if conn:
+                conn.close()
 
     def truncate_table(self, table_name):
         allowed = {"queue_entries", "invoice_items", "invoices", "appointments", "patient_conditions", "activity_log"}
         if table_name not in allowed:
             return False
+        conn = None
         try:
             conn = self._get_connection()
             with conn.cursor() as cur:
@@ -100,6 +115,9 @@ class SettingsMixin:
             return True
         except Exception:
             return False
+        finally:
+            if conn:
+                conn.close()
 
     # ── Standard Conditions ────────────────────────────────────────────
     def get_standard_conditions(self):

@@ -113,10 +113,19 @@ class AppointmentMixin:
         return self.fetch("""
             SELECT s.service_id, s.service_name, s.price, s.category
             FROM services s
-            INNER JOIN service_departments sd ON s.service_id = sd.service_id
             WHERE s.is_active = 1
-              AND sd.department_id = (
-                  SELECT e.department_id FROM employees e WHERE e.employee_id = %s
+              AND (
+                  EXISTS (
+                      SELECT 1 FROM service_departments sd
+                      WHERE sd.service_id = s.service_id
+                        AND sd.department_id = (
+                            SELECT e.department_id FROM employees e WHERE e.employee_id = %s
+                        )
+                  )
+                  OR NOT EXISTS (
+                      SELECT 1 FROM service_departments sd2
+                      WHERE sd2.service_id = s.service_id
+                  )
               )
             ORDER BY s.service_name
         """, (doctor_id,))
@@ -179,6 +188,7 @@ class AppointmentMixin:
         pid = data.get("patient_id") or self._lookup_patient_id(data["patient_name"])
         if not pid:
             return False
+        conn = None
         try:
             conn = self._get_connection()
             with conn.cursor() as cur:
@@ -196,7 +206,7 @@ class AppointmentMixin:
             doctor_name = data.get('doctor', '')
             if not doctor_name and data.get('doctor_id'):
                 doctor_name = self._get_employee_name(data['doctor_id'])
-            
+
             from datetime import date as _date
             is_today = appt_date == _date.today().strftime("%Y-%m-%d")
             log_type = "Walk-in" if is_today else "Scheduled Appointment"
@@ -205,10 +215,14 @@ class AppointmentMixin:
             return True
         except Exception:
             try:
-                conn.rollback()
+                if conn:
+                    conn.rollback()
             except Exception:
                 pass
             return False
+        finally:
+            if conn:
+                conn.close()
 
     def update_appointment(self, appointment_id, data):
         # Validate date range only if date changed from original

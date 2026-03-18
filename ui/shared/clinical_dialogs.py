@@ -185,7 +185,7 @@ class QueueEditDialog(QDialog):
 class ServiceEditDialog(QDialog):
     """Dialog to add/edit a service with category and active toggle."""
 
-    def __init__(self, parent=None, data=None, categories=None):
+    def __init__(self, parent=None, data=None, categories=None, departments=None, selected_departments=None):
         super().__init__(parent)
         is_edit = data is not None
         self.setWindowTitle("Edit Service" if is_edit else "Add Service")
@@ -259,6 +259,38 @@ class ServiceEditDialog(QDialog):
             else:
                 self.cat_combo.setCurrentText(data["category"])
 
+        self.dept_container = QFrame()
+        self.dept_container.setObjectName("deptListFrame")
+        self.dept_container.setStyleSheet(
+            "QFrame#deptListFrame { border: 2px solid #BADFE7; border-radius: 8px; background: #FAFAFA; }"
+        )
+        self.dept_container.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.MinimumExpanding)
+        
+        from PyQt6.QtWidgets import QGridLayout
+        dept_layout = QGridLayout(self.dept_container)
+        dept_layout.setContentsMargins(12, 12, 12, 12)
+        dept_layout.setSpacing(10)
+
+        self.departments = departments or []
+        self._dept_checkboxes = []
+        selected_deps = set(selected_departments or [])
+        
+        # Calculate columns based on width or just use a fixed 2 columns for a neat grid
+        cols = 2 
+        for i, dept in enumerate(self.departments):
+            cb = QCheckBox(dept["department_name"])
+            cb.setProperty("dept_id", dept["department_id"])
+            if dept["department_id"] in selected_deps:
+                cb.setChecked(True)
+            cb.setStyleSheet(
+                "QCheckBox { font-size: 13px; color: #2C3E50; padding: 4px; }"
+                "QCheckBox::indicator { width: 18px; height: 18px; border: 2px solid #BADFE7; border-radius: 4px; }"
+                "QCheckBox::indicator:checked { background: #388087; border-color: #388087; }"
+            )
+            self._dept_checkboxes.append(cb)
+            dept_layout.addWidget(cb, i // cols, i % cols)
+
         self.active_check = QCheckBox("Active")
         self.active_check.setChecked(
             data.get("is_active", True) if data else True)
@@ -272,6 +304,8 @@ class ServiceEditDialog(QDialog):
         form.addRow("Service Name", self.name_edit)
         form.addRow("Price",        self._price_frame)
         form.addRow("Category",     self.cat_combo)
+        if self.departments:
+            form.addRow("Departments",  self.dept_container)
         form.addRow("",             self.active_check)
         outer.addWidget(content, 1)
 
@@ -290,11 +324,20 @@ class ServiceEditDialog(QDialog):
         self.accept()
 
     def get_data(self) -> dict:
+        selected_deps = []
+        if hasattr(self, '_dept_checkboxes'):
+            for cb in self._dept_checkboxes:
+                if cb.isChecked():
+                    dept_id = cb.property("dept_id")
+                    if dept_id is not None:
+                        selected_deps.append(dept_id)
+
         return {
             "name":      self.name_edit.text(),
             "price":     self.price_edit.text(),
             "category":  self.cat_combo.currentText(),
             "is_active": self.active_check.isChecked(),
+            "departments": selected_deps
         }
 
 

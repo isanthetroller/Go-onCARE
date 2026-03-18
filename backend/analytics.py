@@ -184,6 +184,7 @@ class AnalyticsMixin:
     def get_summary_stats(self, from_date=None, to_date=None):
         defaults = {"period_revenue": 0, "total_appts": 0, "completed": 0,
                     "cancelled": 0, "total_patients": 0, "today_appts": 0, "avg_per_day": 0}
+        conn = None
         try:
             conn = self._get_connection()
             with conn.cursor(dictionary=True) as cur:
@@ -214,9 +215,13 @@ class AnalyticsMixin:
             }
         except Exception:
             return defaults
+        finally:
+            if conn:
+                conn.close()
 
     def get_period_comparison(self, doctor_email=None):
         defaults = {"revenue_delta": 0, "appts_delta": 0, "patients_delta": 0, "completed_delta": 0}
+        conn = None
         try:
             conn = self._get_connection()
             with conn.cursor(dictionary=True) as cur:
@@ -254,8 +259,12 @@ class AnalyticsMixin:
             }
         except Exception:
             return defaults
+        finally:
+            if conn:
+                conn.close()
 
     def get_employee_attendance_stats(self):
+        conn = None
         try:
             conn = self._get_connection()
             with conn.cursor(dictionary=True) as cur:
@@ -264,7 +273,7 @@ class AnalyticsMixin:
                 cur.execute("SELECT COUNT(DISTINCT employee_id) as present FROM attendance WHERE DATE(clock_in_time) = CURDATE()")
                 present = cur.fetchone()["present"] or 0
                 absent = max(0, total_active - present)
-                
+
                 cur.execute("""
                     SELECT d.department_name, COUNT(DISTINCT a.employee_id) as present_count
                     FROM attendance a
@@ -277,3 +286,6 @@ class AnalyticsMixin:
             return {"total_active": total_active, "present": present, "absent": absent, "dept_attendance": dept_attendance}
         except Exception:
             return {"total_active": 0, "present": 0, "absent": 0, "dept_attendance": []}
+        finally:
+            if conn:
+                conn.close()

@@ -88,7 +88,7 @@ class ClinicalPage(QWidget):
             tab_labels.append("Billing / POS")
             self._stack.addWidget(self._build_billing_tab())
         if self._role == "Admin":
-            tab_labels.append("Services & Pricing")
+            tab_labels.append("Services && Pricing")
             self._stack.addWidget(self._build_services_tab())
 
         for i, label in enumerate(tab_labels):
@@ -1052,67 +1052,86 @@ class ClinicalPage(QWidget):
             self._svc_table.setRowHidden(r, not (text_match and cat_match))
 
     def _on_add_service(self):
-        cats = self._backend.get_service_categories() if self._backend else []
-        if not cats:
-            cats = ["General"]
-        dlg = ServiceEditDialog(self, categories=cats)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            d = dlg.get_data()
-            if not d["name"].strip():
-                QMessageBox.warning(self, "Validation", "Service name is required.")
-                return
-            try:
-                price = float(d["price"].replace("₱", "").replace(",", ""))
-            except (ValueError, AttributeError):
-                price = 0
-            if self._backend:
-                ok = self._backend.add_service(d["name"], price, d["category"])
-                if not ok:
-                    QMessageBox.warning(self, "Error", "Failed to add service.")
+        self._refresh_timer.stop()
+        try:
+            cats = self._backend.get_service_categories() if self._backend else []
+            if not cats:
+                cats = ["General"]
+            departments = self._backend.get_all_departments() if self._backend else []
+            dlg = ServiceEditDialog(self, categories=cats, departments=departments)
+            if dlg.exec() == QDialog.DialogCode.Accepted:
+                d = dlg.get_data()
+                if not d["name"].strip():
+                    QMessageBox.warning(self, "Validation", "Service name is required.")
                     return
-            self._load_services()
-            QMessageBox.information(self, "Success", f"Service '{d['name']}' added.")
+                try:
+                    price = float(d["price"].replace("₱", "").replace(",", ""))
+                except (ValueError, AttributeError):
+                    price = 0
+                if self._backend:
+                    ok = self._backend.add_service(d["name"], price, d["category"], departments=d.get("departments", []))
+                    if not ok:
+                        QMessageBox.warning(self, "Error", "Failed to add service.")
+                        return
+                self._load_services()
+                QMessageBox.information(self, "Success", f"Service '{d['name']}' added.")
+        finally:
+            self._refresh_timer.start(10_000)
 
     def _on_edit_service(self, row):
-        data = {
-            "name":      self._svc_table.item(row, 0).text() if self._svc_table.item(row, 0) else "",
-            "category":  self._svc_table.item(row, 1).text() if self._svc_table.item(row, 1) else "General",
-            "price":     (self._svc_table.item(row, 2).text().replace("₱", "").replace(",", "")
-                          if self._svc_table.item(row, 2) else ""),
-            "is_active": (self._svc_table.item(row, 4).text() == "Yes") if self._svc_table.item(row, 4) else True,
-        }
-        cats = self._backend.get_service_categories() if self._backend else ["General"]
-        dlg = ServiceEditDialog(self, data=data, categories=cats)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            d = dlg.get_data()
-            if not d["name"].strip():
-                QMessageBox.warning(self, "Validation", "Service name is required.")
-                return
-            try:
-                price = float(d["price"].replace("₱", "").replace(",", ""))
-            except (ValueError, AttributeError):
-                price = 0
-            if self._backend and row < len(self._service_ids):
-                ok = self._backend.update_service_full(
-                    self._service_ids[row], d["name"], price,
-                    d["category"], 1 if d["is_active"] else 0,
-                )
-                if not ok:
-                    QMessageBox.warning(self, "Error", "Failed to update service.")
+        self._refresh_timer.stop()
+        try:
+            data = {
+                "name":      self._svc_table.item(row, 0).text() if self._svc_table.item(row, 0) else "",
+                "category":  self._svc_table.item(row, 1).text() if self._svc_table.item(row, 1) else "General",
+                "price":     (self._svc_table.item(row, 2).text().replace("₱", "").replace(",", "")
+                              if self._svc_table.item(row, 2) else ""),
+                "is_active": (self._svc_table.item(row, 4).text() == "Yes") if self._svc_table.item(row, 4) else True,
+            }
+            cats = self._backend.get_service_categories() if self._backend else ["General"]
+            departments = self._backend.get_all_departments() if self._backend else []
+            service_id = self._service_ids[row] if row < len(self._service_ids) else None
+            selected_deps = self._backend.get_service_departments(service_id) if (self._backend and service_id) else []
+            
+            dlg = ServiceEditDialog(self, data=data, categories=cats, departments=departments, selected_departments=selected_deps)
+            if dlg.exec() == QDialog.DialogCode.Accepted:
+                d = dlg.get_data()
+                if not d["name"].strip():
+                    QMessageBox.warning(self, "Validation", "Service name is required.")
                     return
-            self._load_services()
-            QMessageBox.information(self, "Success", f"Service '{d['name']}' updated.")
+                try:
+                    price = float(d["price"].replace("₱", "").replace(",", ""))
+                except (ValueError, AttributeError):
+                    price = 0
+                if self._backend and row < len(self._service_ids):
+                    ok = self._backend.update_service_full(
+                        self._service_ids[row], d["name"], price,
+                        d["category"], 1 if d["is_active"] else 0,
+                        departments=d.get("departments", [])
+                    )
+                    if not ok:
+                        QMessageBox.warning(self, "Error", "Failed to update service.")
+                        return
+                self._load_services()
+                QMessageBox.information(self, "Success", f"Service '{d['name']}' updated.")
+        finally:
+            self._refresh_timer.start(10_000)
 
     def _on_bulk_price(self):
         if not self._backend:
             return
-        services = self._backend.get_all_services() or []
-        dlg = BulkPriceDialog(self, services=services)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            updates = dlg.get_updates()
-            if updates:
-                self._backend.bulk_update_prices(updates)
-                self._load_services()
-                QMessageBox.information(self, "Done", f"{len(updates)} price(s) updated.")
-            else:
-                QMessageBox.information(self, "No Changes", "No prices were modified.")
+        self._refresh_timer.stop()
+        try:
+            services = self._backend.get_all_services() or []
+            dlg = BulkPriceDialog(self, services=services)
+            if dlg.exec() == QDialog.DialogCode.Accepted:
+                updates = dlg.get_updates()
+                if updates:
+                    self._backend.bulk_update_prices(updates)
+                    self._load_services()
+                    QMessageBox.information(self, "Done", f"{len(updates)} price(s) updated.")
+                else:
+                    QMessageBox.information(self, "No Changes", "No prices were modified.")
+        finally:
+            self._refresh_timer.start(10_000)
+
