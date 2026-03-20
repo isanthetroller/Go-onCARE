@@ -869,20 +869,12 @@ class _PaycheckRequestDialog(QDialog):
         form.addRow("Amount", self._amount)
 
         # Period
-        from ui.shared.modern_calendar import apply_modern_calendar
-        self._from_date = QDateEdit()
-        apply_modern_calendar(self._from_date)
-        self._from_date.setDate(QDate.currentDate().addMonths(-1))
-        self._from_date.setObjectName("formCombo")
-        self._from_date.setMinimumHeight(40)
+        from ui.shared.modern_calendar import ModernDateInput
+        self._from_date = ModernDateInput(QDate.currentDate().addMonths(-1))
         self._from_date.setDisplayFormat("M/d/yyyy")
         form.addRow("Period From", self._from_date)
 
-        self._until_date = QDateEdit()
-        apply_modern_calendar(self._until_date)
-        self._until_date.setDate(QDate.currentDate())
-        self._until_date.setObjectName("formCombo")
-        self._until_date.setMinimumHeight(40)
+        self._until_date = ModernDateInput(QDate.currentDate())
         self._until_date.setDisplayFormat("M/d/yyyy")
         form.addRow("Period Until", self._until_date)
 
@@ -996,21 +988,13 @@ class _PartialPaycheckDialog(QDialog):
         form.addRow("Base Salary", self._salary_label)
 
         # Period
-        from ui.shared.modern_calendar import apply_modern_calendar
-        self._from_date = QDateEdit()
-        apply_modern_calendar(self._from_date)
-        self._from_date.setDate(QDate.currentDate().addMonths(-1))
-        self._from_date.setObjectName("formCombo")
-        self._from_date.setMinimumHeight(40)
+        from ui.shared.modern_calendar import ModernDateInput
+        self._from_date = ModernDateInput(QDate.currentDate().addMonths(-1))
         self._from_date.setDisplayFormat("M/d/yyyy")
         self._from_date.dateChanged.connect(self._recalc)
         form.addRow("Period From", self._from_date)
 
-        self._until_date = QDateEdit()
-        apply_modern_calendar(self._until_date)
-        self._until_date.setDate(QDate.currentDate())
-        self._until_date.setObjectName("formCombo")
-        self._until_date.setMinimumHeight(40)
+        self._until_date = ModernDateInput(QDate.currentDate())
         self._until_date.setDisplayFormat("M/d/yyyy")
         self._until_date.dateChanged.connect(self._recalc)
         form.addRow("Period Until", self._until_date)

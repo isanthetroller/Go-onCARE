@@ -1,0 +1,127 @@
+{
+    "Tables": [
+        {
+            "Tables_in_carecrud_db": "activity_log"
+        },
+        {
+            "Tables_in_carecrud_db": "appointments"
+        },
+        {
+            "Tables_in_carecrud_db": "attendance"
+        },
+        {
+            "Tables_in_carecrud_db": "attendance_breaks"
+        },
+        {
+            "Tables_in_carecrud_db": "departments"
+        },
+        {
+            "Tables_in_carecrud_db": "discount_types"
+        },
+        {
+            "Tables_in_carecrud_db": "doctor_schedules"
+        },
+        {
+            "Tables_in_carecrud_db": "employees"
+        },
+        {
+            "Tables_in_carecrud_db": "invoice_items"
+        },
+        {
+            "Tables_in_carecrud_db": "invoices"
+        },
+        {
+            "Tables_in_carecrud_db": "leave_requests"
+        },
+        {
+            "Tables_in_carecrud_db": "notifications"
+        },
+        {
+            "Tables_in_carecrud_db": "patient_conditions"
+        },
+        {
+            "Tables_in_carecrud_db": "patients"
+        },
+        {
+            "Tables_in_carecrud_db": "paycheck_requests"
+        },
+        {
+            "Tables_in_carecrud_db": "payment_methods"
+        },
+        {
+            "Tables_in_carecrud_db": "queue_entries"
+        },
+        {
+            "Tables_in_carecrud_db": "roles"
+        },
+        {
+            "Tables_in_carecrud_db": "service_departments"
+        },
+        {
+            "Tables_in_carecrud_db": "services"
+        },
+        {
+            "Tables_in_carecrud_db": "standard_conditions"
+        },
+        {
+            "Tables_in_carecrud_db": "tax_settings"
+        },
+        {
+            "Tables_in_carecrud_db": "user_preferences"
+        },
+        {
+            "Tables_in_carecrud_db": "users"
+        },
+        {
+            "Tables_in_carecrud_db": "vw_appointments"
+        },
+        {
+            "Tables_in_carecrud_db": "vw_doctor_performance"
+        },
+        {
+            "Tables_in_carecrud_db": "vw_employees"
+        },
+        {
+            "Tables_in_carecrud_db": "vw_invoices"
+        },
+        {
+            "Tables_in_carecrud_db": "vw_monthly_revenue"
+        },
+        {
+            "Tables_in_carecrud_db": "vw_patients"
+        },
+        {
+            "Tables_in_carecrud_db": "vw_queue"
+        },
+        {
+            "Tables_in_carecrud_db": "vw_today_appointments"
+        },
+        {
+            "Tables_in_carecrud_db": "vw_top_services"
+        }
+    ],
+    "discounts_count": [],
+    "discount_types_rows": [
+        {
+            "discount_id": 1,
+            "type_name": "Senior Citizen",
+            "discount_percent": "20.00",
+            "legal_basis": "RA 9994 \u2013 Expanded Senior Citizens Act of 2010",
+            "is_active": 1
+        },
+        {
+            "discount_id": 2,
+            "type_name": "PWD",
+            "discount_percent": "20.00",
+            "legal_basis": "RA 10754 \u2013 Act Expanding Benefits and Privileges of Persons with Disability",
+            "is_active": 1
+        },
+        {
+            "discount_id": 3,
+            "type_name": "Pregnant",
+            "discount_percent": "0.00",
+            "legal_basis": "Courtesy discount \u2013 configurable by admin",
+            "is_active": 1
+        }
+    ]
+}

@@ -905,21 +905,13 @@ class DashboardPage(QWidget):
         form.setFieldGrowthPolicy(
             QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
 
-        from ui.shared.modern_calendar import apply_modern_calendar
-        from_date = QDateEdit()
-        apply_modern_calendar(from_date)
-        from_date.setDate(QDate.currentDate().addDays(1))
+        from ui.shared.modern_calendar import ModernDateInput
+        from_date = ModernDateInput(QDate.currentDate().addDays(1))
         from_date.setMinimumDate(QDate.currentDate().addDays(1))
-        from_date.setObjectName("formCombo")
-        from_date.setMinimumHeight(40)
         from_date.setDisplayFormat("M/d/yyyy")
 
-        until_date = QDateEdit()
-        apply_modern_calendar(until_date)
-        until_date.setDate(QDate.currentDate().addDays(7))
+        until_date = ModernDateInput(QDate.currentDate().addDays(7))
         until_date.setMinimumDate(QDate.currentDate().addDays(1))
-        until_date.setObjectName("formCombo")
-        until_date.setMinimumHeight(40)
         until_date.setDisplayFormat("M/d/yyyy")
 
         reason_edit = QTextEdit()

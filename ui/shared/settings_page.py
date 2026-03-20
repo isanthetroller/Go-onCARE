@@ -108,7 +108,7 @@ class SettingsPage(QWidget):
         lay.addWidget(disc_card)
 
         self._discount_ids: list[int] = []
-        self._load_discount_types()
+        self.get_discount_types()
 
         # ── Tax & Deduction Settings ───────────────────────────────
         lay.addWidget(self._section("Tax && Deduction Rates"))

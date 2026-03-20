@@ -387,6 +387,8 @@ class NewInvoiceDialog(QDialog):
         for p in self._patients:
             self.patient_combo.addItem(p["name"], p.get("patient_id"))
         self.patient_combo.currentTextChanged.connect(self._on_patient_changed)
+        if self.patient_combo.count() > 0:
+            self._on_patient_changed(self.patient_combo.currentText())
         pt_col.addWidget(self.patient_combo)
         top_form.addLayout(pt_col, 1)
 

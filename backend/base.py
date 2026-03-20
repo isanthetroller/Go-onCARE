@@ -84,9 +84,13 @@ class DatabaseBase:
                         type_name        VARCHAR(100) NOT NULL UNIQUE,
                         discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0.00,
                         legal_basis      VARCHAR(255) DEFAULT '',
+                        requires_id_proof TINYINT(1) NOT NULL DEFAULT 0,
                         is_active        TINYINT(1) NOT NULL DEFAULT 1
                     )
                 """)
+                cur.execute("SHOW COLUMNS FROM discount_types LIKE 'requires_id_proof'")
+                if not cur.fetchone():
+                    cur.execute("ALTER TABLE discount_types ADD COLUMN requires_id_proof TINYINT(1) NOT NULL DEFAULT 0")
                 # discount_type_id column on patients
                 cur.execute("SHOW COLUMNS FROM patients LIKE 'discount_type_id'")
                 if not cur.fetchone():

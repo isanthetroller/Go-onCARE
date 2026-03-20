@@ -1,7 +1,0 @@
-Traceback (most recent call last):
-  File "C:\Users\ethan\Downloads\Projects\CareCRUDV1\test_dialog.py", line 9, in <module>
-    dlg = CancelAppointmentDialog(None, "Jane Smith")
-  File "C:\Users\ethan\Downloads\Projects\CareCRUDV1\ui\shared\appointment_dialog.py", line 1081, in __init__
-    self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
-                                              ^^
-UnboundLocalError: cannot access local variable 'Qt' where it is not associated with a value

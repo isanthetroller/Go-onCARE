@@ -819,7 +819,7 @@ class PatientProfileDialog(QDialog):
                 a.get("status", ""),
                 a.get("notes", "") or "",
             ]), get_icon("calendar"), " Appointments")
-        if role != "Doctor":
+        if role in ("Admin", "Receptionist", "Finance"):
             tabs.addTab(self._table_tab(
                 p.get("invoices", []),
                 ["Invoice #", "Services", "Total", "Paid",

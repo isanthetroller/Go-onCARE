@@ -49,7 +49,7 @@ class PatientsPage(QWidget):
         scroll, lay = make_page_layout()
 
         # ── Banner ─────────────────────────────────────────────────
-        btn_text = "+  Add Patient" if self._role not in ("Nurse", "Doctor") else ""
+        btn_text = "+  Add Patient" if self._role != "Doctor" else ""
         lay.addWidget(make_banner(
             "Patient Records", "Manage and view all patient information",
             btn_text=btn_text, btn_slot=self._on_add,
@@ -102,8 +102,10 @@ class PatientsPage(QWidget):
         # ── Table ──────────────────────────────────────────────────
         cols = ["ID", "Name", "Sex", "Age", "Phone", "Blood Type",
                 "Conditions", "Last Visit", "Status", "Actions"]
-        if self._role == "Nurse":
+        if self._role == "Doctor":
             self.table = make_action_table(cols, action_col_width=100)
+        elif self._role == "Nurse":
+            self.table = make_action_table(cols, action_col_width=150)
         else:
             self.table = make_action_table(cols, action_col_width=210)
         self.table.setSortingEnabled(True)
@@ -173,22 +175,24 @@ class PatientsPage(QWidget):
                     item.setData(Qt.ItemDataRole.UserRole, p["patient_id"])
                 self.table.setItem(r, c, item)
 
-            if self._role != "Nurse":
+            if self._role == "Doctor":
                 view_btn = make_table_btn("View")
                 view_btn.clicked.connect(lambda checked, ri=r: self._on_view(ri))
-                if self._role == "Doctor":
-                    self.table.setCellWidget(r, len(values), self._make_centered_action_cell(view_btn))
-                else:
-                    edit_btn = make_table_btn("Edit")
-                    edit_btn.clicked.connect(lambda checked, ri=r: self._on_edit(ri))
-                    del_btn = make_table_btn_danger("Del")
-                    del_btn.clicked.connect(lambda checked, ri=r: self._on_delete(ri))
-                    self.table.setCellWidget(r, len(values), make_action_cell(view_btn, edit_btn, del_btn))
+                self.table.setCellWidget(r, len(values), self._make_centered_action_cell(view_btn))
+            elif self._role == "Nurse":
+                view_btn = make_table_btn("View")
+                view_btn.clicked.connect(lambda checked, ri=r: self._on_view(ri))
+                edit_btn = make_table_btn("Edit")
+                edit_btn.clicked.connect(lambda checked, ri=r: self._on_edit(ri))
+                self.table.setCellWidget(r, len(values), make_action_cell(view_btn, edit_btn))
             else:
-                # Nurse: read-only view of patient profile
                 view_btn = make_table_btn("View")
                 view_btn.clicked.connect(lambda checked, ri=r: self._on_view(ri))
-                self.table.setCellWidget(r, len(values), make_action_cell(view_btn))
+                edit_btn = make_table_btn("Edit")
+                edit_btn.clicked.connect(lambda checked, ri=r: self._on_edit(ri))
+                del_btn = make_table_btn_danger("Del")
+                del_btn.clicked.connect(lambda checked, ri=r: self._on_delete(ri))
+                self.table.setCellWidget(r, len(values), make_action_cell(view_btn, edit_btn, del_btn))
         self.table.setSortingEnabled(True)
 
     def _make_centered_action_cell(self, *btns):

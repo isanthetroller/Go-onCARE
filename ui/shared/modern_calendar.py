@@ -268,3 +268,65 @@ class CenteredCalendarDialog(QDialog):
     @property
     def selected_date(self):
         return self.calendar.selected_date
+
+class ModernDateInput(QWidget):
+    """
+    A drop-in replacement for QDateEdit that uses the CenteredCalendarDialog
+    instead of the default calendar popup, while maintaining a QLineEdit look.
+    """
+    dateChanged = pyqtSignal(QDate)
+    
+    def __init__(self, default_date=None, parent=None):
+        super().__init__(parent)
+        from PyQt6.QtWidgets import QHBoxLayout, QPushButton, QLineEdit
+        from ui.icons import get_icon
+        
+        self._current_date = default_date or QDate.currentDate()
+        self._min_date = None
+        self._max_date = None
+        
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(4)
+        
+        self.edit = QLineEdit()
+        self.edit.setObjectName("formInput")
+        self.edit.setMinimumHeight(40)
+        self.edit.setReadOnly(True)
+        self.edit.setText(self._current_date.toString("yyyy-MM-dd"))
+        
+        self.btn = QPushButton()
+        self.btn.setIcon(get_icon("calendar"))
+        self.btn.setFixedSize(40, 40)
+        self.btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn.setStyleSheet("QPushButton { background: transparent; border: none; } QPushButton:hover { background: #E8F0F1; border-radius: 8px; }")
+        
+        self.btn.clicked.connect(self._choose_date)
+        
+        lay.addWidget(self.edit, 1)
+        lay.addWidget(self.btn)
+        
+    def _choose_date(self):
+        dlg = CenteredCalendarDialog(current_date=self._current_date, min_date=self._min_date, max_date=self._max_date, parent=self.window())
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self.setDate(dlg.selected_date)
+            
+    def date(self) -> QDate:
+        return self._current_date
+        
+    def setDate(self, date: QDate):
+        self._current_date = date
+        self.edit.setText(date.toString("yyyy-MM-dd"))
+        self.dateChanged.emit(date)
+        
+    def setMinimumDate(self, date: QDate):
+        self._min_date = date
+        
+    def setMaximumDate(self, date: QDate):
+        self._max_date = date
+        
+    def setDisplayFormat(self, fmt: str):
+        # We can store fmt and use it in self.edit.setText, 
+        # but returning ISO date on .date() is what backend expects
+        self.edit.setText(self._current_date.toString(fmt))
+

@@ -540,7 +540,7 @@ QComboBox#formCombo::drop-down {
 QComboBox#formCombo::down-arrow {
     width: 12px;
     height: 12px;
-    image: url(./arrow-down.svg);
+    image: url(ui/styles/arrow-down.svg);
 }
 
 /* Date-edit fields with the #formCombo object name */
@@ -571,7 +571,7 @@ QDateEdit#formCombo::drop-down {
 QDateEdit#formCombo::down-arrow {
     width: 16px;
     height: 16px;
-    image: url(./calendar.svg);
+    image: url(ui/styles/calendar.svg);
 }
 
 QDateEdit::up-button,
@@ -1352,7 +1352,7 @@ QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover, QTimeEdit::up-button
 }
 
 QSpinBox::up-arrow, QDoubleSpinBox::up-arrow, QTimeEdit::up-arrow {
-    image: url(./arrow-up.svg);
+    image: url(ui/styles/arrow-up.svg);
     width: 10px;
     height: 6px;
 }
@@ -1372,7 +1372,7 @@ QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover, QTimeEdit::down-
 }
 
 QSpinBox::down-arrow, QDoubleSpinBox::down-arrow, QTimeEdit::down-arrow {
-    image: url(./arrow-down.svg);
+    image: url(ui/styles/arrow-down.svg);
     width: 10px;
     height: 6px;
 }
