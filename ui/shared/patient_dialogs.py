@@ -710,16 +710,16 @@ class PatientProfileDialog(QDialog):
             }
             QTabWidget::pane {
                 border: 1px solid #E1E8ED;
-                border-radius: 6px;
+                border-radius: 8px;
                 background: #FFFFFF;
                 top: -1px;
             }
             QTabBar::tab {
                 background: transparent;
                 color: #95A5A6;
-                padding: 12px 24px;
+                padding: 14px 24px;
                 font-size: 14px;
-                font-weight: 500;
+                font-weight: 600;
                 border-bottom: 3px solid transparent;
                 margin-right: 4px;
             }
@@ -734,7 +734,7 @@ class PatientProfileDialog(QDialog):
             }
             QFrame#ProfileCard {
                 background-color: #FFFFFF;
-                border-radius: 8px;
+                border-radius: 10px;
                 border: 1px solid #E5EBED;
             }
             QFrame#ProfileCard:hover {
@@ -747,18 +747,18 @@ class PatientProfileDialog(QDialog):
             }
             QLabel#FieldLabel {
                 color: #7F8C8D; 
-                font-size: 13px; 
+                font-size: 12px; 
                 font-weight: 600;
             }
             QLabel#FieldValue {
                 color: #1A252F; 
-                font-size: 13px;
-                font-weight: 400;
+                font-size: 14px;
+                font-weight: 600;
             }
             QLabel#IDImageContainer {
-                border: 1px solid #E1E8ED; 
+                border: 1px dashed #BAC5CC; 
                 border-radius: 6px; 
-                padding: 4px; 
+                padding: 6px; 
                 background: #FAFCFD;
             }
         """)
@@ -766,25 +766,70 @@ class PatientProfileDialog(QDialog):
         p = profile or {}
         info = p.get("info", {})
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(24, 24, 24, 24)
-        lay.setSpacing(16)
+        lay.setContentsMargins(28, 28, 28, 28)
+        lay.setSpacing(20)
 
         # Header
-        from PyQt6.QtWidgets import QHBoxLayout
-        hdr_lay = QHBoxLayout()
+        from PyQt6.QtWidgets import QHBoxLayout, QPushButton
+        from ui.icons import get_icon
+        from PyQt6.QtGui import QColor, QIcon
+        header_container = QWidget()
+        hdr_lay = QHBoxLayout(header_container)
+        hdr_lay.setContentsMargins(0, 0, 0, 0)
+        hdr_lay.setSpacing(16)
+        
+        # Name and basic info
+        name_lay = QVBoxLayout()
+        name_lay.setSpacing(4)
+        
         name = (f"{info.get('first_name', '')}"
                 f" {info.get('last_name', '')}")
-        hdr = QLabel(
-            f"<b style='font-size:24px; color:#1A252F;'>{name}</b>  "
-            f"<span style='color:#7F8C8D; font-size:14px; font-weight: 500;'>"
-            f"&nbsp;&bull;&nbsp; {info.get('status', '')}</span>")
-        hdr.setTextFormat(Qt.TextFormat.RichText)
-        hdr_lay.addWidget(hdr)
+        
+        name_row = QHBoxLayout()
+        name_row.setSpacing(12)
+        name_lbl = QLabel(f"<b style='font-size:26px; color:#1A252F;'>{name}</b>")
+        name_lbl.setTextFormat(Qt.TextFormat.RichText)
+        name_row.addWidget(name_lbl)
+        
+        status = info.get('status', 'Unknown')
+        status_bg = "#27AE60" if status.lower() == "active" else "#E74C3C" if status.lower() == "inactive" else "#F39C12"
+        status_badge = QLabel(status)
+        status_badge.setStyleSheet(f"background-color: {status_bg}; color: white; padding: 4px 12px; border-radius: 12px; font-weight: bold; font-size: 12px;")
+        name_row.addWidget(status_badge)
+        name_row.addStretch()
+        name_lay.addLayout(name_row)
+        
+        age_gender = f"DOB: {info.get('date_of_birth', 'Unknown')} \u2022 Sex: {info.get('sex', 'Unknown')} \u2022 PT-{info.get('patient_id', 0):04d}"
+        sub_lbl = QLabel(age_gender)
+        sub_lbl.setStyleSheet("color: #7F8C8D; font-size: 14px; font-weight: 500;")
+        name_lay.addWidget(sub_lbl)
+        
+        hdr_lay.addLayout(name_lay)
         hdr_lay.addStretch()
-        lay.addLayout(hdr_lay)
+        
+        # Action Buttons
+        btn_edit = QPushButton(" Edit Profile")
+        btn_edit.setIcon(get_icon("edit", color=QColor("#20878F")))
+        btn_appt = QPushButton(" Add Appt")
+        btn_appt.setIcon(get_icon("calendar", color=QColor("#20878F")))
+        btn_note = QPushButton(" Add Note")
+        btn_note.setIcon(get_icon("file-text", color=QColor("#20878F")))
+        
+        for btn in (btn_edit, btn_appt, btn_note):
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #FFFFFF; border: 1px solid #D5E2E6; 
+                    border-radius: 6px; padding: 8px 14px; font-weight: 600; color: #2C3E50;
+                }
+                QPushButton:hover { background-color: #F0F4F7; border-color: #20878F; }
+            """)
+            hdr_lay.addWidget(btn)
+            
+        lay.addWidget(header_container)
 
         tabs = QTabWidget()
-        tabs.addTab(self._info_tab(info), "Info")
+        tabs.addTab(self._info_tab(info), get_icon("user"), " Info")
         tabs.addTab(self._table_tab(
             p.get("appointments", []),
             ["Date", "Time", "Doctor", "Service", "Status", "Notes"],
@@ -795,7 +840,7 @@ class PatientProfileDialog(QDialog):
                 a.get("service_name", ""),
                 a.get("status", ""),
                 a.get("notes", "") or "",
-            ]), "Appointments")
+            ]), get_icon("calendar"), " Appointments")
         if role != "Doctor":
             tabs.addTab(self._table_tab(
                 p.get("invoices", []),
@@ -809,7 +854,7 @@ class PatientProfileDialog(QDialog):
                     i.get("status", ""),
                     i.get("payment_method", ""),
                     str(i.get("created_at", "")),
-                ]), "Invoices")
+                ]), get_icon("file-text"), " Invoices")
         tabs.addTab(self._table_tab(
             p.get("queue", []),
             ["Queue #", "Time", "Doctor", "Purpose", "Status", "Date"],
@@ -820,20 +865,26 @@ class PatientProfileDialog(QDialog):
                 q.get("purpose", "") or "",
                 q.get("status", ""),
                 str(q.get("created_at", "")),
-            ]), "Queue History")
+            ]), get_icon("activity"), " Queue History")
         lay.addWidget(tabs)
 
         close_btn = QPushButton("Close")
         close_btn.setObjectName("dialogSaveBtn")
-        close_btn.setMinimumHeight(38)
+        close_btn.setMinimumHeight(40)
         close_btn.setMinimumWidth(120)
         close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         close_btn.clicked.connect(self.accept)
-        lay.addWidget(close_btn,
-                      alignment=Qt.AlignmentFlag.AlignRight)
+        close_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #E8F0F1; color: #2C3E50; border: none;
+                border-radius: 8px; font-weight: bold; font-size: 14px;
+            }
+            QPushButton:hover { background-color: #D0E5E8; }
+        """)
+        lay.addWidget(close_btn, alignment=Qt.AlignmentFlag.AlignRight)
 
     def _info_tab(self, info: dict) -> QWidget:
-        from PyQt6.QtWidgets import QScrollArea, QSizePolicy
+        from PyQt6.QtWidgets import QScrollArea, QSizePolicy, QGraphicsDropShadowEffect
         # Use a scroll area for the info tab to prevent overflow
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -853,8 +904,8 @@ class PatientProfileDialog(QDialog):
         right_col = QVBoxLayout()
         right_col.setSpacing(24)
         
-        main_lay.addLayout(left_col, 55)
-        main_lay.addLayout(right_col, 45)
+        main_lay.addLayout(left_col, 50)
+        main_lay.addLayout(right_col, 50)
         
         def _make_card(title, icon_name):
             from ui.icons import get_icon
@@ -864,17 +915,23 @@ class PatientProfileDialog(QDialog):
             card = QFrame()
             card.setObjectName("ProfileCard")
             
+            shadow = QGraphicsDropShadowEffect()
+            shadow.setBlurRadius(15)
+            shadow.setColor(QColor(0, 0, 0, 8))
+            shadow.setOffset(0, 4)
+            card.setGraphicsEffect(shadow)
+            
             card_lay = QVBoxLayout(card)
-            card_lay.setContentsMargins(20, 20, 20, 24)
+            card_lay.setContentsMargins(24, 20, 24, 24)
             card_lay.setSpacing(16)
             
             hdr_w = QWidget()
             hdr_lay = QHBoxLayout(hdr_w)
             hdr_lay.setContentsMargins(0, 0, 0, 0)
-            hdr_lay.setSpacing(10)
+            hdr_lay.setSpacing(12)
             
             icon_lbl = QLabel()
-            icon_lbl.setPixmap(get_icon(icon_name, color=QColor("#20878F")).pixmap(18, 18))
+            icon_lbl.setPixmap(get_icon(icon_name, color=QColor("#20878F")).pixmap(20, 20))
             hdr_lay.addWidget(icon_lbl)
             
             lbl = QLabel(title)
@@ -893,20 +950,26 @@ class PatientProfileDialog(QDialog):
             form_w = QWidget()
             form_lay = QFormLayout(form_w)
             form_lay.setContentsMargins(0, 0, 0, 0)
-            form_lay.setHorizontalSpacing(24)
-            form_lay.setVerticalSpacing(12)
+            form_lay.setHorizontalSpacing(32)
+            form_lay.setVerticalSpacing(16)
             card_lay.addWidget(form_w)
             
             extra_lay = QVBoxLayout()
-            extra_lay.setSpacing(12)
+            extra_lay.setSpacing(16)
             card_lay.addLayout(extra_lay)
             
             return card, form_lay, extra_lay
 
         def _add_fields(form_lay, fields_list):
             for label, val in fields_list:
-                val_lbl = QLabel(str(val))
+                if not val or str(val).strip() in ("", "None", "Unknown"):
+                    val_str = "<span style='font-style:italic; color:#95A5A6;'>Not specified</span>"
+                else:
+                    val_str = str(val)
+                    
+                val_lbl = QLabel(val_str)
                 val_lbl.setObjectName("FieldValue")
+                val_lbl.setTextFormat(Qt.TextFormat.RichText)
                 val_lbl.setWordWrap(True)
                 
                 key_lbl = QLabel(label)
@@ -916,22 +979,19 @@ class PatientProfileDialog(QDialog):
         # ── 1. Personal & Contact Info (Left) ─────────────────
         card1, f1, _ = _make_card("Personal Details", "user")
         _add_fields(f1, [
-            ("Patient ID", f"PT-{info.get('patient_id', 0):04d}"),
-            ("Sex", info.get("sex", "")),
-            ("Date of Birth", str(info.get("date_of_birth", ""))),
-            ("Civil Status", info.get("civil_status", "") or "\u2014"),
-            ("Phone", info.get("phone", "") or "\u2014"),
-            ("Email", info.get("email", "") or "\u2014"),
-            ("Address", info.get("address", "") or "\u2014"),
-            ("Emerg. Contact", info.get("emergency_contact", "") or "\u2014"),
+            ("Civil Status", info.get("civil_status", "")),
+            ("Phone", info.get("phone", "")),
+            ("Email", info.get("email", "")),
+            ("Address", info.get("address", "")),
+            ("Emerg. Contact", info.get("emergency_contact", "")),
         ])
         left_col.addWidget(card1)
 
-        # ── 2. Medical Information (Left) ─────────────────────
+        # ── 2. Medical Overview (Left) ─────────────────────
         card2, f2, _ = _make_card("Medical Overview", "activity")
         _add_fields(f2, [
-            ("Blood Type", info.get("blood_type", "") or "Unknown"),
-            ("Conditions", info.get("conditions", "") or "None"),
+            ("Blood Type", info.get("blood_type", "")),
+            ("Conditions", info.get("conditions", "")),
         ])
         left_col.addWidget(card2)
         left_col.addStretch(1)
@@ -940,35 +1000,42 @@ class PatientProfileDialog(QDialog):
         card3, f3, e3 = _make_card("Administrative", "file-text")
         
         discount_type = info.get("discount_type")
-        if not discount_type:
-            discount_type = "None"
+        notes_val = info.get("notes", "")
+        if not notes_val.strip():
+            notes_val = "<span style='font-style:italic; color:#95A5A6;'>No notes available</span>"
             
         _add_fields(f3, [
-            ("Status", info.get("status", "Active")),
             ("Discount Type", discount_type),
-            ("Notes", info.get("notes", "") or "\u2014"),
         ])
+        
+        notes_lbl = QLabel("Notes")
+        notes_lbl.setObjectName("FieldLabel")
+        notes_val_lbl = QLabel(notes_val)
+        notes_val_lbl.setObjectName("FieldValue")
+        notes_val_lbl.setTextFormat(Qt.TextFormat.RichText)
+        notes_val_lbl.setWordWrap(True)
+        f3.addRow(notes_lbl, notes_val_lbl)
         
         id_proof = info.get("id_proof_path")
         if id_proof:
             import os
             from PyQt6.QtGui import QPixmap, QCursor
             from PyQt6.QtCore import Qt
+            
+            key_lbl = QLabel("Government ID")
+            key_lbl.setObjectName("FieldLabel")
+            e3.addWidget(key_lbl)
+            
             if os.path.exists(id_proof):
                 pix = QPixmap(id_proof)
                 if not pix.isNull():
-                    pix = pix.scaled(150, 150, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                    pix = pix.scaled(200, 150, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                     img_lbl = QLabel()
                     img_lbl.setObjectName("IDImageContainer")
                     img_lbl.setPixmap(pix)
                     img_lbl.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-                    img_lbl.setToolTip("ID Proof Image")
+                    img_lbl.setToolTip("Government ID Proof")
                     
-                    key_lbl = QLabel("ID Verification")
-                    key_lbl.setObjectName("FieldLabel")
-                    key_lbl.setStyleSheet("margin-top: 10px;")
-                    
-                    e3.addWidget(key_lbl)
                     img_container = QWidget()
                     img_lay = QHBoxLayout(img_container)
                     img_lay.setContentsMargins(0, 0, 0, 0)
@@ -976,9 +1043,9 @@ class PatientProfileDialog(QDialog):
                     img_lay.addStretch()
                     e3.addWidget(img_container)
                 else:
-                    e3.addWidget(QLabel("<i>Invalid image file</i>"))
+                    e3.addWidget(QLabel("<i style='color:#95A5A6;'>Invalid image file</i>"))
             else:
-                e3.addWidget(QLabel(f"<i>File missing: {os.path.basename(id_proof)}</i>"))
+                e3.addWidget(QLabel(f"<i style='color:#95A5A6;'>File missing: {os.path.basename(id_proof)}</i>"))
                 
         right_col.addWidget(card3)
         right_col.addStretch(1)
@@ -988,6 +1055,7 @@ class PatientProfileDialog(QDialog):
     def _table_tab(self, rows: list, headers: list,
                    mapper) -> QWidget:
         w = QWidget(); lay = QVBoxLayout(w)
+        lay.setContentsMargins(16, 16, 16, 16)
         t = QTableWidget(len(rows), len(headers))
         t.setHorizontalHeaderLabels(headers)
         t.horizontalHeader().setSectionResizeMode(
