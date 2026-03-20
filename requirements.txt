@@ -1,0 +1,4 @@
+﻿PyQt6
+mysql-connector-python
+markdown
+xhtml2pdf

@@ -1,0 +1,919 @@
+# Employee CRUD + HR stuff (leave requests, salary, etc)
+
+import traceback
+
+
+class EmployeeMixin:
+
+    def _split_name(self, full_name):
+        parts = full_name.split(None, 1)
+        return parts[0], parts[1] if len(parts) > 1 else ""
+
+    def _lookup_dept_id(self, dept_name):
+        row = self.fetch("SELECT department_id FROM departments WHERE department_name = %s", (dept_name,), one=True)
+        return row["department_id"] if row else None
+
+    def get_employees(self, detailed=False):
+        """Return employees. Set detailed=True to include salary & emergency_contact."""
+        hr_cols = ", e.salary, e.emergency_contact, e.address" if detailed else ""
+        return self.fetch(f"""
+            SELECT e.employee_id, CONCAT(e.first_name,' ',e.last_name) AS full_name,
+                   r.role_name, d.department_name, e.employment_type,
+                   e.phone, e.email, e.hire_date, e.status, e.notes,
+                   e.leave_from, e.leave_until{hr_cols}
+            FROM employees e
+            INNER JOIN roles r ON e.role_id = r.role_id
+            INNER JOIN departments d ON e.department_id = d.department_id
+            ORDER BY e.employee_id
+        """)
+
+    def get_employee_by_id(self, employee_id):
+        """Return a single employee's full record (with address, salary, emergency_contact)."""
+        return self.fetch("""
+            SELECT e.employee_id, CONCAT(e.first_name,' ',e.last_name) AS full_name,
+                   r.role_name, d.department_name, e.employment_type,
+                   e.phone, e.email, e.hire_date, e.status, e.notes,
+                   e.leave_from, e.leave_until, e.salary, e.emergency_contact, e.address
+            FROM employees e
+            INNER JOIN roles r ON e.role_id = r.role_id
+            INNER JOIN departments d ON e.department_id = d.department_id
+            WHERE e.employee_id = %s
+        """, (employee_id,), one=True)
+
+    def get_employees_detailed(self):
+        """Convenience alias — returns employees with HR fields."""
+        return self.get_employees(detailed=True)
+
+    def get_leave_employees(self):
+        """Return employees currently on leave with dates."""
+        return self.fetch("""
+            SELECT e.employee_id, CONCAT(e.first_name,' ',e.last_name) AS full_name,
+                   r.role_name, d.department_name, e.leave_from, e.leave_until, e.notes
+            FROM employees e
+            INNER JOIN roles r ON e.role_id = r.role_id
+            INNER JOIN departments d ON e.department_id = d.department_id
+            WHERE e.status = 'On Leave'
+            ORDER BY e.leave_until
+        """)
+
+    def get_hr_stats(self):
+        """Unified employee stats (superset of basic + HR fields)."""
+        row = self.fetch("""
+            SELECT COUNT(*) AS total,
+                   SUM(CASE WHEN r.role_name='Doctor' THEN 1 ELSE 0 END) AS doctors,
+                   SUM(CASE WHEN e.status='Active' THEN 1 ELSE 0 END) AS active,
+                   SUM(CASE WHEN e.status='On Leave' THEN 1 ELSE 0 END) AS on_leave,
+                   SUM(CASE WHEN e.status='Inactive' THEN 1 ELSE 0 END) AS inactive,
+                   COALESCE(AVG(e.salary), 0) AS avg_salary,
+                   COALESCE(SUM(CASE WHEN e.status='Active' THEN e.salary ELSE 0 END), 0) AS total_payroll
+            FROM employees e INNER JOIN roles r ON e.role_id = r.role_id
+        """, one=True)
+        return row or {"total": 0, "doctors": 0, "active": 0, "on_leave": 0,
+                       "inactive": 0, "avg_salary": 0, "total_payroll": 0}
+
+    def get_payroll_summary(self):
+        """Return payroll breakdown by department."""
+        return self.fetch("""
+            SELECT d.department_name,
+                   COUNT(e.employee_id) AS headcount,
+                   COALESCE(SUM(e.salary), 0) AS total_salary,
+                   COALESCE(AVG(e.salary), 0) AS avg_salary
+            FROM departments d
+            LEFT JOIN employees e ON d.department_id = e.department_id AND e.status = 'Active'
+            GROUP BY d.department_id, d.department_name
+            HAVING headcount > 0
+            ORDER BY total_salary DESC
+        """)
+
+    def get_employment_type_counts(self):
+        """Return employee counts by employment type."""
+        return self.fetch("""
+            SELECT employment_type, COUNT(*) AS cnt
+            FROM employees WHERE status = 'Active'
+            GROUP BY employment_type ORDER BY cnt DESC
+        """)
+
+    def check_duplicate_phone(self, phone):
+        """Return dict with employee_id & full_name if phone is already used, else None."""
+        return self.fetch(
+            "SELECT employee_id, CONCAT(first_name,' ',last_name) AS full_name "
+            "FROM employees WHERE phone=%s", (phone,), one=True)
+
+    def add_employee(self, data):
+        first, last = self._split_name(data["name"])
+        role_id = self._lookup_role_id(data["role"])
+        dept_id = self._lookup_dept_id(data["dept"])
+        if not role_id or not dept_id:
+            missing = []
+            if not role_id: missing.append(f"role '{data['role']}'")
+            if not dept_id: missing.append(f"department '{data['dept']}'")
+            return f"Unknown {' and '.join(missing)} in database."
+        try:
+            conn = self._get_connection()
+            with conn.cursor() as cur:
+                cols = ["first_name", "last_name", "role_id", "department_id",
+                        "employment_type", "phone", "email", "hire_date",
+                        "status", "notes"]
+                vals = [first, last, role_id, dept_id, data["type"],
+                        data.get("phone", ""), data.get("email", ""),
+                        data.get("hire_date") or None, data["status"],
+                        data.get("notes", "")]
+                if "leave_from" in data:
+                    cols.append("leave_from")
+                    vals.append(data.get("leave_from") or None)
+                if "leave_until" in data:
+                    cols.append("leave_until")
+                    vals.append(data.get("leave_until") or None)
+                if "salary" in data:
+                    cols.append("salary")
+                    vals.append(data.get("salary") or None)
+                if "emergency_contact" in data:
+                    cols.append("emergency_contact")
+                    vals.append(data.get("emergency_contact", ""))
+                if "address" in data:
+                    cols.append("address")
+                    vals.append(data.get("address", ""))
+                placeholders = ", ".join(["%s"] * len(vals))
+                # Use COALESCE for hire_date so it defaults to today
+                col_str = ", ".join(cols)
+                sql = f"INSERT INTO employees ({col_str}) VALUES ({placeholders})"
+                cur.execute(sql, vals)
+                email = data.get("email", "")
+                if email:
+                    cur.execute("SELECT user_id FROM users WHERE email=%s", (email,))
+                    if not cur.fetchone():
+                        # Auto-generate password: role_lowercase + "123"
+                        role_lower = data["role"].lower().replace(" ", "")
+                        pw = f"{role_lower}123"
+                        cur.execute(
+                            "INSERT INTO users (email,password,full_name,role_id,must_change_password) "
+                            "VALUES (%s,%s,%s,%s,1)",
+                            (email, pw, data["name"], role_id))
+                conn.commit()
+            self.log_activity("Created", "Employee", data["name"])
+            return True
+        except Exception as e:
+            traceback.print_exc()
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            return str(e)
+
+    def update_employee(self, employee_id, data, old_email=""):
+        first, last = self._split_name(data["name"])
+        role_id = self._lookup_role_id(data["role"])
+        dept_id = self._lookup_dept_id(data["dept"])
+        if not role_id or not dept_id:
+            missing = []
+            if not role_id: missing.append(f"role '{data['role']}'")
+            if not dept_id: missing.append(f"department '{data['dept']}'")
+            return f"Unknown {' and '.join(missing)} in database."
+        try:
+            conn = self._get_connection()
+            with conn.cursor() as cur:
+                sets = ["first_name=%s", "last_name=%s", "role_id=%s",
+                        "department_id=%s", "employment_type=%s", "phone=%s",
+                        "email=%s", "status=%s", "notes=%s"]
+                vals = [first, last, role_id, dept_id, data["type"],
+                        data.get("phone", ""), data.get("email", ""),
+                        data["status"], data.get("notes", "")]
+                if "leave_from" in data:
+                    sets.append("leave_from=%s")
+                    vals.append(data.get("leave_from") or None)
+                if "leave_until" in data:
+                    sets.append("leave_until=%s")
+                    vals.append(data.get("leave_until") or None)
+                if "salary" in data:
+                    sets.append("salary=%s")
+                    vals.append(data.get("salary") or None)
+                if "emergency_contact" in data:
+                    sets.append("emergency_contact=%s")
+                    vals.append(data.get("emergency_contact", ""))
+                if "address" in data:
+                    sets.append("address=%s")
+                    vals.append(data.get("address", ""))
+                vals.append(employee_id)
+                sql = f"UPDATE employees SET {', '.join(sets)} WHERE employee_id=%s"
+                cur.execute(sql, vals)
+                new_email = data.get("email", "")
+                lookup = old_email or new_email
+                if lookup and new_email:
+                    # Try to update the existing user row by old email
+                    cur.execute("UPDATE users SET email=%s, full_name=%s, role_id=%s WHERE email=%s",
+                                (new_email, data["name"], role_id, lookup))
+                    # If no user row matched (e.g. old_email didn't exist), create one
+                    if cur.rowcount == 0:
+                        cur.execute("SELECT user_id FROM users WHERE email=%s", (new_email,))
+                        if not cur.fetchone():
+                            role_lower = data["role"].lower().replace(" ", "")
+                            pw = f"{role_lower}123"
+                            cur.execute(
+                                "INSERT INTO users (email,password,full_name,role_id,must_change_password) "
+                                "VALUES (%s,%s,%s,%s,1)",
+                                (new_email, pw, data["name"], role_id))
+                conn.commit()
+            self.log_activity("Edited", "Employee", data["name"])
+            return True
+        except Exception as e:
+            traceback.print_exc()
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            return str(e)
+
+    def delete_employee(self, employee_id):
+        row = self.fetch("SELECT email, CONCAT(first_name,' ',last_name) AS n FROM employees WHERE employee_id=%s",
+                         (employee_id,), one=True)
+        queries = [
+            ("DELETE ii FROM invoice_items ii INNER JOIN invoices i ON ii.invoice_id=i.invoice_id "
+             "INNER JOIN appointments a ON i.appointment_id=a.appointment_id WHERE a.doctor_id=%s", (employee_id,)),
+            ("DELETE i FROM invoices i INNER JOIN appointments a ON i.appointment_id=a.appointment_id "
+             "WHERE a.doctor_id=%s", (employee_id,)),
+            ("DELETE FROM queue_entries WHERE doctor_id=%s", (employee_id,)),
+            ("DELETE FROM doctor_schedules WHERE doctor_id=%s", (employee_id,)),
+            ("DELETE FROM appointments WHERE doctor_id=%s", (employee_id,)),
+            ("DELETE FROM notifications WHERE employee_id=%s", (employee_id,)),
+            ("UPDATE leave_requests SET hr_decided_by=NULL WHERE hr_decided_by=%s", (employee_id,)),
+            ("DELETE FROM leave_requests WHERE employee_id=%s", (employee_id,)),
+            ("DELETE FROM employees WHERE employee_id=%s", (employee_id,)),
+        ]
+        if row and row.get("email"):
+            queries.append(("DELETE FROM users WHERE email=%s", (row["email"],)))
+        if self.exec_many(queries) is not False:
+            self.log_activity("Deleted", "Employee", row["n"] if row else str(employee_id))
+            return True
+        return False
+
+    def get_all_departments(self):
+        """Return all departments ordered by name."""
+        return self.fetch("SELECT department_id, department_name FROM departments ORDER BY department_name")
+
+    def add_department(self, name):
+        """Create a new department. Returns True on success."""
+        return bool(self.exec(
+            "INSERT INTO departments (department_name) VALUES (%s)", (name,)))
+
+    def delete_department(self, department_id):
+        """Delete a department. Returns True on success, False if it still has employees."""
+        emp_count = self.fetch(
+            "SELECT COUNT(*) AS cnt FROM employees WHERE department_id = %s",
+            (department_id,), one=True)
+        if emp_count and emp_count.get("cnt", 0) > 0:
+            return False
+        return bool(self.exec(
+            "DELETE FROM departments WHERE department_id = %s", (department_id,)))
+
+    def get_department_employee_count(self, department_id):
+        """Return the number of employees in a department."""
+        row = self.fetch(
+            "SELECT COUNT(*) AS cnt FROM employees WHERE department_id = %s",
+            (department_id,), one=True)
+        return row.get("cnt", 0) if row else 0
+
+    def get_department_counts(self):
+        return self.fetch("""
+            SELECT d.department_name, COUNT(e.employee_id) AS cnt
+            FROM departments d LEFT JOIN employees e ON d.department_id = e.department_id
+            GROUP BY d.department_id, d.department_name HAVING cnt > 0 ORDER BY cnt DESC
+        """)
+
+    def get_employee_performance(self, employee_id):
+        row = self.fetch("""
+            SELECT COUNT(a.appointment_id) AS total_appts,
+                   SUM(CASE WHEN a.status='Completed' THEN 1 ELSE 0 END) AS completed,
+                   COALESCE(SUM(CASE WHEN a.status='Completed' THEN s.price ELSE 0 END),0) AS revenue
+            FROM appointments a INNER JOIN services s ON a.service_id = s.service_id
+            WHERE a.doctor_id = %s
+        """, (employee_id,), one=True)
+        return row or {"total_appts": 0, "completed": 0, "revenue": 0}
+
+    def get_employee_appointments(self, employee_id):
+        return self.fetch("""
+            SELECT a.appointment_date, a.appointment_time,
+                   CONCAT(p.first_name,' ',p.last_name) AS patient_name,
+                   s.service_name, a.status
+            FROM appointments a
+            INNER JOIN patients p ON a.patient_id = p.patient_id
+            INNER JOIN services s ON a.service_id = s.service_id
+            WHERE a.doctor_id = %s
+            ORDER BY a.appointment_date DESC, a.appointment_time DESC LIMIT 20
+        """, (employee_id,))
+
+    # ── Leave Request System ──────────────────────────────────────
+
+    def get_employee_id_by_email(self, email):
+        """Look up employee_id from email (or matching user's full_name)."""
+        row = self.fetch("""
+            SELECT e.employee_id 
+            FROM employees e 
+            WHERE e.email = %s 
+               OR CONCAT(e.first_name, ' ', e.last_name) = (
+                   SELECT full_name FROM users WHERE email = %s LIMIT 1
+               )
+            LIMIT 1
+        """, (email, email), one=True)
+        return row["employee_id"] if row else None
+
+    def submit_leave_request(self, employee_id, leave_from, leave_until, reason):
+        """Employee submits a leave request."""
+        try:
+            self.exec(
+                "INSERT INTO leave_requests (employee_id, leave_from, leave_until, reason) "
+                "VALUES (%s, %s, %s, %s)",
+                (employee_id, leave_from, leave_until, reason))
+            name = self._get_employee_name(employee_id) or str(employee_id)
+            self.log_activity("Requested", "Leave",
+                              f"{name} requested leave {leave_from} to {leave_until}")
+            return True
+        except Exception as e:
+            traceback.print_exc()
+            return str(e)
+
+    def get_pending_leave_requests(self):
+        """HR: get all pending leave requests."""
+        return self.fetch("""
+            SELECT lr.request_id, lr.employee_id,
+                   CONCAT(e.first_name,' ',e.last_name) AS employee_name,
+                   r.role_name, d.department_name,
+                   lr.leave_from, lr.leave_until, lr.reason, lr.status, lr.created_at
+            FROM leave_requests lr
+            INNER JOIN employees e ON lr.employee_id = e.employee_id
+            INNER JOIN roles r ON e.role_id = r.role_id
+            INNER JOIN departments d ON e.department_id = d.department_id
+            WHERE lr.status = 'Pending'
+            ORDER BY lr.created_at ASC
+        """)
+
+    def get_all_leave_requests(self):
+        """HR: get all leave requests (all statuses)."""
+        return self.fetch("""
+            SELECT lr.request_id, lr.employee_id,
+                   CONCAT(e.first_name,' ',e.last_name) AS employee_name,
+                   r.role_name, d.department_name,
+                   lr.leave_from, lr.leave_until, lr.reason,
+                   lr.status, lr.hr_note, lr.decided_at, lr.created_at,
+                   CASE WHEN lr.hr_decided_by IS NOT NULL
+                        THEN (SELECT CONCAT(h.first_name,' ',h.last_name)
+                              FROM employees h WHERE h.employee_id = lr.hr_decided_by)
+                        ELSE NULL END AS decided_by_name
+            FROM leave_requests lr
+            INNER JOIN employees e ON lr.employee_id = e.employee_id
+            INNER JOIN roles r ON e.role_id = r.role_id
+            INNER JOIN departments d ON e.department_id = d.department_id
+            ORDER BY lr.created_at DESC
+        """)
+
+    def get_my_leave_requests(self, employee_id):
+        """Employee: get their own leave requests."""
+        return self.fetch("""
+            SELECT lr.request_id, lr.leave_from, lr.leave_until, lr.reason,
+                   lr.status, lr.hr_note, lr.decided_at, lr.created_at
+            FROM leave_requests lr
+            WHERE lr.employee_id = %s
+            ORDER BY lr.created_at DESC
+        """, (employee_id,))
+
+    def approve_leave_request(self, request_id, hr_employee_id):
+        """HR approves a leave request. Updates employee status to On Leave."""
+        try:
+            conn = self._get_connection()
+            with conn.cursor(dictionary=True) as cur:
+                # Get request details
+                cur.execute("SELECT * FROM leave_requests WHERE request_id=%s AND status='Pending'",
+                            (request_id,))
+                req = cur.fetchone()
+                if not req:
+                    return "Request not found or already decided."
+                emp_id = req["employee_id"]
+                # Update request
+                cur.execute(
+                    "UPDATE leave_requests SET status='Approved', hr_decided_by=%s, "
+                    "decided_at=NOW() WHERE request_id=%s",
+                    (hr_employee_id, request_id))
+                # Update employee status to On Leave with dates
+                cur.execute(
+                    "UPDATE employees SET status='On Leave', leave_from=%s, leave_until=%s "
+                    "WHERE employee_id=%s",
+                    (req["leave_from"], req["leave_until"], emp_id))
+                # Cancel confirmed appointments during leave period
+                cur.execute(
+                    "UPDATE appointments SET status='Cancelled', "
+                    "cancellation_reason='Doctor on approved leave' "
+                    "WHERE doctor_id=%s AND appointment_date BETWEEN %s AND %s "
+                    "AND status IN ('Pending','Confirmed')",
+                    (emp_id, req["leave_from"], req["leave_until"]))
+                emp_name = self._get_employee_name(emp_id) or str(emp_id)
+                # Create notification for employee
+                msg = (f"Your leave request ({req['leave_from']} to {req['leave_until']}) "
+                       f"has been approved.")
+                cur.execute(
+                    "INSERT INTO notifications (employee_id, message) VALUES (%s, %s)",
+                    (emp_id, msg))
+                conn.commit()
+            self.log_activity("Approved", "Leave",
+                              f"Approved leave for {emp_name} ({req['leave_from']} to {req['leave_until']})")
+            return True
+        except Exception as e:
+            traceback.print_exc()
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            return str(e)
+
+    def decline_leave_request(self, request_id, hr_employee_id, hr_note):
+        """HR declines a leave request with a reason/note."""
+        try:
+            conn = self._get_connection()
+            with conn.cursor(dictionary=True) as cur:
+                cur.execute("SELECT * FROM leave_requests WHERE request_id=%s AND status='Pending'",
+                            (request_id,))
+                req = cur.fetchone()
+                if not req:
+                    return "Request not found or already decided."
+                emp_id = req["employee_id"]
+                cur.execute(
+                    "UPDATE leave_requests SET status='Declined', hr_decided_by=%s, "
+                    "hr_note=%s, decided_at=NOW() WHERE request_id=%s",
+                    (hr_employee_id, hr_note, request_id))
+                emp_name = self._get_employee_name(emp_id) or str(emp_id)
+                # Notification
+                msg = (f"Your leave request ({req['leave_from']} to {req['leave_until']}) "
+                       f"has been declined. Reason: {hr_note}")
+                cur.execute(
+                    "INSERT INTO notifications (employee_id, message) VALUES (%s, %s)",
+                    (emp_id, msg))
+                conn.commit()
+            self.log_activity("Declined", "Leave",
+                              f"Declined leave for {emp_name}: {hr_note}")
+            return True
+        except Exception as e:
+            traceback.print_exc()
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            return str(e)
+
+    def get_unread_notifications(self, employee_id):
+        """Get unread notifications for an employee."""
+        return self.fetch(
+            "SELECT notification_id, message, created_at FROM notifications "
+            "WHERE employee_id=%s AND is_read=0 ORDER BY created_at DESC",
+            (employee_id,))
+
+    def mark_notifications_read(self, employee_id):
+        """Mark all notifications as read for an employee."""
+        ok = self.exec("UPDATE notifications SET is_read=1 WHERE employee_id=%s AND is_read=0",
+                       (employee_id,))
+        if ok:
+            self.log_activity("Edited", "Notification", f"Marked notifications read for employee #{employee_id}")
+
+    # ── Leave Auto-Expiry ─────────────────────────────────────
+
+    def auto_expire_leaves(self):
+        """Restore employees to Active whose leave_until date has passed."""
+        ok = self.exec(
+            "UPDATE employees SET status='Active', leave_from=NULL, leave_until=NULL "
+            "WHERE status='On Leave' AND leave_until IS NOT NULL AND leave_until <= CURDATE()")
+        if ok:
+            self.log_activity("Edited", "Employee", "Auto-expired past-due leave(s), restored to Active")
+        return ok
+
+    # ── Doctor Schedule Management ────────────────────────────────
+
+    def get_doctor_schedules(self, doctor_id):
+        """Return schedule rows for a doctor."""
+        return self.fetch(
+            "SELECT schedule_id, day_of_week, start_time, end_time "
+            "FROM doctor_schedules WHERE doctor_id=%s ORDER BY FIELD(day_of_week, "
+            "'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')",
+            (doctor_id,))
+
+    def save_doctor_schedules(self, doctor_id, schedules):
+        """Replace all schedules for a doctor.
+        schedules = [{'day': 'Monday', 'start': '08:00', 'end': '17:00'}, ...]"""
+        try:
+            conn = self._get_connection()
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM doctor_schedules WHERE doctor_id=%s", (doctor_id,))
+                for s in schedules:
+                    cur.execute(
+                        "INSERT INTO doctor_schedules (doctor_id, day_of_week, start_time, end_time) "
+                        "VALUES (%s,%s,%s,%s)",
+                        (doctor_id, s['day_of_week'], s['start_time'], s['end_time']))
+                conn.commit()
+            name = self._get_employee_name(doctor_id) or str(doctor_id)
+            self.log_activity("Edited", "Schedule", f"Updated schedule for Dr. {name}")
+            return True
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            return False
+
+    def get_all_doctor_schedules(self):
+        """Return all active doctors' weekly schedules for dashboard display."""
+        return self.fetch("""
+            SELECT e.employee_id, CONCAT(e.first_name,' ',e.last_name) AS doctor_name,
+                   ds.day_of_week,
+                   TIME_FORMAT(ds.start_time, '%h:%i %p') AS start_display,
+                   TIME_FORMAT(ds.end_time, '%h:%i %p') AS end_display
+            FROM employees e
+            INNER JOIN roles r ON e.role_id = r.role_id
+            INNER JOIN doctor_schedules ds ON e.employee_id = ds.doctor_id
+            WHERE r.role_name = 'Doctor' AND e.status = 'Active'
+            ORDER BY e.first_name,
+                     FIELD(ds.day_of_week,'Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')
+        """)
+
+    # ── Paycheck Request System (HR→Finance workflow) ────────────
+
+    def submit_paycheck_request(self, employee_id, amount, period_from, period_until, requested_by_id):
+        """HR submits a paycheck request for an employee. Auto-calculates deductions."""
+        try:
+            deductions = self.calculate_deductions(amount)
+            self.exec(
+                "INSERT INTO paycheck_requests "
+                "(employee_id, amount, sss_deduction, philhealth_deduction, "
+                "hospital_share, net_amount, period_from, period_until, requested_by) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                (employee_id, amount,
+                 deductions["sss_deduction"], deductions["philhealth_deduction"],
+                 deductions["hospital_share"], deductions["net_amount"],
+                 period_from, period_until, requested_by_id))
+            name = self._get_employee_name(employee_id) or str(employee_id)
+            self.log_activity("Created", "Paycheck",
+                              f"Paycheck request for {name}: Gross ₱{float(amount):,.2f} → "
+                              f"Net ₱{deductions['net_amount']:,.2f} ({period_from} to {period_until})")
+            return True
+        except Exception as e:
+            traceback.print_exc()
+            return str(e)
+
+    def get_pending_paycheck_requests(self):
+        """Finance: get all pending paycheck requests."""
+        return self.fetch("""
+            SELECT pr.request_id, pr.employee_id,
+                   CONCAT(e.first_name,' ',e.last_name) AS employee_name,
+                   r.role_name, d.department_name,
+                   e.salary,
+                   pr.amount, pr.sss_deduction, pr.philhealth_deduction,
+                   pr.hospital_share, pr.net_amount,
+                   pr.period_from, pr.period_until,
+                   pr.status, pr.created_at,
+                   CONCAT(h.first_name,' ',h.last_name) AS requested_by_name
+            FROM paycheck_requests pr
+            INNER JOIN employees e ON pr.employee_id = e.employee_id
+            INNER JOIN roles r ON e.role_id = r.role_id
+            INNER JOIN departments d ON e.department_id = d.department_id
+            INNER JOIN employees h ON pr.requested_by = h.employee_id
+            WHERE pr.status = 'Pending'
+            ORDER BY pr.created_at ASC
+        """)
+
+    def get_all_paycheck_requests(self):
+        """Get all paycheck requests (all statuses)."""
+        return self.fetch("""
+            SELECT pr.request_id, pr.employee_id,
+                   CONCAT(e.first_name,' ',e.last_name) AS employee_name,
+                   r.role_name, d.department_name,
+                   e.salary,
+                   pr.amount, pr.sss_deduction, pr.philhealth_deduction,
+                   pr.hospital_share, pr.net_amount,
+                   pr.period_from, pr.period_until,
+                   pr.status, pr.finance_note, pr.decided_at,
+                   pr.disbursed_at, pr.created_at,
+                   CONCAT(h.first_name,' ',h.last_name) AS requested_by_name,
+                   CASE WHEN pr.finance_decided_by IS NOT NULL
+                        THEN (SELECT CONCAT(f.first_name,' ',f.last_name)
+                              FROM employees f WHERE f.employee_id = pr.finance_decided_by)
+                        ELSE NULL END AS decided_by_name
+            FROM paycheck_requests pr
+            INNER JOIN employees e ON pr.employee_id = e.employee_id
+            INNER JOIN roles r ON e.role_id = r.role_id
+            INNER JOIN departments d ON e.department_id = d.department_id
+            INNER JOIN employees h ON pr.requested_by = h.employee_id
+            ORDER BY pr.created_at DESC
+        """)
+
+    def get_employee_activity_for_period(self, employee_id, from_date, to_date):
+        """Return appointments and services for an employee during a period."""
+        return self.fetch("""
+            SELECT a.appointment_id, a.appointment_date, a.appointment_time,
+                   CONCAT(p.first_name,' ',p.last_name) AS patient_name,
+                   s.service_name, s.price, a.status
+            FROM appointments a
+            INNER JOIN patients p ON a.patient_id = p.patient_id
+            INNER JOIN services s ON a.service_id = s.service_id
+            WHERE a.doctor_id = %s
+              AND a.appointment_date BETWEEN %s AND %s
+            ORDER BY a.appointment_date DESC, a.appointment_time DESC
+        """, (employee_id, from_date, to_date))
+
+    def approve_paycheck_request(self, request_id, finance_employee_id, note=""):
+        """Finance approves a paycheck request."""
+        try:
+            conn = self._get_connection()
+            with conn.cursor(dictionary=True) as cur:
+                cur.execute("SELECT * FROM paycheck_requests WHERE request_id=%s AND status='Pending'",
+                            (request_id,))
+                req = cur.fetchone()
+                if not req:
+                    return "Request not found or already decided."
+                cur.execute(
+                    "UPDATE paycheck_requests SET status='Approved', finance_decided_by=%s, "
+                    "finance_note=%s, decided_at=NOW() WHERE request_id=%s",
+                    (finance_employee_id, note, request_id))
+                emp_name = self._get_employee_name(req["employee_id"]) or str(req["employee_id"])
+                # Notify the HR who requested
+                msg = f"Paycheck request for {emp_name} (₱{float(req['amount']):,.2f}) has been approved."
+                cur.execute(
+                    "INSERT INTO notifications (employee_id, message) VALUES (%s, %s)",
+                    (req["requested_by"], msg))
+                conn.commit()
+            self.log_activity("Approved", "Paycheck",
+                              f"Approved paycheck for {emp_name}: ₱{float(req['amount']):,.2f}")
+            return True
+        except Exception as e:
+            traceback.print_exc()
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            return str(e)
+
+    def reject_paycheck_request(self, request_id, finance_employee_id, note):
+        """Finance rejects a paycheck request with a reason."""
+        try:
+            conn = self._get_connection()
+            with conn.cursor(dictionary=True) as cur:
+                cur.execute("SELECT * FROM paycheck_requests WHERE request_id=%s AND status='Pending'",
+                            (request_id,))
+                req = cur.fetchone()
+                if not req:
+                    return "Request not found or already decided."
+                cur.execute(
+                    "UPDATE paycheck_requests SET status='Rejected', finance_decided_by=%s, "
+                    "finance_note=%s, decided_at=NOW() WHERE request_id=%s",
+                    (finance_employee_id, note, request_id))
+                emp_name = self._get_employee_name(req["employee_id"]) or str(req["employee_id"])
+                msg = f"Paycheck request for {emp_name} has been rejected. Reason: {note}"
+                cur.execute(
+                    "INSERT INTO notifications (employee_id, message) VALUES (%s, %s)",
+                    (req["requested_by"], msg))
+                conn.commit()
+            self.log_activity("Rejected", "Paycheck",
+                              f"Rejected paycheck for {emp_name}: {note}")
+            return True
+        except Exception as e:
+            traceback.print_exc()
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            return str(e)
+
+    def disburse_paycheck(self, request_id):
+        """HR marks an approved paycheck as disbursed."""
+        try:
+            conn = self._get_connection()
+            with conn.cursor(dictionary=True) as cur:
+                cur.execute("SELECT * FROM paycheck_requests WHERE request_id=%s AND status='Approved'",
+                            (request_id,))
+                req = cur.fetchone()
+                if not req:
+                    return "Request not found or not yet approved."
+                cur.execute(
+                    "UPDATE paycheck_requests SET status='Disbursed', disbursed_at=NOW() "
+                    "WHERE request_id=%s",
+                    (request_id,))
+                emp_name = self._get_employee_name(req["employee_id"]) or str(req["employee_id"])
+                # Notify the employee
+                msg = f"Your paycheck of ₱{float(req['amount']):,.2f} for period {req['period_from']} to {req['period_until']} has been disbursed."
+                cur.execute(
+                    "INSERT INTO notifications (employee_id, message) VALUES (%s, %s)",
+                    (req["employee_id"], msg))
+                conn.commit()
+            self.log_activity("Edited", "Paycheck",
+                              f"Disbursed paycheck for {emp_name}: ₱{float(req['amount']):,.2f}")
+            return True
+        except Exception as e:
+            traceback.print_exc()
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            return str(e)
+
+    def get_paycheck_history(self, employee_id):
+        """Return all paycheck requests for a specific employee, newest first."""
+        return self.fetch("""
+            SELECT pr.request_id, pr.employee_id,
+                   CONCAT(e.first_name,' ',e.last_name) AS employee_name,
+                   r.role_name, d.department_name, e.salary,
+                   pr.amount, pr.sss_deduction, pr.philhealth_deduction,
+                   pr.hospital_share, pr.net_amount,
+                   pr.period_from, pr.period_until,
+                   pr.status, pr.finance_note, pr.decided_at,
+                   pr.disbursed_at, pr.created_at,
+                   CONCAT(h.first_name,' ',h.last_name) AS requested_by_name,
+                   CASE WHEN pr.finance_decided_by IS NOT NULL
+                        THEN (SELECT CONCAT(f.first_name,' ',f.last_name)
+                              FROM employees f WHERE f.employee_id = pr.finance_decided_by)
+                        ELSE NULL END AS decided_by_name
+            FROM paycheck_requests pr
+            INNER JOIN employees e ON pr.employee_id = e.employee_id
+            INNER JOIN roles r ON e.role_id = r.role_id
+            INNER JOIN departments d ON e.department_id = d.department_id
+            INNER JOIN employees h ON pr.requested_by = h.employee_id
+            WHERE pr.employee_id = %s
+            ORDER BY pr.created_at DESC
+        """, (employee_id,))
+
+    def get_last_disbursed_paycheck(self, employee_id):
+        """Return the most recent disbursed paycheck for an employee."""
+        return self.fetch("""
+            SELECT pr.request_id, pr.period_from, pr.period_until,
+                   pr.amount, pr.net_amount, pr.disbursed_at
+            FROM paycheck_requests pr
+            WHERE pr.employee_id = %s AND pr.status = 'Disbursed'
+            ORDER BY pr.period_until DESC
+            LIMIT 1
+        """, (employee_id,), one=True)
+
+    def submit_partial_paycheck(self, employee_id, full_salary, days_worked, total_days,
+                                period_from, period_until, requested_by_id):
+        """Submit a partial (prorated) paycheck based on days worked in period."""
+        prorated = round(float(full_salary) * days_worked / total_days, 2)
+        return self.submit_paycheck_request(
+            employee_id, prorated, period_from, period_until, requested_by_id)
+
+    # ── Attendance System ──────────────────────────────────────────────────
+
+    def get_all_attendance(self):
+        """Fetch all attendance records for HR."""
+        return self.fetch("""
+            SELECT a.attendance_id, a.employee_id, 
+                   CONCAT(e.first_name, ' ', e.last_name) AS employee_name,
+                   r.role_name,
+                   a.record_date, a.time_in, a.time_out,
+                   a.break_start, a.break_end, a.break_reason,
+                   a.status, a.notes
+            FROM attendance a
+            INNER JOIN employees e ON a.employee_id = e.employee_id
+            INNER JOIN roles r ON e.role_id = r.role_id
+            ORDER BY a.record_date DESC, a.time_in DESC
+        """)
+
+    def get_employee_attendance(self, employee_id):
+        return self.fetch("""
+            SELECT attendance_id, record_date, time_in, time_out, break_start, break_end, break_reason, status, notes
+            FROM attendance
+            WHERE employee_id = %s
+            ORDER BY record_date DESC
+        """, (employee_id,))
+
+    def get_today_attendance(self, employee_id):
+        """Check if an employee has an attendance record for today and include active break status."""
+        att = self.fetch("""
+            SELECT attendance_id, time_in, time_out, status
+            FROM attendance
+            WHERE employee_id = %s AND record_date = CURDATE()
+            LIMIT 1
+        """, (employee_id,), one=True)
+        if not att:
+            return None
+            
+        # Check for any active breaks
+        active_break = self.fetch("""
+            SELECT break_start, break_end, break_reason 
+            FROM attendance_breaks 
+            WHERE attendance_id = %s AND break_end IS NULL
+            ORDER BY break_id DESC LIMIT 1
+        """, (att["attendance_id"],), one=True)
+        
+        if active_break:
+            att["break_start"] = active_break["break_start"]
+            att["break_end"] = active_break["break_end"]
+            att["break_reason"] = active_break["break_reason"]
+        else:
+            att["break_start"] = None
+            att["break_end"] = None
+            att["break_reason"] = None
+            
+        return att
+
+    def clock_in(self, employee_id):
+        """Clock in an employee for today. Resumes shift if previously checked out."""
+        existing = self.get_today_attendance(employee_id)
+        if existing:
+            if existing['time_out'] is None:
+                return "Already checked in today."
+            else:
+                # Resume tracking if they were clocked out (e.g. app crash/accidental close)
+                try:
+                    self.exec("""
+                        UPDATE attendance
+                        SET time_out = NULL
+                        WHERE attendance_id = %s
+                    """, (existing["attendance_id"],))
+                    name = self._get_employee_name(employee_id) or str(employee_id)
+                    self.log_activity("Logged In", "Attendance", f"Resumed shift for {name}")
+                    return True
+                except Exception as e:
+                    traceback.print_exc()
+                    return str(e)
+
+        try:
+            self.exec("""
+                INSERT INTO attendance (employee_id, record_date, time_in, status)
+                VALUES (%s, CURDATE(), CURTIME(), 'Present')
+            """, (employee_id,))
+            name = self._get_employee_name(employee_id) or str(employee_id)
+            self.log_activity("Logged In", "Attendance", f"Automated clock-in for {name}")
+            return True
+        except Exception as e:
+            traceback.print_exc()
+            return str(e)
+
+    def clock_out(self, employee_id):
+        """Clock out an employee for today."""
+        existing = self.get_today_attendance(employee_id)
+        if not existing:
+            # For automatic clock out on end-of-day or logout, if not clocked in, silently ignore.
+            return "No check-in found for today."
+        if existing['time_out']:
+            return "Already checked out today."
+
+        try:
+            self.exec("""
+                UPDATE attendance
+                SET time_out = CURTIME()
+                WHERE attendance_id = %s
+            """, (existing["attendance_id"],))
+            name = self._get_employee_name(employee_id) or str(employee_id)
+            self.log_activity("Logged Out", "Attendance", f"Automated clock-out for {name}")
+            return True
+        except Exception as e:
+            traceback.print_exc()
+            return str(e)
+
+    def start_break(self, employee_id, reason):
+        """Log a break start for a clocked-in employee."""
+        existing = self.get_today_attendance(employee_id)
+        if not existing:
+            return "Must be clocked in to take a break."
+        if existing['time_out']:
+            return "Cannot take a break after clocking out."
+        if existing.get('break_start') and not existing.get('break_end'):
+            return "Already on a break."
+
+        try:
+            self.exec("""
+                INSERT INTO attendance_breaks (attendance_id, break_start, break_reason)
+                VALUES (%s, CURTIME(), %s)
+            """, (existing["attendance_id"], reason))
+            name = self._get_employee_name(employee_id) or str(employee_id)
+            self.log_activity("Break", "Attendance", f"Started break ({reason}) for {name}")
+            return True
+        except Exception as e:
+            traceback.print_exc()
+            return str(e)
+
+    def end_break(self, employee_id):
+        """End an ongoing break."""
+        existing = self.get_today_attendance(employee_id)
+        if not existing or not existing.get('break_start'):
+            return "Not currently on break."
+        if existing.get('break_end'):
+            return "Break already ended."
+
+        try:
+            self.exec("""
+                UPDATE attendance_breaks
+                SET break_end = CURTIME()
+                WHERE attendance_id = %s AND break_end IS NULL
+            """, (existing["attendance_id"],))
+            name = self._get_employee_name(employee_id) or str(employee_id)
+            self.log_activity("Resumed Work", "Attendance", f"Ended break for {name}")
+            return True
+        except Exception as e:
+            traceback.print_exc()
+            return str(e)
+            
+    def update_attendance(self, attendance_id, status, notes=""):
+        """HR manually update an attendance status/note."""
+        try:
+            self.exec("""
+                UPDATE attendance
+                SET status = %s, notes = %s
+                WHERE attendance_id = %s
+            """, (status, notes, attendance_id))
+            return True
+        except Exception as e:
+            traceback.print_exc()
+            return str(e)
