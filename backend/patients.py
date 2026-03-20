@@ -31,7 +31,8 @@ class PatientMixin:
                 return {}
         info = self.fetch("""
             SELECT p.*, GROUP_CONCAT(pc.condition_name SEPARATOR ', ') AS conditions,
-                   dt.type_name AS discount_type
+                   dt.type_name AS discount_type,
+                   COALESCE(dt.discount_percent, 0) AS discount_percent
             FROM patients p 
             LEFT JOIN patient_conditions pc ON p.patient_id = pc.patient_id
             LEFT JOIN discount_types dt ON p.discount_type_id = dt.discount_id

@@ -53,11 +53,12 @@ CREATE TABLE standard_conditions (
 
 -- Discount types (PWD, Senior Citizen, etc.)
 CREATE TABLE discount_types (
-    discount_id      INT AUTO_INCREMENT PRIMARY KEY,
-    type_name        VARCHAR(100) NOT NULL UNIQUE,
-    discount_percent DECIMAL(5, 2) NOT NULL DEFAULT 0.00,
-    legal_basis      VARCHAR(255) DEFAULT '',
-    is_active        TINYINT(1) NOT NULL DEFAULT 1
+    discount_id       INT AUTO_INCREMENT PRIMARY KEY,
+    type_name         VARCHAR(100) NOT NULL UNIQUE,
+    discount_percent  DECIMAL(5, 2) NOT NULL DEFAULT 0.00,
+    legal_basis       VARCHAR(255) DEFAULT '',
+    requires_id_proof TINYINT(1) NOT NULL DEFAULT 0,
+    is_active         TINYINT(1) NOT NULL DEFAULT 1
 );
 
 

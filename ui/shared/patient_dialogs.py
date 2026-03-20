@@ -999,14 +999,26 @@ class PatientProfileDialog(QDialog):
         # ── 3. Administrative (Right) ──────────────────────────
         card3, f3, e3 = _make_card("Administrative", "file-text")
         
-        discount_type = info.get("discount_type")
+        discount_type = info.get("discount_type") or ""
+        discount_pct = float(info.get("discount_percent", 0) or 0)
         notes_val = info.get("notes", "")
-        if not notes_val.strip():
+        if not notes_val or not str(notes_val).strip():
             notes_val = "<span style='font-style:italic; color:#95A5A6;'>No notes available</span>"
-            
-        _add_fields(f3, [
-            ("Discount Type", discount_type),
-        ])
+
+        # ── Discount badge ──────────────────────────────
+        disc_key = QLabel("Discount")
+        disc_key.setObjectName("FieldLabel")
+        if discount_type and discount_type.strip():
+            disc_text = f"🏷  {discount_type} — {discount_pct:.0f}%"
+            disc_val = QLabel(disc_text)
+            disc_val.setStyleSheet(
+                "background-color: #E8F8F5; color: #1ABC9C; padding: 5px 14px;"
+                " border-radius: 12px; font-weight: bold; font-size: 13px;")
+        else:
+            disc_val = QLabel("No discount assigned")
+            disc_val.setObjectName("FieldValue")
+            disc_val.setStyleSheet("font-style: italic; color: #95A5A6; font-size: 13px;")
+        f3.addRow(disc_key, disc_val)
         
         notes_lbl = QLabel("Notes")
         notes_lbl.setObjectName("FieldLabel")

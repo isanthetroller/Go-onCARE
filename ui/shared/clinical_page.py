@@ -373,7 +373,18 @@ class ClinicalPage(QWidget):
                 QMessageBox.information(self, "Called",
                     f"Now seeing: {entry.get('patient_name', 'Unknown')}")
         else:
-            msg = "No waiting patients to triage." if self._role == "Nurse" else "No waiting patients in queue."
+            if self._role == "Doctor":
+                has_untriaged = any(
+                    self._queue_table.item(r, 7) and self._queue_table.item(r, 7).text() == "Waiting"
+                    for r in range(self._queue_table.rowCount())
+                    if not doc_id or (r < len(self._queue_doctor_ids) and self._queue_doctor_ids[r] == doc_id)
+                )
+                if has_untriaged:
+                    msg = "The next patient is currently awaiting Nurse Triage. You cannot accept them yet."
+                else:
+                    msg = "No triaged patients in queue."
+            else:
+                msg = "No waiting patients to triage." if self._role == "Nurse" else "No matching patients in queue."
             QMessageBox.information(self, "Queue", msg)
 
     def _on_edit_queue(self, row):

@@ -8,6 +8,7 @@ from backend.db_config import DB_CONFIG
 class DatabaseBase:
     DB_CONFIG = DB_CONFIG
     _pool = None  # shared across all instances
+    _schema_checked = False  # skip repeated _ensure_schema calls
 
     def __init__(self):
         self._current_user_email = ""
@@ -73,6 +74,8 @@ class DatabaseBase:
     # ── Schema auto-migration ──────────────────────────────────────
     def _ensure_schema(self):
         """Create any missing tables or columns so the app works on older DBs."""
+        if DatabaseBase._schema_checked:
+            return
         conn = None
         try:
             conn = self._get_connection()
@@ -84,6 +87,7 @@ class DatabaseBase:
                         type_name        VARCHAR(100) NOT NULL UNIQUE,
                         discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0.00,
                         legal_basis      VARCHAR(255) DEFAULT '',
+                        requires_id_proof TINYINT(1) NOT NULL DEFAULT 0,
                         is_active        TINYINT(1) NOT NULL DEFAULT 1
                     )
                 """)
@@ -309,12 +313,19 @@ class DatabaseBase:
                             "INSERT INTO users (email, password, full_name, role_id, must_change_password) "
                             "VALUES ('finance@carecrud.com', 'finance123', 'Maria Garcia', %s, 0)",
                             (fin_role_id,))
+
+                # requires_id_proof column on discount_types
+                cur.execute("SHOW COLUMNS FROM discount_types LIKE 'requires_id_proof'")
+                if not cur.fetchone():
+                    cur.execute("ALTER TABLE discount_types ADD COLUMN requires_id_proof TINYINT(1) NOT NULL DEFAULT 0")
+
                 conn.commit()
         except Exception:
             pass
         finally:
             if conn:
                 conn.close()
+        DatabaseBase._schema_checked = True
 
     # ── Query helpers ──────────────────────────────────────────────
     def fetch(self, sql, params=None, one=False):
