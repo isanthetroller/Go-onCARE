@@ -115,7 +115,7 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(1500, self._check_notifications)
             self._notif_timer = QTimer(self)
             self._notif_timer.timeout.connect(self._check_notifications)
-            self._notif_timer.start(15_000)
+            self._notif_timer.start(60_000)
 
         # ── Auto-expire leaves past their end date ────────────────────
         try:
@@ -285,6 +285,9 @@ class MainWindow(QMainWindow):
         self._search_bar.setMinimumHeight(36)
         self._search_bar.returnPressed.connect(self._on_global_search)
         lay.addWidget(self._search_bar)
+        
+        if self._role != "Admin":
+            self._search_bar.hide()
 
         return bar
 

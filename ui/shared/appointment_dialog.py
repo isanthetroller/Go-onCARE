@@ -805,15 +805,439 @@ class AppointmentDialog(QDialog):
             "doctor":       doc_text,
             "doctor_id":    self.doctor_combo.currentData(),
             "date":         appt_date,
-            "time":         self.time_edit.time().toString(
-                                "HH:mm:ss"),
+            "time":         self.time_edit.time().toString("HH:mm:ss"),
             "purpose":      self.purpose_combo.currentText(),
             "service_id":   self.purpose_combo.currentData(),
-            "status":       (self.status_combo.currentText()
-                             if self._is_edit else "Confirmed"),
+            "status":       (self.status_combo.currentText() if self._is_edit else "Confirmed"),
             "notes":        self.notes_edit.toPlainText(),
-            "cancellation_reason": (
-                self.cancel_reason.text()
-                if self._is_edit else ""),
+            "cancellation_reason": (self.cancel_reason.text() if self._is_edit else ""),
             "reschedule_reason": "",
         }
+
+# ══════════════════════════════════════════════════════════════════════
+#  Appointment Details Dialog (Modern read-only view)
+# ══════════════════════════════════════════════════════════════════════
+class AppointmentDetailsDialog(QDialog):
+    def __init__(self, parent=None, appt: dict = None):
+        super().__init__(parent)
+        self.setWindowTitle("Appointment Details")
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
+        self.setMinimumWidth(460)
+        
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #F4F7F9;
+            }
+            QFrame#MainCard {
+                background-color: #FFFFFF;
+                border-radius: 12px;
+                border: 1px solid #E1E8ED;
+            }
+            QLabel#TitleLabel {
+                font-size: 18px;
+                font-weight: 700;
+                color: #2C3E50;
+            }
+            QLabel#FieldLabel {
+                font-size: 13px;
+                font-weight: 600;
+                color: #7F8C8D;
+                padding-right: 16px;
+            }
+            QLabel#FieldValue {
+                font-size: 14px;
+                font-weight: 500;
+                color: #2C3E50;
+            }
+            QLabel#PatientName {
+                font-size: 16px;
+                font-weight: 700;
+                color: #1A252F;
+            }
+            /* Status Pills */
+            QLabel#StatusConfirmed {
+                background-color: #D1E7DD; color: #0F5132;
+                border-radius: 12px; padding: 4px 12px;
+                font-size: 12px; font-weight: bold;
+            }
+            QLabel#StatusPending {
+                background-color: #FFF3CD; color: #664D03;
+                border-radius: 12px; padding: 4px 12px;
+                font-size: 12px; font-weight: bold;
+            }
+            QLabel#StatusCancelled {
+                background-color: #F8D7DA; color: #842029;
+                border-radius: 12px; padding: 4px 12px;
+                font-size: 12px; font-weight: bold;
+            }
+            QLabel#StatusCompleted {
+                background-color: #CFF4FC; color: #055160;
+                border-radius: 12px; padding: 4px 12px;
+                font-size: 12px; font-weight: bold;
+            }
+            QLabel#StatusDefault {
+                background-color: #E2E3E5; color: #41464A;
+                border-radius: 12px; padding: 4px 12px;
+                font-size: 12px; font-weight: bold;
+            }
+            /* OK Button */
+            QPushButton#OkButton {
+                background-color: #388087;
+                color: white;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: 600;
+                border: none;
+            }
+            QPushButton#OkButton:hover {
+                background-color: #2C6B71;
+            }
+            QPushButton#OkButton:pressed {
+                background-color: #1F5257;
+            }
+            /* Multi-line fields like notes */
+            QTextEdit#NotesField {
+                background-color: #F9FAFC;
+                border: 1px solid #E1E8ED;
+                border-radius: 6px;
+                padding: 8px;
+                color: #34495E;
+                font-size: 13px;
+            }
+        """)
+        
+        appt = appt or {}
+        time_str = str(appt.get('appointment_time', ''))
+        try:
+            from datetime import datetime
+            t = datetime.strptime(time_str, "%H:%M:%S")
+            time_display = t.strftime("%I:%M %p").lstrip("0")
+        except Exception: 
+            time_display = time_str
+            
+        date_display = _pretty_date(str(appt.get('appointment_date', '')))
+        
+        main_lay = QVBoxLayout(self)
+        main_lay.setContentsMargins(24, 24, 24, 24)
+        main_lay.setSpacing(20)
+        
+        # -- Main Card Container --
+        card = QFrame()
+        card.setObjectName("MainCard")
+        # Apply drop shadow effect
+        from PyQt6.QtWidgets import QGraphicsDropShadowEffect
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(16)
+        shadow.setColor(QColor(0, 0, 0, 15))
+        shadow.setOffset(0, 4)
+        card.setGraphicsEffect(shadow)
+        
+        card_lay = QVBoxLayout(card)
+        card_lay.setContentsMargins(0, 0, 0, 0)
+        card_lay.setSpacing(0)
+        
+        # Header Area (Icon + Title + Status)
+        hdr_w = QWidget()
+        hdr_lay = QHBoxLayout(hdr_w)
+        hdr_lay.setContentsMargins(24, 24, 24, 20)
+        hdr_lay.setSpacing(16)
+        
+        # Soft circle icon container
+        import os
+        from PyQt6.QtSvgWidgets import QSvgWidget
+        icon_container = QFrame()
+        icon_container.setFixedSize(48, 48)
+        icon_container.setStyleSheet("background-color: #E6F0F2; border-radius: 24px;")
+        
+        icon_lay = QVBoxLayout(icon_container)
+        icon_lay.setContentsMargins(12, 12, 12, 12)
+        
+        svg_path = os.path.join(os.path.dirname(__file__), "..", "styles", "icon-info.svg")
+        icon_widget = QSvgWidget(os.path.normpath(svg_path))
+        icon_widget.setFixedSize(24, 24)
+        icon_widget.setStyleSheet("background: transparent;")
+        
+        icon_lay.addWidget(icon_widget, alignment=Qt.AlignmentFlag.AlignCenter)
+        hdr_lay.addWidget(icon_container, alignment=Qt.AlignmentFlag.AlignTop)
+        
+        # Title and Patient Name
+        title_col = QVBoxLayout()
+        title_col.setSpacing(4)
+        
+        title_lbl = QLabel("Appointment Details")
+        title_lbl.setObjectName("TitleLabel")
+        patient_lbl = QLabel(appt.get('patient_name', 'Unknown Patient'))
+        patient_lbl.setObjectName("PatientName")
+        
+        title_col.addWidget(title_lbl)
+        title_col.addWidget(patient_lbl)
+        hdr_lay.addLayout(title_col)
+        hdr_lay.addStretch()
+        
+        # Status Pill
+        status_val = appt.get('status', 'Pending')
+        status_lbl = QLabel(status_val.upper())
+        status_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        if status_val == "Confirmed":
+            status_lbl.setObjectName("StatusConfirmed")
+        elif status_val == "Pending":
+            status_lbl.setObjectName("StatusPending")
+        elif status_val == "Cancelled":
+            status_lbl.setObjectName("StatusCancelled")
+        elif status_val == "Completed":
+            status_lbl.setObjectName("StatusCompleted")
+        else:
+            status_lbl.setObjectName("StatusDefault")
+        hdr_lay.addWidget(status_lbl, alignment=Qt.AlignmentFlag.AlignTop)
+        
+        card_lay.addWidget(hdr_w)
+        
+        # Divider
+        div = QFrame()
+        div.setFrameShape(QFrame.Shape.HLine)
+        div.setStyleSheet("background-color: #F0F4F7; border: none;")
+        div.setFixedHeight(1)
+        card_lay.addWidget(div)
+        
+        # Details Grid
+        details_w = QWidget()
+        details_lay = QFormLayout(details_w)
+        details_lay.setContentsMargins(24, 24, 24, 24)
+        details_lay.setHorizontalSpacing(16)
+        details_lay.setVerticalSpacing(16)
+        
+        def _add_row(label, val):
+            k = QLabel(label)
+            k.setObjectName("FieldLabel")
+            v = QLabel(str(val))
+            v.setObjectName("FieldValue")
+            v.setWordWrap(True)
+            details_lay.addRow(k, v)
+            
+        _add_row("Doctor", appt.get('doctor_name', ''))
+        _add_row("Date", date_display)
+        _add_row("Time", time_display)
+        _add_row("Service", appt.get('service_name', ''))
+        
+        notes = appt.get("notes", "") or ""
+        cancel_reason = appt.get("cancellation_reason", "") or ""
+        
+        card_lay.addWidget(details_w)
+        
+        # Optional Notes Section
+        if notes or cancel_reason:
+            notes_w = QWidget()
+            notes_lay = QVBoxLayout(notes_w)
+            notes_lay.setContentsMargins(24, 0, 24, 24)
+            notes_lay.setSpacing(12)
+            
+            if notes:
+                n_lbl = QLabel("Notes")
+                n_lbl.setObjectName("FieldLabel")
+                n_val = QTextEdit(notes)
+                n_val.setObjectName("NotesField")
+                n_val.setReadOnly(True)
+                n_val.setMaximumHeight(60)
+                notes_lay.addWidget(n_lbl)
+                notes_lay.addWidget(n_val)
+                
+            if cancel_reason:
+                c_lbl = QLabel("Cancellation Reason")
+                c_lbl.setObjectName("FieldLabel")
+                c_val = QTextEdit(cancel_reason)
+                c_val.setObjectName("NotesField")
+                c_val.setReadOnly(True)
+                c_val.setMaximumHeight(60)
+                c_val.setStyleSheet("QTextEdit#NotesField { border: 1px solid #F8D7DA; background-color: #FFF5F6; }")
+                notes_lay.addWidget(c_lbl)
+                notes_lay.addWidget(c_val)
+                
+            card_lay.addWidget(notes_w)
+            
+        main_lay.addWidget(card)
+        
+        # Button Row
+        btn_lay = QHBoxLayout()
+        btn_lay.addStretch()
+        
+        ok_btn = QPushButton("OK")
+        ok_btn.setObjectName("OkButton")
+        ok_btn.setMinimumSize(100, 40)
+        ok_btn.clicked.connect(self.accept)
+        ok_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        
+        btn_lay.addWidget(ok_btn)
+        main_lay.addLayout(btn_lay)
+
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  Cancel Appointment Dialog (Modern UI)
+# ══════════════════════════════════════════════════════════════════════
+class CancelAppointmentDialog(QDialog):
+    def __init__(self, parent=None, patient_name: str = "Unknown"):
+        from PyQt6.QtCore import Qt
+        super().__init__(parent)
+        self.setWindowTitle("Cancel Appointment")
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
+        self.setMinimumWidth(480)
+        
+        # Modern QSS Styling
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #F5F7FA;
+            }
+            QFrame#MainCard {
+                background-color: #FFFFFF;
+                border-radius: 12px;
+                border: 1px solid #DCDCDC;
+            }
+            QLabel#Breadcrumb {
+                font-size: 11px;
+                font-weight: 500;
+                color: #8A98A5;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+            QLabel#TitleLabel {
+                font-size: 20px;
+                font-weight: 800;
+                color: #2C3E50;
+            }
+            QLabel#SubtitleLabel {
+                font-size: 15px;
+                font-weight: 600;
+                color: #34495E;
+            }
+            QLabel#ReasonLabel {
+                font-size: 13px;
+                font-weight: 600;
+                color: #2C3E50;
+            }
+            QTextEdit#ReasonText {
+                background-color: #FFFFFF;
+                border: 1px solid #DCDCDC;
+                border-radius: 8px;
+                padding: 10px;
+                font-size: 14px;
+                color: #2C3E50;
+            }
+            QTextEdit#ReasonText:focus {
+                border: 2px solid #388087;
+                background-color: #F8FBFC;
+            }
+            QPushButton#ConfirmBtn {
+                background-color: #E74C3C;
+                color: white;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: 600;
+                padding: 10px 20px;
+                border: none;
+            }
+            QPushButton#ConfirmBtn:hover {
+                background-color: #C0392B;
+            }
+            QPushButton#ConfirmBtn:pressed {
+                background-color: #A93226;
+            }
+            QPushButton#GoBackBtn {
+                background-color: transparent;
+                color: #7F8C8D;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: 600;
+                padding: 10px 20px;
+                border: 1px solid #DCDCDC;
+            }
+            QPushButton#GoBackBtn:hover {
+                background-color: #F0F3F4;
+                color: #34495E;
+            }
+            QPushButton#GoBackBtn:pressed {
+                background-color: #E5E8E8;
+            }
+        """)
+
+        main_lay = QVBoxLayout(self)
+        main_lay.setContentsMargins(24, 24, 24, 24)
+        main_lay.setSpacing(0)
+        
+        # Card Container
+        card = QFrame()
+        card.setObjectName("MainCard")
+        # Optional subtle drop shadow
+        from PyQt6.QtWidgets import QGraphicsDropShadowEffect
+        from PyQt6.QtGui import QColor
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor(0, 0, 0, 10))
+        shadow.setOffset(0, 4)
+        card.setGraphicsEffect(shadow)
+        
+        card_lay = QVBoxLayout(card)
+        card_lay.setContentsMargins(24, 24, 24, 24)
+        card_lay.setSpacing(20)
+        
+        # --- Header Section ---
+        header_lay = QVBoxLayout()
+        header_lay.setSpacing(6)
+        
+        breadcrumb = QLabel("Appointments > Cancel Appointment")
+        breadcrumb.setObjectName("Breadcrumb")
+        
+        title = QLabel("Cancel Appointment")
+        title.setObjectName("TitleLabel")
+        
+        subtitle = QLabel(patient_name)
+        subtitle.setObjectName("SubtitleLabel")
+        
+        header_lay.addWidget(breadcrumb)
+        header_lay.addWidget(title)
+        header_lay.addWidget(subtitle)
+        
+        card_lay.addLayout(header_lay)
+        
+        # --- Body Section ---
+        body_lay = QVBoxLayout()
+        body_lay.setSpacing(8)
+        
+        reason_lbl = QLabel("Cancellation Reason")
+        reason_lbl.setObjectName("ReasonLabel")
+        
+        self.reason_text = QTextEdit()
+        self.reason_text.setObjectName("ReasonText")
+        self.reason_text.setPlaceholderText("Enter reason for cancellation...")
+        self.reason_text.setMinimumHeight(100)
+        self.reason_text.setMaximumHeight(140)
+        
+        body_lay.addWidget(reason_lbl)
+        body_lay.addWidget(self.reason_text)
+        
+        card_lay.addLayout(body_lay)
+        
+        # --- Button Row ---
+        btn_lay = QHBoxLayout()
+        btn_lay.setSpacing(12)
+        btn_lay.addStretch()
+        
+        go_back_btn = QPushButton("Go Back")
+        go_back_btn.setObjectName("GoBackBtn")
+        go_back_btn.setMinimumHeight(42)
+        go_back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        go_back_btn.clicked.connect(self.reject)
+        
+        confirm_btn = QPushButton("Confirm Cancellation")
+        confirm_btn.setObjectName("ConfirmBtn")
+        confirm_btn.setMinimumHeight(42)
+        confirm_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        confirm_btn.clicked.connect(self.accept)
+        
+        btn_lay.addWidget(go_back_btn)
+        btn_lay.addWidget(confirm_btn)
+        
+        card_lay.addLayout(btn_lay)
+        main_lay.addWidget(card)
+        
+    def get_reason(self) -> str:
+        return self.reason_text.toPlainText().strip()

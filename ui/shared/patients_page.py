@@ -35,7 +35,7 @@ class PatientsPage(QWidget):
         # Auto-refresh data every 10 seconds
         self._refresh_timer = QTimer(self)
         self._refresh_timer.timeout.connect(self._load_from_db)
-        self._refresh_timer.start(10_000)
+        self._refresh_timer.start(300_000)
 
     def get_patient_names(self) -> list[str]:
         names = []
@@ -177,7 +177,7 @@ class PatientsPage(QWidget):
                 view_btn = make_table_btn("View")
                 view_btn.clicked.connect(lambda checked, ri=r: self._on_view(ri))
                 if self._role == "Doctor":
-                    self.table.setCellWidget(r, len(values), make_action_cell(view_btn))
+                    self.table.setCellWidget(r, len(values), self._make_centered_action_cell(view_btn))
                 else:
                     edit_btn = make_table_btn("Edit")
                     edit_btn.clicked.connect(lambda checked, ri=r: self._on_edit(ri))
@@ -190,6 +190,17 @@ class PatientsPage(QWidget):
                 view_btn.clicked.connect(lambda checked, ri=r: self._on_view(ri))
                 self.table.setCellWidget(r, len(values), make_action_cell(view_btn))
         self.table.setSortingEnabled(True)
+
+    def _make_centered_action_cell(self, *btns):
+        from PyQt6.QtWidgets import QWidget, QHBoxLayout
+        from PyQt6.QtCore import Qt
+        w = QWidget()
+        lay = QHBoxLayout(w)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        for b in btns:
+            lay.addWidget(b)
+        return w
 
     # ── Filters ────────────────────────────────────────────────────
     def _apply_filters(self, _=None):

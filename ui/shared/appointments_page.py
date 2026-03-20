@@ -40,7 +40,7 @@ class AppointmentsPage(QWidget):
         # Auto-refresh data every 10 seconds
         self._refresh_timer = QTimer(self)
         self._refresh_timer.timeout.connect(self._load_from_db)
-        self._refresh_timer.start(10_000)
+        self._refresh_timer.start(300_000)
 
     def set_patient_names(self, names: list[str]):
         self._patient_names = names
@@ -270,13 +270,23 @@ class AppointmentsPage(QWidget):
                         cancel_btn = make_table_btn_danger("Cancel")
                         cancel_btn.clicked.connect(lambda checked, a=appt: self._on_cancel(a))
                         btns.append(cancel_btn)
-                    self.table.setCellWidget(r, col_count - 1, make_action_cell(*btns))
+                    self.table.setCellWidget(r, col_count - 1, self._make_centered_action_cell(*btns))
                 else:
                     edit_btn = make_table_btn("Edit")
                     edit_btn.clicked.connect(lambda checked, a=appt: self._on_edit(a))
-                    self.table.setCellWidget(r, col_count - 1, make_action_cell(edit_btn))
+                    self.table.setCellWidget(r, col_count - 1, self._make_centered_action_cell(edit_btn))
         self._summary_label.setText(f"Showing {len(rows)} appointment{'s' if len(rows)!=1 else ''}")
         self._apply_filters()
+
+    def _make_centered_action_cell(self, *btns) -> QWidget:
+        w = QWidget()
+        lay = QHBoxLayout(w)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(8)
+        lay.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        for b in btns:
+            lay.addWidget(b)
+        return w
 
     def _apply_filters(self, _=None):
         search = self.search.text().lower()
@@ -411,25 +421,9 @@ class AppointmentsPage(QWidget):
             QMessageBox.information(self, "Success", f"Appointment for '{d['patient_name']}' updated.")
 
     def _on_view(self, appt: dict):
-        time_str = str(appt.get("appointment_time", ""))
-        try:
-            t = datetime.strptime(time_str, "%H:%M:%S"); time_display = t.strftime("%I:%M %p")
-        except Exception: time_display = time_str
-        info = (
-            f"Patient:  {appt.get('patient_name', '')}"
-            f"\nDoctor:   {appt.get('doctor_name', '')}"
-            f"\nDate:     {_pretty_date(str(appt.get('appointment_date', '')))}"
-            f"\nTime:     {time_display}"
-            f"\nService:  {appt.get('service_name', '')}"
-            f"\nStatus:   {appt.get('status', '')}"
-        )
-        notes = appt.get("notes", "") or ""
-        if notes:
-            info += f"\n\nNotes:\n{notes}"
-        cancel_reason = appt.get("cancellation_reason", "") or ""
-        if cancel_reason:
-            info += f"\n\nCancellation Reason:\n{cancel_reason}"
-        QMessageBox.information(self, "Appointment Details", info)
+        from ui.shared.appointment_dialog import AppointmentDetailsDialog
+        dlg = AppointmentDetailsDialog(self, appt)
+        dlg.exec()
 
     def _on_confirm(self, appt: dict):
         appt_id = appt.get("appointment_id")
@@ -457,10 +451,12 @@ class AppointmentsPage(QWidget):
         patient = appt.get("patient_name", "")
         if not self._backend or not appt_id:
             return
-        reason, ok = QInputDialog.getMultiLineText(
-            self, "Cancel Appointment",
-            f"Reason for cancelling {patient}'s appointment:", "")
-        if not ok:
+        from ui.shared.appointment_dialog import CancelAppointmentDialog
+        dlg = CancelAppointmentDialog(self, patient)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        reason = dlg.get_reason()
+        if not reason:
             return
         self._backend.exec(
             "UPDATE appointments SET status='Cancelled', cancellation_reason=%s WHERE appointment_id=%s",

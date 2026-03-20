@@ -27,7 +27,7 @@ class SettingsPage(QWidget):
         # Auto-refresh data every 10 seconds
         self._refresh_timer = QTimer(self)
         self._refresh_timer.timeout.connect(self._refresh_counts)
-        self._refresh_timer.start(10_000)
+        self._refresh_timer.start(300_000)
 
     # ── UI ─────────────────────────────────────────────────────────────
     def _build(self):

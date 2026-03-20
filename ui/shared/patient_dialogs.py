@@ -388,6 +388,10 @@ class PatientDialog(QDialog):
         self._cond_search.textChanged.connect(self._filter_conditions)
         self._cond_section.addWidget(self._cond_search)
 
+        self.cond_custom = self._input(
+            "Other conditions (comma-separated)")
+        self.cond_custom.setMaxLength(300)
+
         self._cond_checkboxes = []
         self._cond_frame = QFrame()
         self._cond_frame.setStyleSheet(
@@ -398,11 +402,8 @@ class PatientDialog(QDialog):
         self._cond_grid.setHorizontalSpacing(8)
         self._cond_grid.setVerticalSpacing(8)
         self._load_standard_conditions(data, self._cond_grid)
+        
         self._cond_section.addWidget(self._cond_frame, 1)
-
-        self.cond_custom = self._input(
-            "Other conditions (comma-separated)")
-        self.cond_custom.setMaxLength(300)
         self._cond_section.addWidget(self.cond_custom)
 
         # ── Bottom: Notes ─────────────────────────────────────────
@@ -701,21 +702,86 @@ class PatientProfileDialog(QDialog):
                  role: str = "Admin"):
         super().__init__(parent)
         self.setWindowTitle("Patient Profile")
-        self.setMinimumSize(720, 520)
+        self.setMinimumSize(920, 680)
+        
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #F4F7F9;
+            }
+            QTabWidget::pane {
+                border: 1px solid #E1E8ED;
+                border-radius: 6px;
+                background: #FFFFFF;
+                top: -1px;
+            }
+            QTabBar::tab {
+                background: transparent;
+                color: #95A5A6;
+                padding: 12px 24px;
+                font-size: 14px;
+                font-weight: 500;
+                border-bottom: 3px solid transparent;
+                margin-right: 4px;
+            }
+            QTabBar::tab:hover {
+                color: #2C3E50;
+                border-bottom: 3px solid #D5E2E6;
+            }
+            QTabBar::tab:selected {
+                color: #20878F;
+                font-weight: 700;
+                border-bottom: 3px solid #20878F;
+            }
+            QFrame#ProfileCard {
+                background-color: #FFFFFF;
+                border-radius: 8px;
+                border: 1px solid #E5EBED;
+            }
+            QFrame#ProfileCard:hover {
+                border: 1px solid #C9D9DC;
+            }
+            QLabel#CardTitle {
+                font-size: 15px; 
+                font-weight: 700; 
+                color: #2C3E50;
+            }
+            QLabel#FieldLabel {
+                color: #7F8C8D; 
+                font-size: 13px; 
+                font-weight: 600;
+            }
+            QLabel#FieldValue {
+                color: #1A252F; 
+                font-size: 13px;
+                font-weight: 400;
+            }
+            QLabel#IDImageContainer {
+                border: 1px solid #E1E8ED; 
+                border-radius: 6px; 
+                padding: 4px; 
+                background: #FAFCFD;
+            }
+        """)
+
         p = profile or {}
         info = p.get("info", {})
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(20, 20, 20, 20)
+        lay.setContentsMargins(24, 24, 24, 24)
+        lay.setSpacing(16)
 
         # Header
+        from PyQt6.QtWidgets import QHBoxLayout
+        hdr_lay = QHBoxLayout()
         name = (f"{info.get('first_name', '')}"
                 f" {info.get('last_name', '')}")
         hdr = QLabel(
-            f"<b style='font-size:18px'>{name}</b>  "
-            f"<span style='color:#7F8C8D'>"
-            f"{info.get('status', '')}</span>")
+            f"<b style='font-size:24px; color:#1A252F;'>{name}</b>  "
+            f"<span style='color:#7F8C8D; font-size:14px; font-weight: 500;'>"
+            f"&nbsp;&bull;&nbsp; {info.get('status', '')}</span>")
         hdr.setTextFormat(Qt.TextFormat.RichText)
-        lay.addWidget(hdr)
+        hdr_lay.addWidget(hdr)
+        hdr_lay.addStretch()
+        lay.addLayout(hdr_lay)
 
         tabs = QTabWidget()
         tabs.addTab(self._info_tab(info), "Info")
@@ -760,56 +826,164 @@ class PatientProfileDialog(QDialog):
         close_btn = QPushButton("Close")
         close_btn.setObjectName("dialogSaveBtn")
         close_btn.setMinimumHeight(38)
+        close_btn.setMinimumWidth(120)
         close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         close_btn.clicked.connect(self.accept)
         lay.addWidget(close_btn,
                       alignment=Qt.AlignmentFlag.AlignRight)
 
     def _info_tab(self, info: dict) -> QWidget:
-        w = QWidget(); form = QFormLayout(w)
-        form.setSpacing(8)
-        form.setContentsMargins(16, 16, 16, 16)
-        fields = [
-            ("Patient ID",
-             f"PT-{info.get('patient_id', 0):04d}"),
-            ("Sex",              info.get("sex", "")),
-            ("Date of Birth",
-             str(info.get("date_of_birth", ""))),
-            ("Phone",            info.get("phone", "") or "\u2014"),
-            ("Email",            info.get("email", "") or "\u2014"),
-            ("Address",          info.get("address", "") or "\u2014"),
-            ("Civil Status",
-             info.get("civil_status", "") or "\u2014"),
-            ("Emergency Contact",
-             info.get("emergency_contact", "") or "\u2014"),
-            ("Blood Type",
-             info.get("blood_type", "") or "Unknown"),
-            ("Conditions",
-             info.get("conditions", "") or "None"),
-            ("Notes",            info.get("notes", "") or "\u2014"),
-        ]
-        for label, val in fields:
-            form.addRow(f"<b>{label}:</b>", QLabel(str(val)))
+        from PyQt6.QtWidgets import QScrollArea, QSizePolicy
+        # Use a scroll area for the info tab to prevent overflow
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setStyleSheet("QScrollArea { background: #FFFFFF; border: none; }")
+        
+        w = QWidget()
+        w.setStyleSheet("QWidget { background: #FFFFFF; }")
+        scroll.setWidget(w)
+        
+        main_lay = QHBoxLayout(w)
+        main_lay.setContentsMargins(24, 24, 24, 24)
+        main_lay.setSpacing(24)
+        
+        left_col = QVBoxLayout()
+        left_col.setSpacing(24)
+        right_col = QVBoxLayout()
+        right_col.setSpacing(24)
+        
+        main_lay.addLayout(left_col, 55)
+        main_lay.addLayout(right_col, 45)
+        
+        def _make_card(title, icon_name):
+            from ui.icons import get_icon
+            from PyQt6.QtGui import QColor
+            from PyQt6.QtCore import Qt
             
+            card = QFrame()
+            card.setObjectName("ProfileCard")
+            
+            card_lay = QVBoxLayout(card)
+            card_lay.setContentsMargins(20, 20, 20, 24)
+            card_lay.setSpacing(16)
+            
+            hdr_w = QWidget()
+            hdr_lay = QHBoxLayout(hdr_w)
+            hdr_lay.setContentsMargins(0, 0, 0, 0)
+            hdr_lay.setSpacing(10)
+            
+            icon_lbl = QLabel()
+            icon_lbl.setPixmap(get_icon(icon_name, color=QColor("#20878F")).pixmap(18, 18))
+            hdr_lay.addWidget(icon_lbl)
+            
+            lbl = QLabel(title)
+            lbl.setObjectName("CardTitle")
+            hdr_lay.addWidget(lbl)
+            hdr_lay.addStretch()
+            
+            card_lay.addWidget(hdr_w)
+            
+            line = QFrame()
+            line.setFrameShape(QFrame.Shape.HLine)
+            line.setStyleSheet("background-color: #F0F4F7; border: none;")
+            line.setFixedHeight(1)
+            card_lay.addWidget(line)
+            
+            form_w = QWidget()
+            form_lay = QFormLayout(form_w)
+            form_lay.setContentsMargins(0, 0, 0, 0)
+            form_lay.setHorizontalSpacing(24)
+            form_lay.setVerticalSpacing(12)
+            card_lay.addWidget(form_w)
+            
+            extra_lay = QVBoxLayout()
+            extra_lay.setSpacing(12)
+            card_lay.addLayout(extra_lay)
+            
+            return card, form_lay, extra_lay
+
+        def _add_fields(form_lay, fields_list):
+            for label, val in fields_list:
+                val_lbl = QLabel(str(val))
+                val_lbl.setObjectName("FieldValue")
+                val_lbl.setWordWrap(True)
+                
+                key_lbl = QLabel(label)
+                key_lbl.setObjectName("FieldLabel")
+                form_lay.addRow(key_lbl, val_lbl)
+
+        # ── 1. Personal & Contact Info (Left) ─────────────────
+        card1, f1, _ = _make_card("Personal Details", "user")
+        _add_fields(f1, [
+            ("Patient ID", f"PT-{info.get('patient_id', 0):04d}"),
+            ("Sex", info.get("sex", "")),
+            ("Date of Birth", str(info.get("date_of_birth", ""))),
+            ("Civil Status", info.get("civil_status", "") or "\u2014"),
+            ("Phone", info.get("phone", "") or "\u2014"),
+            ("Email", info.get("email", "") or "\u2014"),
+            ("Address", info.get("address", "") or "\u2014"),
+            ("Emerg. Contact", info.get("emergency_contact", "") or "\u2014"),
+        ])
+        left_col.addWidget(card1)
+
+        # ── 2. Medical Information (Left) ─────────────────────
+        card2, f2, _ = _make_card("Medical Overview", "activity")
+        _add_fields(f2, [
+            ("Blood Type", info.get("blood_type", "") or "Unknown"),
+            ("Conditions", info.get("conditions", "") or "None"),
+        ])
+        left_col.addWidget(card2)
+        left_col.addStretch(1)
+
+        # ── 3. Administrative (Right) ──────────────────────────
+        card3, f3, e3 = _make_card("Administrative", "file-text")
+        
+        discount_type = info.get("discount_type")
+        if not discount_type:
+            discount_type = "None"
+            
+        _add_fields(f3, [
+            ("Status", info.get("status", "Active")),
+            ("Discount Type", discount_type),
+            ("Notes", info.get("notes", "") or "\u2014"),
+        ])
+        
         id_proof = info.get("id_proof_path")
         if id_proof:
             import os
-            from PyQt6.QtGui import QPixmap
+            from PyQt6.QtGui import QPixmap, QCursor
             from PyQt6.QtCore import Qt
             if os.path.exists(id_proof):
                 pix = QPixmap(id_proof)
                 if not pix.isNull():
-                    pix = pix.scaled(300, 200, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                    pix = pix.scaled(150, 150, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                     img_lbl = QLabel()
+                    img_lbl.setObjectName("IDImageContainer")
                     img_lbl.setPixmap(pix)
-                    img_lbl.setStyleSheet("border: 1px solid #BADFE7; border-radius: 4px; padding: 2px;")
-                    form.addRow("<b>ID Proof:</b>", img_lbl)
+                    img_lbl.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+                    img_lbl.setToolTip("ID Proof Image")
+                    
+                    key_lbl = QLabel("ID Verification")
+                    key_lbl.setObjectName("FieldLabel")
+                    key_lbl.setStyleSheet("margin-top: 10px;")
+                    
+                    e3.addWidget(key_lbl)
+                    img_container = QWidget()
+                    img_lay = QHBoxLayout(img_container)
+                    img_lay.setContentsMargins(0, 0, 0, 0)
+                    img_lay.addWidget(img_lbl)
+                    img_lay.addStretch()
+                    e3.addWidget(img_container)
                 else:
-                    form.addRow("<b>ID Proof:</b>", QLabel("<i>Invalid image file</i>"))
+                    e3.addWidget(QLabel("<i>Invalid image file</i>"))
             else:
-                form.addRow("<b>ID Proof:</b>", QLabel(f"<i>File missing: {os.path.basename(id_proof)}</i>"))
+                e3.addWidget(QLabel(f"<i>File missing: {os.path.basename(id_proof)}</i>"))
+                
+        right_col.addWidget(card3)
+        right_col.addStretch(1)
 
-        return w
+        return scroll
 
     def _table_tab(self, rows: list, headers: list,
                    mapper) -> QWidget:

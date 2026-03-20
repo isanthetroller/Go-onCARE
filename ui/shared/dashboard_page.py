@@ -36,7 +36,7 @@ class DashboardPage(QWidget):
         self._timer.start(1_000)
         self._data_timer = QTimer(self)
         self._data_timer.timeout.connect(self.refresh)
-        self._data_timer.start(10_000)
+        self._data_timer.start(300_000)
 
     # ── Layout ────────────────────────────────────────────────────
     def _build(self):

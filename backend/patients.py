@@ -30,8 +30,11 @@ class PatientMixin:
             if not check:
                 return {}
         info = self.fetch("""
-            SELECT p.*, GROUP_CONCAT(pc.condition_name SEPARATOR ', ') AS conditions
-            FROM patients p LEFT JOIN patient_conditions pc ON p.patient_id = pc.patient_id
+            SELECT p.*, GROUP_CONCAT(pc.condition_name SEPARATOR ', ') AS conditions,
+                   dt.type_name AS discount_type
+            FROM patients p 
+            LEFT JOIN patient_conditions pc ON p.patient_id = pc.patient_id
+            LEFT JOIN discount_types dt ON p.discount_type_id = dt.discount_id
             WHERE p.patient_id = %s GROUP BY p.patient_id
         """, (patient_id,), one=True)
         if not info:

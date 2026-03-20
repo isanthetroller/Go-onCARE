@@ -80,9 +80,26 @@ class PieChartWidget(QWidget):
             painter.drawPie(rect, start, -span)
             start -= span
         if self._donut:
-            hole = size * 0.52; hx, hy = (self.width()-hole)/2, (self.height()-hole)/2
+            hole = size * 0.58; hx, hy = (self.width()-hole)/2, (self.height()-hole)/2
             painter.setBrush(QBrush(QColor("#FFFFFF")))
             painter.drawEllipse(QRectF(hx, hy, hole, hole))
+            
+            # Format and draw 'Total' text perfectly centered
+            painter.setPen(QPen(QColor("#2C3E50")))
+            font = painter.font()
+            font.setBold(True)
+            
+            # Manually offset the two lines for better visual rhythm
+            lbl_font = QFont(font.family(), 10)
+            lbl_font.setBold(True)
+            painter.setFont(lbl_font)
+            painter.drawText(QRectF(hx, hy, hole, hole/2 + 8), Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignHCenter, "Total")
+            
+            val_font = QFont(font.family(), 13)
+            val_font.setBold(True)
+            painter.setFont(val_font)
+            painter.drawText(QRectF(hx, hy + hole/2 + 8, hole, hole/2 - 8), Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter, f"{self._total:,}")
+            
         painter.end()
 
 

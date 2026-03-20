@@ -45,7 +45,7 @@ class ClinicalPage(QWidget):
         # Auto-refresh data every 10 seconds
         self._refresh_timer = QTimer(self)
         self._refresh_timer.timeout.connect(self.refresh)
-        self._refresh_timer.start(10_000)
+        self._refresh_timer.start(300_000)
 
     def refresh(self):
         """Reload data for all clinical tabs, auto-sync appointments."""
@@ -1076,7 +1076,7 @@ class ClinicalPage(QWidget):
                 self._load_services()
                 QMessageBox.information(self, "Success", f"Service '{d['name']}' added.")
         finally:
-            self._refresh_timer.start(10_000)
+            self._refresh_timer.start(300_000)
 
     def _on_edit_service(self, row):
         self._refresh_timer.stop()
@@ -1115,7 +1115,7 @@ class ClinicalPage(QWidget):
                 self._load_services()
                 QMessageBox.information(self, "Success", f"Service '{d['name']}' updated.")
         finally:
-            self._refresh_timer.start(10_000)
+            self._refresh_timer.start(300_000)
 
     def _on_bulk_price(self):
         if not self._backend:
@@ -1133,5 +1133,5 @@ class ClinicalPage(QWidget):
                 else:
                     QMessageBox.information(self, "No Changes", "No prices were modified.")
         finally:
-            self._refresh_timer.start(10_000)
+            self._refresh_timer.start(300_000)
 

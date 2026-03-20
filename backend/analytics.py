@@ -107,7 +107,20 @@ class AnalyticsMixin:
         return self.fetch("SELECT status, COUNT(*) AS cnt FROM appointments GROUP BY status ORDER BY cnt DESC")
 
     def get_patient_condition_counts(self):
-        return self.fetch("SELECT condition_name, COUNT(*) AS cnt FROM patient_conditions GROUP BY condition_name ORDER BY cnt DESC")
+        top_3 = self.fetch("SELECT condition_name, COUNT(*) AS cnt FROM patient_conditions GROUP BY condition_name ORDER BY cnt DESC LIMIT 3")
+        if not top_3:
+            return []
+            
+        top_names = [r["condition_name"] for r in top_3]
+        placeholders = ",".join(["%s"] * len(top_names))
+        
+        others_row = self.fetch(f"SELECT COUNT(DISTINCT patient_id) AS others_cnt FROM patient_conditions WHERE condition_name NOT IN ({placeholders})", top_names, one=True)
+        
+        results = [{"condition_name": r["condition_name"], "cnt": r["cnt"]} for r in top_3]
+        if others_row and others_row["others_cnt"] > 0:
+            results.append({"condition_name": "Others", "cnt": others_row["others_cnt"]})
+            
+        return results
 
     def get_patient_demographics(self):
         return self.fetch("""
@@ -270,7 +283,7 @@ class AnalyticsMixin:
             with conn.cursor(dictionary=True) as cur:
                 cur.execute("SELECT COUNT(*) as total_active FROM employees WHERE status='Active'")
                 total_active = cur.fetchone()["total_active"] or 0
-                cur.execute("SELECT COUNT(DISTINCT employee_id) as present FROM attendance WHERE DATE(clock_in_time) = CURDATE()")
+                cur.execute("SELECT COUNT(DISTINCT employee_id) as present FROM attendance WHERE record_date = CURDATE()")
                 present = cur.fetchone()["present"] or 0
                 absent = max(0, total_active - present)
 
@@ -279,7 +292,7 @@ class AnalyticsMixin:
                     FROM attendance a
                     JOIN employees e ON a.employee_id = e.employee_id
                     JOIN departments d ON e.department_id = d.department_id
-                    WHERE DATE(a.clock_in_time) = CURDATE()
+                    WHERE a.record_date = CURDATE()
                     GROUP BY d.department_name
                 """)
                 dept_attendance = cur.fetchall()

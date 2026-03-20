@@ -12,7 +12,8 @@ class ModernCalendarWidget(QCalendarWidget):
         super().__init__(parent)
         self.setGridVisible(False)
         self.setVerticalHeaderFormat(QCalendarWidget.VerticalHeaderFormat.NoVerticalHeader)
-        self.setHorizontalHeaderFormat(QCalendarWidget.HorizontalHeaderFormat.LongDayNames)
+        self.setHorizontalHeaderFormat(QCalendarWidget.HorizontalHeaderFormat.ShortDayNames)
+        self.setMinimumSize(360, 290)
         # We do NOT setNavigationBarVisible(False) because QDateEdit popup relies on the native bar.
 
     def paintCell(self, painter, rect, date):

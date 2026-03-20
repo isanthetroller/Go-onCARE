@@ -36,7 +36,7 @@ class PayrollPage(QWidget):
         self._load_data()
         self._refresh_timer = QTimer(self)
         self._refresh_timer.timeout.connect(self._load_data)
-        self._refresh_timer.start(10_000)
+        self._refresh_timer.start(300_000)
 
     # ── Doctor-only build: read-only history view ────────────────
     def _build_doctor(self):
