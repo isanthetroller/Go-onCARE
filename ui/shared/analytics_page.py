@@ -84,48 +84,46 @@ class AnalyticsPage(QWidget):
             self._build_kpi_cards(kpi_row, stats, data, cmp)
             lay.addLayout(kpi_row)
 
-            # ── Row 1: Conditions + Appointment Status ────────────
-            row1 = QHBoxLayout(); row1.setSpacing(16)
+            # ── 2x2 Grid Layout for Main Charts ────────────
+            grid = QGridLayout()
+            grid.setSpacing(24)
             
             raw_conds = data.get("conditions", [])
             total_cases = sum(c["cnt"] for c in raw_conds)
             others_cnt = sum(c["cnt"] for c in raw_conds if c["condition_name"] == "Others")
                 
             cond_data = [(c["condition_name"], c["cnt"],
-                          CONDITION_COLORS[i % len(CONDITION_COLORS)] if c["condition_name"] != "Others" else "#95A5A6")
+                          CONDITION_COLORS[i % len(CONDITION_COLORS)] if c["condition_name"] != "Others" else "#BDC3C7")
                          for i, c in enumerate(raw_conds)]
             
             if total_cases > 0 and (others_cnt / total_cases) > 0.4:
-                row1.addWidget(self._hbar_card("Patient Conditions",
+                grid.addWidget(self._hbar_card("Patient Conditions",
                                                "Top conditions (Others >40%)",
-                                               cond_data or [("No data", 1, "#CCC")]))
+                                               cond_data or [("No data", 1, "#CCC")]), 0, 0)
             else:
-                row1.addWidget(self._pie_card("Patient Conditions",
+                grid.addWidget(self._pie_card("Patient Conditions",
                                               "Distribution of diagnosed conditions",
-                                              cond_data or [("No data", 1, "#CCC")]))
+                                              cond_data or [("No data", 1, "#CCC")]), 0, 0)
             status_data = [(s["status"], s["cnt"],
                             STATUS_COLORS.get(s["status"], "#7F8C8D"))
                            for s in data.get("appt_status", [])]
-            row1.addWidget(self._pie_card("Appointment Status",
+            grid.addWidget(self._pie_card("Appointment Status",
                                           "Current appointment outcomes",
-                                          status_data or [("No data", 1, "#CCC")]))
-            lay.addLayout(row1)
+                                          status_data or [("No data", 1, "#CCC")]), 0, 1)
 
-            # ── Row 2: Revenue by Dept + Demographics ─────────────
-            row2 = QHBoxLayout(); row2.setSpacing(20)
             dept_data = [(d["department_name"], int(d["total_revenue"]),
                           DEPT_COLORS[i % len(DEPT_COLORS)])
                          for i, d in enumerate(data.get("dept_revenue", []))]
-            row2.addWidget(self._pie_card("Revenue by Department",
+            grid.addWidget(self._pie_card("Revenue by Department",
                                           "Revenue distribution by doctor department",
-                                          dept_data or [("No data", 1, "#CCC")]))
+                                          dept_data or [("No data", 1, "#CCC")]), 1, 0)
             demo_data = [(d["age_group"], d["cnt"],
                           DEMO_COLORS.get(d["age_group"], "#7F8C8D"))
                          for d in data.get("demographics", [])]
-            row2.addWidget(self._pie_card("Patient Demographics",
+            grid.addWidget(self._pie_card("Patient Demographics",
                                           "Age group distribution",
-                                          demo_data or [("No data", 1, "#CCC")]))
-            lay.addLayout(row2)
+                                          demo_data or [("No data", 1, "#CCC")]), 1, 1)
+            lay.addLayout(grid)
             
             # ── Row 3: Live Employee Attendance ───────────
             att = data.get("attendance", {})
@@ -192,17 +190,17 @@ class AnalyticsPage(QWidget):
         total_patients = stats.get("total_patients", 0)
 
         kpis = [
-            ("Monthly Revenue", fmt_peso(current_month_rev), "#388087",
-             cmp.get("revenue_delta", 0)),
-            ("Total Patients", f"{total_patients:,}", "#5CB85C",
-             cmp.get("patients_delta", 0)),
-            ("Appointments", f"{total_appts:,}", "#6FB3B8",
-             cmp.get("appts_delta", 0)),
-            ("Active Doctors", f"{active_docs}", "#C2EDCE", None),
-            ("Avg. Visit / Day", f"{avg_per_day}", "#388087", None),
+            ("Monthly Revenue", fmt_peso(current_month_rev), "#16A085",
+             cmp.get("revenue_delta", 0), "file-text"),
+            ("Total Patients", f"{total_patients:,}", "#2980B9",
+             cmp.get("patients_delta", 0), "users"),
+            ("Appointments", f"{total_appts:,}", "#8E44AD",
+             cmp.get("appts_delta", 0), "calendar"),
+            ("Active Doctors", f"{active_docs}", "#E67E22", None, "activity"),
+            ("Avg. Visit / Day", f"{avg_per_day}", "#2E86C1", None, "clock"),
         ]
-        for label, value, color, delta in kpis:
-            kpi_row.addWidget(self._kpi_card(label, value, color, delta))
+        for label, value, color, delta, icon_name in kpis:
+            kpi_row.addWidget(self._kpi_card(label, value, color, delta, icon_name))
 
     # ── Doctor-only analytics view ────────────────────────────────
     def _build_doctor_view(self, lay):
@@ -290,20 +288,64 @@ class AnalyticsPage(QWidget):
             lay.addWidget(tbl_card)
 
     @staticmethod
-    def _kpi_card(label, value, color, delta=None) -> QFrame:
-        card = make_card(min_height=110)
-        vbox = QVBoxLayout(card); vbox.setContentsMargins(18, 14, 18, 14); vbox.setSpacing(4)
-        strip = QFrame(); strip.setFixedHeight(3)
-        strip.setStyleSheet(f"background-color: {color}; border-radius: 1px;")
-        vbox.addWidget(strip)
-        v = QLabel(value); v.setObjectName("statValue"); vbox.addWidget(v)
-        l = QLabel(label); l.setObjectName("statLabel"); vbox.addWidget(l)
+    def _kpi_card(label, value, color, delta=None, icon_name="activity") -> QFrame:
+        card = make_card(min_height=120)
+        card.setObjectName("HoverKpiCard")
+        card.setStyleSheet("""
+            QFrame#HoverKpiCard {
+                background-color: #FFFFFF;
+                border-radius: 12px;
+                border: 1px solid #E5EBED;
+            }
+            QFrame#HoverKpiCard:hover {
+                border-color: #3498DB;
+            }
+        """)
+        vbox = QVBoxLayout(card)
+        vbox.setContentsMargins(24, 20, 24, 20)
+        vbox.setSpacing(8)
+        
+        # Header: Icon + Title
+        hdr = QHBoxLayout()
+        hdr.setSpacing(12)
+        
+        from ui.icons import get_icon
+        from PyQt6.QtGui import QColor
+        from PyQt6.QtCore import Qt
+        
+        icon_lbl = QLabel()
+        icon_lbl.setPixmap(get_icon(icon_name, color=QColor(color)).pixmap(22, 22))
+        icon_bg = QFrame()
+        icon_bg.setStyleSheet(f"background-color: {color}15; border-radius: 8px;")
+        icon_bg.setFixedSize(36, 36)
+        ibox = QVBoxLayout(icon_bg)
+        ibox.setContentsMargins(0,0,0,0)
+        ibox.addWidget(icon_lbl, alignment=Qt.AlignmentFlag.AlignCenter)
+        hdr.addWidget(icon_bg)
+        
+        l = QLabel(label)
+        l.setStyleSheet("color: #7F8C8D; font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;")
+        hdr.addWidget(l)
+        hdr.addStretch()
+        vbox.addLayout(hdr)
+        
+        vbox.addSpacing(4)
+        
+        # Value
+        v = QLabel(value)
+        v.setStyleSheet("color: #1A252F; font-size: 28px; font-weight: 800; letter-spacing: -0.5px;")
+        vbox.addWidget(v)
+        
+        # Delta
         if delta is not None:
             arrow = "▲" if delta >= 0 else "▼"
-            clr = "#5CB85C" if delta >= 0 else "#D9534F"
+            clr = "#27AE60" if delta >= 0 else "#E74C3C"
             d = QLabel(f"{arrow} {abs(delta):.1f}% vs last month")
-            d.setStyleSheet(f"color: {clr}; font-size: 11px; font-weight: bold;")
+            d.setStyleSheet(f"color: {clr}; font-size: 13px; font-weight: bold;")
             vbox.addWidget(d)
+        else:
+            vbox.addStretch(1)
+            
         return card
 
     # ── Refresh / Export ──────────────────────────────────────────
@@ -340,20 +382,32 @@ class AnalyticsPage(QWidget):
             QTimer.singleShot(50, restore)
 
     # ── Pie card ──────────────────────────────────────────────────
+    # ── Pie card ──────────────────────────────────────────────────
     @staticmethod
     def _pie_card(title_text, subtitle_text, data) -> QFrame:
-        card = make_card(min_height=320)
-        vbox = QVBoxLayout(card); vbox.setContentsMargins(20, 18, 20, 14); vbox.setSpacing(2)
+        card = make_card(min_height=340)
+        card.setObjectName("HoverKpiCard")
+        vbox = QVBoxLayout(card); vbox.setContentsMargins(0, 0, 0, 0); vbox.setSpacing(0)
         
-        hdr = QVBoxLayout(); hdr.setSpacing(2)
+        # Header Region with subtle border
+        hdr_widget = QWidget()
+        hdr_widget.setStyleSheet("border-bottom: 1px solid #F0F4F7;")
+        hdr = QVBoxLayout(hdr_widget)
+        hdr.setContentsMargins(24, 20, 24, 16)
+        hdr.setSpacing(4)
         t = QLabel(title_text); t.setObjectName("cardTitle")
         t.setStyleSheet("font-size: 16px; font-weight: 800; color: #2C3E50;")
         s = QLabel(subtitle_text); s.setObjectName("mutedSubtext")
-        s.setStyleSheet("font-size: 12px; color: #7F8C8D;")
+        s.setStyleSheet("font-size: 13px; color: #7F8C8D;")
         hdr.addWidget(t); hdr.addWidget(s)
-        vbox.addLayout(hdr)
+        vbox.addWidget(hdr_widget)
 
         total = sum(v for _, v, _ in data)
+        
+        content_wrap = QWidget()
+        content = QHBoxLayout(content_wrap)
+        content.setContentsMargins(24, 24, 24, 24)
+        content.setSpacing(32)
         
         # ── Stat Card override for single-category domains ──
         if len(data) == 1:
@@ -362,7 +416,6 @@ class AnalyticsPage(QWidget):
             label_text, value, color = data[0]
             
             val_lbl = QLabel(f"{value:,}")
-            # Extreme emphasis: 76px, weight 900, dark teal accent
             val_lbl.setStyleSheet("font-size: 76px; font-weight: 900; color: #2E6A70; letter-spacing: -2px;")
             val_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             
@@ -370,7 +423,7 @@ class AnalyticsPage(QWidget):
             sub_lbl.setStyleSheet("font-size: 16px; color: #34495E; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;")
             sub_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             
-            vbox.addStretch()
+            content.addStretch()
             stat_lay.addWidget(val_lbl)
             stat_lay.addWidget(sub_lbl)
             
@@ -380,65 +433,71 @@ class AnalyticsPage(QWidget):
                 pct_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 stat_lay.addWidget(pct_lbl)
                 
-            vbox.addLayout(stat_lay)
-            vbox.addStretch()
+            content.addLayout(stat_lay)
+            content.addStretch()
+            vbox.addWidget(content_wrap, 1)
             return card
 
         # ── Normal Pie Layout with Legends ──
-        vbox.addSpacing(16)
-        content = QHBoxLayout(); content.setSpacing(48)
-        content.addStretch()
-        
-        chart = PieChartWidget(data); chart.setFixedSize(240, 240)
-        content.addWidget(chart, alignment=Qt.AlignmentFlag.AlignVCenter)
+        from ui.shared.chart_widgets import PieChartWidget
+        chart = PieChartWidget(data); chart.setMinimumSize(220, 220)
+        content.addWidget(chart, 1, alignment=Qt.AlignmentFlag.AlignCenter)
         
         legend_widget = QWidget()
         legend = QGridLayout(legend_widget)
         legend.setContentsMargins(0, 0, 0, 0)
-        legend.setVerticalSpacing(12)
+        legend.setVerticalSpacing(16)
         legend.setHorizontalSpacing(16)
         
         for i, (label, value, color) in enumerate(data):
             pct = (value / total * 100) if total else 0
             
-            dot = QLabel("●"); dot.setStyleSheet(f"color:{color}; font-size:16px;")
+            dot = QLabel("●"); dot.setStyleSheet(f"color:{color}; font-size:20px;")
             dot.setAlignment(Qt.AlignmentFlag.AlignCenter)
             
             lbl = QLabel(label)
-            lbl.setStyleSheet("color:#2C3E50; font-size:13px; font-weight: 600;")
+            lbl.setStyleSheet("color:#1A252F; font-size:14px; font-weight: 600;")
             lbl.setWordWrap(True)
             
-            val = QLabel(f"{value:,}  ({pct:.1f}%)"); val.setStyleSheet("color:#7F8C8D; font-size:13px; font-weight:bold;")
+            val = QLabel(f"{value:,}  ({pct:.1f}%)"); val.setStyleSheet("color:#7F8C8D; font-size:14px; font-weight: 700;")
             val.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             
             legend.addWidget(dot, i, 0)
             legend.addWidget(lbl, i, 1)
             legend.addWidget(val, i, 2)
             
-        content.addWidget(legend_widget, alignment=Qt.AlignmentFlag.AlignVCenter)
-        content.addStretch()
-        vbox.addLayout(content, 1)
+        content.addWidget(legend_widget, 1, alignment=Qt.AlignmentFlag.AlignVCenter)
+        vbox.addWidget(content_wrap, 1)
         return card
 
     # ── Horizontal Bar Card ───────────────────────────────────────
     @staticmethod
     def _hbar_card(title_text, subtitle_text, data) -> QFrame:
-        card = make_card(min_height=320)
-        vbox = QVBoxLayout(card); vbox.setContentsMargins(20, 18, 20, 14); vbox.setSpacing(12)
+        card = make_card(min_height=340)
+        card.setObjectName("HoverKpiCard")
+        vbox = QVBoxLayout(card); vbox.setContentsMargins(0, 0, 0, 0); vbox.setSpacing(0)
         
-        hdr = QVBoxLayout(); hdr.setSpacing(2)
+        hdr_widget = QWidget()
+        hdr_widget.setStyleSheet("border-bottom: 1px solid #F0F4F7;")
+        hdr = QVBoxLayout(hdr_widget)
+        hdr.setContentsMargins(24, 20, 24, 16)
+        hdr.setSpacing(4)
         t = QLabel(title_text); t.setObjectName("cardTitle")
         t.setStyleSheet("font-size: 16px; font-weight: 800; color: #2C3E50;")
         s = QLabel(subtitle_text); s.setObjectName("mutedSubtext")
-        s.setStyleSheet("font-size: 12px; color: #7F8C8D;")
+        s.setStyleSheet("font-size: 13px; color: #7F8C8D;")
         hdr.addWidget(t); hdr.addWidget(s)
-        vbox.addLayout(hdr)
+        vbox.addWidget(hdr_widget)
         
-        vbox.addSpacing(16)
+        content_wrap = QWidget()
+        content = QVBoxLayout(content_wrap)
+        content.setContentsMargins(24, 24, 24, 24)
         from ui.shared.chart_widgets import HBarChartWidget
         chart = HBarChartWidget(data)
-        vbox.addWidget(chart)
-        vbox.addStretch()
+        content.addWidget(chart)
+        content.addStretch()
+        
+        vbox.addWidget(content_wrap, 1)
         return card
 
     # ── Patient Retention card ────────────────────────────────────
