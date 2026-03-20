@@ -80,7 +80,7 @@ class PatientDialog(QDialog):
             from PyQt6.QtSvgWidgets import QSvgWidget
             icon_w = QSvgWidget(os.path.normpath(_icon_path))
             icon_w.setFixedSize(32, 32)
-            icon_w.setStyleSheet("background: transparent;")
+            icon_w.setObjectName("icon_w_no_bleed"); icon_w.setStyleSheet("#icon_w_no_bleed { background: transparent; }")
         except ImportError:
             icon_w = QLabel("\U0001F3E5")
             icon_w.setFixedSize(32, 32)
@@ -110,7 +110,7 @@ class PatientDialog(QDialog):
         scroll.setStyleSheet(
             "QScrollArea { background: #FFFFFF; border: none; }")
         scroll_inner = QWidget()
-        scroll_inner.setStyleSheet("background: #FFFFFF;")
+        scroll_inner.setObjectName("scroll_inner_no_bleed"); scroll_inner.setStyleSheet("#scroll_inner_no_bleed { background: #FFFFFF; }")
         content_lay = QVBoxLayout(scroll_inner)
         content_lay.setContentsMargins(32, 20, 32, 12)
         content_lay.setSpacing(0)
@@ -180,7 +180,7 @@ class PatientDialog(QDialog):
     # ── UI helpers ─────────────────────────────────────────────────
     def _section_label(self, text: str) -> QWidget:
         container = QWidget()
-        container.setStyleSheet("background: transparent; border: none;")
+        container.setObjectName("container_no_bleed"); container.setStyleSheet("#container_no_bleed { background: transparent; border: none; }")
         row = QHBoxLayout(container)
         row.setContentsMargins(0, 6, 0, 4)
         row.setSpacing(10)
@@ -227,13 +227,14 @@ class PatientDialog(QDialog):
         self.sex_combo.addItems(["Male", "Female"])
         self.sex_combo.setMinimumHeight(40)
 
+        from ui.shared.modern_calendar import apply_modern_calendar
         self.dob_edit = QDateEdit()
-        self.dob_edit.setCalendarPopup(True)
+        self.dob_edit.setObjectName("formCombo")  # Crucial for applying the right CSS
+        apply_modern_calendar(self.dob_edit)
         self.dob_edit.setDate(QDate.currentDate())
-        self.dob_edit.setObjectName("formCombo")
         self.dob_edit.setMaximumDate(QDate.currentDate())
-        self.dob_edit.setDisplayFormat("M/d/yyyy")
-        self.dob_edit.setMinimumHeight(40)
+        self.dob_edit.setDisplayFormat("MMMM d, yyyy")
+        self.dob_edit.setMinimumHeight(38)
         self.dob_edit.setToolTip("Patient's date of birth")
 
         # Phone with +63 prefix
@@ -326,9 +327,48 @@ class PatientDialog(QDialog):
         self.status_combo.addItems(["Active", "Inactive"])
         self.status_combo.setMinimumHeight(40)
 
+        # ID Proof Image row
+        self._id_proof_path = None
+        self._id_proof_btn = QPushButton("Select Image")
+        self._id_proof_btn.setMinimumHeight(34)
+        self._id_proof_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._id_proof_btn.setStyleSheet(
+            "QPushButton { background: #E8F0F1; color: #2C3E50; border: 1px solid #BADFE7; border-radius: 6px; padding: 4px 10px; }"
+            " QPushButton:hover { background: #D0E5E8; border-color: #388087; }"
+        )
+        self._id_proof_lbl = QLabel("No file chosen")
+        self._id_proof_lbl.setStyleSheet("font-size: 12px; color: #7F8C8D;")
+        self._id_proof_lbl.setWordWrap(True)
+        self._id_proof_btn.clicked.connect(self._select_id_proof)
+        
+        self._id_proof_preview = QLabel()
+        self._id_proof_preview.setFixedSize(100, 70)
+        self._id_proof_preview.setStyleSheet("border: 1px dashed #BADFE7; border-radius: 4px; background: #FAFCFD;")
+        self._id_proof_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._id_proof_preview.setVisible(False)
+        
+        self._id_proof_container = QWidget()
+        id_proof_lay = QHBoxLayout(self._id_proof_container)
+        id_proof_lay.setSpacing(8)
+        id_proof_lay.setContentsMargins(0, 0, 0, 0)
+        
+        btn_col = QVBoxLayout()
+        btn_col.setSpacing(4)
+        btn_col.setContentsMargins(0,0,0,0)
+        btn_col.addWidget(self._id_proof_btn)
+        btn_col.addWidget(self._id_proof_lbl)
+        
+        id_proof_lay.addWidget(self._id_proof_preview)
+        id_proof_lay.addLayout(btn_col)
+        id_proof_lay.addStretch()
+
         right.addRow("Blood Type", self.blood_combo)
         right.addRow("Discount",   self.discount_combo)
+        right.addRow("ID Proof Image", self._id_proof_container)
         right.addRow("Status",     self.status_combo)
+        
+        self.discount_combo.currentIndexChanged.connect(self._toggle_id_proof_visibility)
+        self._toggle_id_proof_visibility()
 
         # ── Conditions picker ─────────────────────────────────────
         cond_lbl = QLabel("Conditions")
@@ -452,6 +492,57 @@ class PatientDialog(QDialog):
             data.get("status", "Active"))
         if sidx >= 0: self.status_combo.setCurrentIndex(sidx)
         self.notes_edit.setPlainText(data.get("notes", ""))
+        
+        id_proof = data.get("id_proof_path")
+        if id_proof:
+            self._update_proof_preview(id_proof)
+
+    def _toggle_id_proof_visibility(self):
+        idx = self.discount_combo.currentIndex()
+        if idx <= 0:
+            self._id_proof_container.setVisible(False)
+            lbl = self._right_form.labelForField(self._id_proof_container)
+            if lbl:
+                lbl.setVisible(False)
+            self._id_proof_path = None
+            self._id_proof_lbl.setText("No file chosen")
+            self._id_proof_preview.setVisible(False)
+            return
+        dt = self._discount_types[idx - 1]
+        req = bool(dt.get("requires_id_proof", 0))
+        self._id_proof_container.setVisible(req)
+        lbl = self._right_form.labelForField(self._id_proof_container)
+        if lbl:
+            lbl.setVisible(req)
+        if not req:
+            self._id_proof_path = None
+            self._id_proof_lbl.setText("No file chosen")
+            self._id_proof_preview.setVisible(False)
+
+    def _update_proof_preview(self, path: str):
+        self._id_proof_path = path
+        import os
+        from PyQt6.QtGui import QPixmap
+        self._id_proof_lbl.setText(os.path.basename(path))
+        if os.path.exists(path):
+            pix = QPixmap(path)
+            if not pix.isNull():
+                pix = pix.scaled(100, 70, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                self._id_proof_preview.setPixmap(pix)
+                self._id_proof_preview.setVisible(True)
+            else:
+                self._id_proof_preview.setVisible(False)
+        else:
+            self._id_proof_preview.setVisible(False)
+
+    def _select_id_proof(self):
+        from PyQt6.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select ID Proof Image", "",
+            "Images (*.png *.jpg *.jpeg)"
+        )
+        if path:
+            self._update_proof_preview(path)
 
     # ── Conditions helpers ─────────────────────────────────────────
     def _load_standard_conditions(self, data, grid):
@@ -532,6 +623,7 @@ class PatientDialog(QDialog):
             SEP,
             ROW.format("Blood Type", d.get("blood_type", "Unknown")),
             ROW.format("Discount",   disc_str),
+            ROW.format("ID Proof",   "Uploaded" if d.get("id_proof_path") else "\u2014"),
             ROW.format("Conditions", cond_str),
             ROW.format("Status",     d["status"]),
         ]
@@ -591,6 +683,7 @@ class PatientDialog(QDialog):
             "emergency_contact": self.emergency_edit.text(),
             "blood_type":        self.blood_combo.currentText(),
             "discount_type_id":  self.discount_combo.currentData(),
+            "id_proof_path":     self._id_proof_path,
             "conditions":        all_conds,
             "status":            self.status_combo.currentText(),
             "notes":             self.notes_edit.toPlainText(),
@@ -697,6 +790,25 @@ class PatientProfileDialog(QDialog):
         ]
         for label, val in fields:
             form.addRow(f"<b>{label}:</b>", QLabel(str(val)))
+            
+        id_proof = info.get("id_proof_path")
+        if id_proof:
+            import os
+            from PyQt6.QtGui import QPixmap
+            from PyQt6.QtCore import Qt
+            if os.path.exists(id_proof):
+                pix = QPixmap(id_proof)
+                if not pix.isNull():
+                    pix = pix.scaled(300, 200, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                    img_lbl = QLabel()
+                    img_lbl.setPixmap(pix)
+                    img_lbl.setStyleSheet("border: 1px solid #BADFE7; border-radius: 4px; padding: 2px;")
+                    form.addRow("<b>ID Proof:</b>", img_lbl)
+                else:
+                    form.addRow("<b>ID Proof:</b>", QLabel("<i>Invalid image file</i>"))
+            else:
+                form.addRow("<b>ID Proof:</b>", QLabel(f"<i>File missing: {os.path.basename(id_proof)}</i>"))
+
         return w
 
     def _table_tab(self, rows: list, headers: list,

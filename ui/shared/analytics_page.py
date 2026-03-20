@@ -474,14 +474,15 @@ class AnalyticsPage(QWidget):
         hdr.addLayout(tc); hdr.addStretch()
 
         hdr.addWidget(QLabel("From:"))
-        self.sum_from = QDateEdit(); self.sum_from.setCalendarPopup(True)
+        from ui.shared.modern_calendar import apply_modern_calendar
+        self.sum_from = QDateEdit(); apply_modern_calendar(self.sum_from)
         self.sum_from.setDate(QDate.currentDate().addMonths(-6))
         self.sum_from.setObjectName("formCombo"); self.sum_from.setMinimumHeight(36); self.sum_from.setMaximumWidth(140)
         self.sum_from.setDisplayFormat("M/d/yyyy")
         hdr.addWidget(self.sum_from)
 
         hdr.addWidget(QLabel("To:"))
-        self.sum_to = QDateEdit(); self.sum_to.setCalendarPopup(True)
+        self.sum_to = QDateEdit(); apply_modern_calendar(self.sum_to)
         self.sum_to.setDate(QDate.currentDate())
         self.sum_to.setObjectName("formCombo"); self.sum_to.setMinimumHeight(36); self.sum_to.setMaximumWidth(140)
         self.sum_to.setDisplayFormat("M/d/yyyy")

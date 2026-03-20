@@ -21,7 +21,7 @@ def _svg_icon(filename: str):
         from PyQt6.QtSvgWidgets import QSvgWidget
         w = QSvgWidget(os.path.normpath(path))
         w.setFixedSize(28, 28)
-        w.setStyleSheet("background: transparent;")
+        w.setObjectName("w_no_bleed"); w.setStyleSheet("#w_no_bleed { background: transparent; }")
         return w
     except ImportError:
         lbl = QLabel("\U0001F4CB")
@@ -117,7 +117,7 @@ class QueueEditDialog(QDialog):
             "Update status, purpose or notes"))
 
         content = QWidget()
-        content.setStyleSheet("background: #FFFFFF;")
+        content.setObjectName("content_no_bleed"); content.setStyleSheet("#content_no_bleed { background: #FFFFFF; }")
         form = QFormLayout(content)
         form.setSpacing(12)
         form.setContentsMargins(28, 20, 28, 16)
@@ -202,7 +202,7 @@ class ServiceEditDialog(QDialog):
             "icon-service.svg"))
 
         content = QWidget()
-        content.setStyleSheet("background: #FFFFFF;")
+        content.setObjectName("content_no_bleed"); content.setStyleSheet("#content_no_bleed { background: #FFFFFF; }")
         form = QFormLayout(content)
         form.setSpacing(14)
         form.setContentsMargins(28, 24, 28, 16)

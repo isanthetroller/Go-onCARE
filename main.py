@@ -65,6 +65,7 @@ class App:
             self.auth_win.hide()
             set_active_palette(False)
             self._apply_light_palette()
+            self.qapp.setStyleSheet(MAIN_STYLE)
             self.current_user_email = email
             self.current_user_role = role
             self.main_win = MainWindow(user_email=email, user_role=role, user_name=full_name)
@@ -86,6 +87,7 @@ class App:
 
         set_active_palette(False)
         self._apply_light_palette()
+        self.qapp.setStyleSheet("")
         self.auth_win = AuthWindow()
         self.auth_win.login_success.connect(self._on_login)
         self.auth_win.show()

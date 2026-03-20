@@ -231,7 +231,7 @@ CareCRUDV1/
 | `services` | Medical services with prices | service_id, service_name, price, category, is_active |
 | `payment_methods` | How patients pay (Cash, GCash, etc.) | method_id, method_name |
 | `standard_conditions` | Common medical conditions list | condition_id, condition_name |
-| `discount_types` | Discount categories (Senior, PWD) | discount_id, type_name, discount_percent, legal_basis |
+| `discount_types` | Discount categories (Senior, PWD) | discount_id, type_name, discount_percent, legal_basis, requires_id_proof |
 
 #### Main Tables (core data)
 | Table | Purpose | Key Columns |
@@ -239,7 +239,7 @@ CareCRUDV1/
 | `users` | Login accounts | user_id, email, password, full_name, role_id, must_change_password |
 | `user_preferences` | User settings | pref_id, user_email, dark_mode |
 | `employees` | Staff records | employee_id, first_name, last_name, role_id, department_id, phone, email, hire_date, status, salary |
-| `patients` | Patient records | patient_id, first_name, last_name, sex, date_of_birth, phone, email, address, civil_status, blood_type, discount_type_id, status |
+| `patients` | Patient records | patient_id, first_name, last_name, sex, date_of_birth, phone, email, address, civil_status, blood_type, discount_type_id, id_proof_path, status |
 | `patient_conditions` | Patient medical conditions | condition_id, patient_id, condition_name |
 
 #### Transaction Tables (things that happen)
@@ -423,7 +423,7 @@ delta = ((current_month_value - last_month_value) / last_month_value) × 100
 
 | Operation | Who Can | What Happens |
 |-----------|---------|-------------|
-| **Create** | Admin, Receptionist | Opens form → fills name, sex, DOB, civil status, address, phone, email, emergency contact, blood type, discount, conditions, status, notes → INSERT into `patients` + `patient_conditions` |
+| **Create** | Admin, Receptionist | Opens form → fills name, sex, DOB, civil status, address, phone, email, emergency contact, blood type, discount, ID Proof image (if required), conditions, status, notes → INSERT into `patients` + `patient_conditions` |
 | **Read** | All with access | Table shows all patients (Doctor sees only own patients via JOIN with appointments). **Nurse** has View button to see patient profiles (read-only). |
 | **Update** | Admin, Receptionist | Opens same form pre-filled → UPDATE `patients` + DELETE/re-INSERT `patient_conditions` |
 | **Delete** | Admin, Receptionist | Confirmation dialog → Cascading delete: invoice_items → invoices → queue_entries → appointments → patient_conditions → patients |
@@ -445,6 +445,7 @@ delta = ((current_month_value - last_month_value) / last_month_value) × 100
 **Discount System:**
 - Each patient can have one discount type (Senior Citizen 20%, PWD 20%, etc.)
 - Stored as `discount_type_id` foreign key
+- **ID Proof Requirement**: If the Admin has flagged a discount type as requiring an ID (like a PWD or Senior Citizen card), the UI dynamically shows an image upload field during patient registration. The image is saved locally and a visual thumbnail is shown in the patient profile.
 - When an invoice is created, the system looks up the patient's discount and **enforces it from the database** — the UI cannot override this
 
 **How the View Profile works:**
@@ -772,7 +773,7 @@ JOIN (SELECT patient_id, MIN(appointment_date) AS first_date FROM appointments G
 
 | Feature | What It Does |
 |---------|-------------|
-| **Discount Management** | Add/Edit/Delete discount types (Senior 20%, PWD 20%, etc.) with legal basis |
+| **Discount Management** | Add/Edit/Delete discount types (Senior 20%, PWD 20%, etc.) with legal basis, and toggle if they require an ID Proof upload |
 | **Database Overview** | Shows row counts for all 19 tables (auto-refreshes every 10 seconds) |
 | **Cleanup: Completed Appointments** | Delete completed appointments before a chosen date (cascades to invoices, queue) |
 | **Cleanup: Cancelled Appointments** | Delete ALL cancelled appointments |

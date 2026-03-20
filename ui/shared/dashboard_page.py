@@ -862,7 +862,7 @@ class DashboardPage(QWidget):
     def _on_request_leave(self):
         emp_id = self._get_my_employee_id()
         if not emp_id:
-            QMessageBox.warning(self, "Error", "Could not find your employee record.")
+            QMessageBox.warning(self, "Error", "Could not find your employee record. Only registered employees can request leave.")
             return
 
         dlg = QDialog(self)
@@ -895,7 +895,7 @@ class DashboardPage(QWidget):
 
         # Content
         content = QWidget()
-        content.setStyleSheet("background: #FFFFFF;")
+        content.setObjectName("content_no_bleed"); content.setStyleSheet("#content_no_bleed { background: #FFFFFF; }")
         form = QFormLayout(content)
         form.setSpacing(14)
         form.setContentsMargins(28, 20, 28, 16)
@@ -903,8 +903,9 @@ class DashboardPage(QWidget):
         form.setFieldGrowthPolicy(
             QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
 
+        from ui.shared.modern_calendar import apply_modern_calendar
         from_date = QDateEdit()
-        from_date.setCalendarPopup(True)
+        apply_modern_calendar(from_date)
         from_date.setDate(QDate.currentDate().addDays(1))
         from_date.setMinimumDate(QDate.currentDate().addDays(1))
         from_date.setObjectName("formCombo")
@@ -912,7 +913,7 @@ class DashboardPage(QWidget):
         from_date.setDisplayFormat("M/d/yyyy")
 
         until_date = QDateEdit()
-        until_date.setCalendarPopup(True)
+        apply_modern_calendar(until_date)
         until_date.setDate(QDate.currentDate().addDays(7))
         until_date.setMinimumDate(QDate.currentDate().addDays(1))
         until_date.setObjectName("formCombo")

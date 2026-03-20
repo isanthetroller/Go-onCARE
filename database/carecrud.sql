@@ -124,6 +124,7 @@ CREATE TABLE patients (
     emergency_contact VARCHAR(200) DEFAULT '',
     blood_type        ENUM('A+','A-','B+','B-','AB+','AB-','O+','O-','Unknown') DEFAULT 'Unknown',
     discount_type_id  INT DEFAULT NULL,
+    id_proof_path     VARCHAR(255) DEFAULT NULL,
     status            ENUM('Active', 'Inactive') NOT NULL DEFAULT 'Active',
     notes             TEXT,
     created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -521,6 +522,7 @@ SELECT
     p.civil_status,
     p.emergency_contact,
     p.blood_type,
+    p.id_proof_path,
     COALESCE(GROUP_CONCAT(pc.condition_name SEPARATOR ', '), 'None') AS conditions,
     p.status,
     p.notes

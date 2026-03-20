@@ -244,6 +244,7 @@ class PatientsPage(QWidget):
                 "emergency_contact": d["emergency_contact"],
                 "blood_type": d["blood_type"],
                 "discount_type_id": d.get("discount_type_id"),
+                "id_proof_path": d.get("id_proof_path"),
                 "conditions": d["conditions"], "status": d["status"],
                 "notes": d["notes"],
             }
@@ -287,6 +288,7 @@ class PatientsPage(QWidget):
             "emergency_contact": p.get("emergency_contact","") or "",
             "blood_type": p.get("blood_type","") or "Unknown",
             "discount_type_id": p.get("discount_type_id"),
+            "id_proof_path": p.get("id_proof_path", ""),
             "conditions": p.get("conditions","") or "",
             "status": p.get("status",""),
             "notes": p.get("notes","") or "",

@@ -8,7 +8,7 @@ class PatientMixin:
             SELECT p.patient_id, p.first_name, p.last_name, p.sex,
                    p.date_of_birth, p.phone, p.email, p.address, p.civil_status,
                    p.status, p.notes,
-                   p.emergency_contact, p.blood_type, p.discount_type_id,
+                   p.emergency_contact, p.blood_type, p.discount_type_id, p.id_proof_path,
                    COALESCE(dt.type_name, '') AS discount_type,
                    GROUP_CONCAT(pc.condition_name SEPARATOR ', ') AS conditions,
                    (SELECT MAX(a.appointment_date) FROM appointments a
@@ -75,6 +75,23 @@ class PatientMixin:
             for c in [c.strip() for c in conditions_str.split(",") if c.strip()]:
                 cur.execute("INSERT INTO patient_conditions (patient_id, condition_name) VALUES (%s,%s)", (patient_id, c))
 
+    def _handle_id_proof(self, source_path):
+        if not source_path:
+            return None
+        import os, shutil, time
+        dest_dir = os.path.join(os.path.dirname(__file__), "..", "id_proofs")
+        os.makedirs(dest_dir, exist_ok=True)
+        # Avoid re-copying if it's already a relative path representing saved proof or in dest_dir
+        if source_path.startswith("id_proofs") or source_path.startswith(dest_dir):
+            return source_path
+        if not os.path.isfile(source_path):
+            return source_path
+        ext = os.path.splitext(source_path)[1]
+        new_filename = f"proof_{int(time.time())}_{os.path.basename(source_path)}"
+        dest_path = os.path.join(dest_dir, new_filename)
+        shutil.copy2(source_path, dest_path)
+        return f"id_proofs/{new_filename}"
+
     def check_duplicate_patient(self, first_name, last_name, phone="", email=""):
         """Return list of possible duplicate patients matching name, phone, or email."""
         clauses = ["(LOWER(first_name)=LOWER(%s) AND LOWER(last_name)=LOWER(%s))"]
@@ -95,16 +112,17 @@ class PatientMixin:
             conn = self._get_connection()
             with conn.cursor() as cur:
                 discount_type_id = data.get("discount_type_id") or None
+                id_proof_p = self._handle_id_proof(data.get("id_proof_path"))
                 cur.execute("""
                     INSERT INTO patients (first_name, last_name, sex, date_of_birth,
                         phone, email, address, civil_status,
-                        emergency_contact, blood_type, discount_type_id, status, notes)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        emergency_contact, blood_type, discount_type_id, id_proof_path, status, notes)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 """, (data["first_name"], data["last_name"], data["sex"],
                       data.get("dob"), data.get("phone",""), data.get("email",""),
                       data.get("address",""), data.get("civil_status","Single"),
                       data.get("emergency_contact",""), data.get("blood_type","Unknown"),
-                      discount_type_id,
+                      discount_type_id, id_proof_p,
                       data.get("status","Active"), data.get("notes","")))
                 pid = cur.lastrowid
                 self._save_conditions(cur, pid, data.get("conditions",""))
@@ -128,16 +146,17 @@ class PatientMixin:
             conn = self._get_connection()
             with conn.cursor() as cur:
                 discount_type_id = data.get("discount_type_id") or None
+                id_proof_p = self._handle_id_proof(data.get("id_proof_path"))
                 cur.execute("""
                     UPDATE patients SET first_name=%s, last_name=%s, sex=%s, date_of_birth=%s,
                         phone=%s, email=%s, address=%s, civil_status=%s,
-                        emergency_contact=%s, blood_type=%s, discount_type_id=%s, status=%s, notes=%s
+                        emergency_contact=%s, blood_type=%s, discount_type_id=%s, id_proof_path=%s, status=%s, notes=%s
                     WHERE patient_id=%s
                 """, (data["first_name"], data["last_name"], data["sex"],
                       data.get("dob"), data.get("phone",""), data.get("email",""),
                       data.get("address",""), data.get("civil_status","Single"),
                       data.get("emergency_contact",""), data.get("blood_type","Unknown"),
-                      discount_type_id,
+                      discount_type_id, id_proof_p,
                       data.get("status","Active"), data.get("notes",""), patient_id))
                 self._save_conditions(cur, patient_id, data.get("conditions",""))
                 conn.commit()
@@ -190,7 +209,7 @@ class PatientMixin:
             SELECT DISTINCT p.patient_id, p.first_name, p.last_name, p.sex,
                    p.date_of_birth, p.phone, p.email, p.address, p.civil_status,
                    p.status, p.notes,
-                   p.emergency_contact, p.blood_type,
+                   p.emergency_contact, p.blood_type, p.id_proof_path,
                    GROUP_CONCAT(DISTINCT pc.condition_name SEPARATOR ', ') AS conditions,
                    (SELECT MAX(a2.appointment_date) FROM appointments a2
                     WHERE a2.patient_id = p.patient_id) AS last_visit

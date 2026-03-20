@@ -62,7 +62,8 @@ class ActivityLogPage(QWidget):
         # HR now sees the full activity log like Admin
 
         fr.addWidget(QLabel("From:"))
-        self._from_date = QDateEdit(); self._from_date.setCalendarPopup(True)
+        from ui.shared.modern_calendar import apply_modern_calendar
+        self._from_date = QDateEdit(); apply_modern_calendar(self._from_date)
         self._from_date.setDate(QDate.currentDate().addMonths(-1))
         self._from_date.setObjectName("formCombo")
         self._from_date.setMinimumHeight(36)
@@ -70,7 +71,7 @@ class ActivityLogPage(QWidget):
         fr.addWidget(self._from_date)
 
         fr.addWidget(QLabel("To:"))
-        self._to_date = QDateEdit(); self._to_date.setCalendarPopup(True)
+        self._to_date = QDateEdit(); apply_modern_calendar(self._to_date)
         self._to_date.setDate(QDate.currentDate())
         self._to_date.setObjectName("formCombo")
         self._to_date.setMinimumHeight(36)

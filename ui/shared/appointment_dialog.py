@@ -69,7 +69,7 @@ def _svg_icon(filename: str):
         from PyQt6.QtSvgWidgets import QSvgWidget
         w = QSvgWidget(os.path.normpath(path))
         w.setFixedSize(32, 32)
-        w.setStyleSheet("background: transparent;")
+        w.setStyleSheet("QSvgWidget { background: transparent; }")
         return w
     except ImportError:
         lbl = QLabel("\U0001F4C5")
@@ -150,14 +150,14 @@ class AppointmentDialog(QDialog):
 
         # ── Content area ───────────────────────────────────────────
         content_w = QWidget()
-        content_w.setStyleSheet("background: #FFFFFF;")
+        content_w.setObjectName("content_w_no_bleed"); content_w.setStyleSheet("#content_w_no_bleed { background: #FFFFFF; }")
         root = QHBoxLayout(content_w)
         root.setSpacing(24)
         root.setContentsMargins(28, 16, 28, 8)
 
         # ── Left: form (compact — no vertical stretch) ──
         left = QWidget()
-        left.setStyleSheet("background: transparent;")
+        left.setObjectName("left_no_bleed"); left.setStyleSheet("#left_no_bleed { background: transparent; }")
         left_vbox = QVBoxLayout(left)
         left_vbox.setContentsMargins(0, 0, 0, 0)
         left_vbox.setSpacing(0)
@@ -170,20 +170,36 @@ class AppointmentDialog(QDialog):
             QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
 
         # Date label/picker
+        from ui.shared.modern_calendar import apply_modern_calendar
         self.date_edit = QDateEdit()
         self.date_edit.setObjectName("formCombo")
         self.date_edit.setMinimumHeight(38)
-        self.date_edit.setCalendarPopup(True)
-        self.date_edit.setDisplayFormat("MMMM d, yyyy")
-        self.date_edit.setMinimumDate(QDate.currentDate())
+        
+        # Restrict appointments to the current month
+        today = QDate.currentDate()
+        self.date_edit.setMinimumDate(today)
+        self.date_edit.setMaximumDate(QDate(today.year(), today.month(), today.daysInMonth()))
+        
         if self._is_edit and self._original_date:
             try:
                 appt_d = datetime.strptime(self._original_date, "%Y-%m-%d").date()
                 self.date_edit.setDate(QDate(appt_d.year, appt_d.month, appt_d.day))
             except Exception:
-                self.date_edit.setDate(QDate.currentDate())
+                self.date_edit.setDate(today)
         else:
-            self.date_edit.setDate(QDate.currentDate())
+            self.date_edit.setDate(today)
+            
+        self.date_edit.setDisplayFormat("MMMM d, yyyy")
+        
+        # Center calendar logic explicitly for Receptionist/Admin making New Appointments
+        if not self._is_edit and self._user_role in ("Receptionist", "Admin"):
+            from PyQt6.QtWidgets import QAbstractSpinBox
+            self.date_edit.setCalendarPopup(False)
+            self.date_edit.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+            self.date_edit.setReadOnly(True)  # Readonly so it acts like a pure picker
+            self.date_edit.installEventFilter(self)
+        else:
+            apply_modern_calendar(self.date_edit)
         
         self.date_edit.dateChanged.connect(self._on_date_changed)
 
@@ -290,7 +306,7 @@ class AppointmentDialog(QDialog):
 
         # ── Right: doctor schedule panel ──
         self._sched_panel = QWidget()
-        self._sched_panel.setStyleSheet("background: transparent;")
+        self._sched_panel.setObjectName("_sched_panel_no_bleed"); self._sched_panel.setStyleSheet("#_sched_panel_no_bleed { background: transparent; }")
         sp_lay = QVBoxLayout(self._sched_panel)
         sp_lay.setContentsMargins(0, 0, 0, 0)
         sp_lay.setSpacing(10)
@@ -761,6 +777,22 @@ class AppointmentDialog(QDialog):
                         return
                         
         self.accept()
+
+    def eventFilter(self, obj, event):
+        from PyQt6.QtCore import QEvent
+        from PyQt6.QtWidgets import QDialog
+        if obj == self.date_edit and event.type() == QEvent.Type.MouseButtonRelease:
+            from ui.shared.modern_calendar import CenteredCalendarDialog
+            dlg = CenteredCalendarDialog(
+                current_date=self.date_edit.date(),
+                min_date=self.date_edit.minimumDate(),
+                max_date=self.date_edit.maximumDate(),
+                parent=self
+            )
+            if dlg.exec() == QDialog.DialogCode.Accepted:
+                self.date_edit.setDate(dlg.selected_date)
+            return True
+        return super().eventFilter(obj, event)
 
     def get_data(self) -> dict:
         doc_text = self.doctor_combo.currentText()

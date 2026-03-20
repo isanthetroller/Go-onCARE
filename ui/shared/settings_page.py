@@ -88,7 +88,7 @@ class SettingsPage(QWidget):
         dl.addWidget(disc_info)
 
         self._disc_table = make_interactive_table(
-            ["Type Name", "Discount %", "Legal Basis", "Active"],
+            ["Type Name", "Discount %", "Legal Basis", "Requires ID", "Active"],
             min_h=160, max_h=220, row_h=40)
         dl.addWidget(self._disc_table)
 
@@ -227,7 +227,8 @@ class SettingsPage(QWidget):
             "Permanently remove completed appointments older than the selected date.\n"
             "This helps keep your records tidy without affecting recent data."))
         c1.addLayout(lbl_col1, 1)
-        self.cutoff_date = QDateEdit(); self.cutoff_date.setCalendarPopup(True)
+        from ui.shared.modern_calendar import apply_modern_calendar
+        self.cutoff_date = QDateEdit(); apply_modern_calendar(self.cutoff_date)
         self.cutoff_date.setDate(QDate.currentDate().addMonths(-3))
         self.cutoff_date.setObjectName("formCombo"); self.cutoff_date.setMinimumHeight(38)
         self.cutoff_date.setDisplayFormat("M/d/yyyy")
@@ -432,13 +433,18 @@ class SettingsPage(QWidget):
             pct_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self._disc_table.setItem(r, 1, pct_item)
             self._disc_table.setItem(r, 2, QTableWidgetItem(dt.get("legal_basis", "") or ""))
+            req_id_item = QTableWidgetItem("Yes" if dt.get("requires_id_proof") else "No")
+            req_id_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            if dt.get("requires_id_proof"):
+                req_id_item.setForeground(QColor("#F39C12"))
+            self._disc_table.setItem(r, 3, req_id_item)
             active_item = QTableWidgetItem("Yes" if dt.get("is_active") else "No")
             active_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             if not dt.get("is_active"):
                 active_item.setForeground(QColor("#D9534F"))
             else:
                 active_item.setForeground(QColor("#5CB85C"))
-            self._disc_table.setItem(r, 3, active_item)
+            self._disc_table.setItem(r, 4, active_item)
 
     def _on_add_discount(self):
         dlg = _DiscountTypeDialog(self)
@@ -448,7 +454,7 @@ class SettingsPage(QWidget):
                 QMessageBox.warning(self, "Validation", "Type name is required.")
                 return
             if self._backend:
-                ok = self._backend.add_discount_type(d["name"], d["percent"], d["legal_basis"])
+                ok = self._backend.add_discount_type(d["name"], d["percent"], d["legal_basis"], 1 if d["requires_id_proof"] else 0)
                 self._load_discount_types()
                 if ok:
                     QMessageBox.information(self, "Success", f"Discount type '{d['name']}' added.")
@@ -467,7 +473,8 @@ class SettingsPage(QWidget):
             "name": self._disc_table.item(row, 0).text(),
             "percent": float(self._disc_table.item(row, 1).text().replace("%", "")),
             "legal_basis": self._disc_table.item(row, 2).text(),
-            "is_active": self._disc_table.item(row, 3).text() == "Yes",
+            "requires_id_proof": self._disc_table.item(row, 3).text() == "Yes",
+            "is_active": self._disc_table.item(row, 4).text() == "Yes",
         }
         dlg = _DiscountTypeDialog(self, data=current)
         if dlg.exec() == QDialog.DialogCode.Accepted:
@@ -477,7 +484,7 @@ class SettingsPage(QWidget):
                 return
             if self._backend:
                 ok = self._backend.update_discount_type(
-                    did, d["name"], d["percent"], d["legal_basis"], 1 if d["is_active"] else 0)
+                    did, d["name"], d["percent"], d["legal_basis"], 1 if d["requires_id_proof"] else 0, 1 if d["is_active"] else 0)
                 self._load_discount_types()
                 if ok:
                     QMessageBox.information(self, "Success", f"Discount type '{d['name']}' updated.")
@@ -678,12 +685,16 @@ class _DiscountTypeDialog(QDialog):
         self.legal_edit.setPlaceholderText("e.g. RA 9994 – Expanded Senior Citizens Act")
         self.legal_edit.setMaxLength(200)
 
+        self.req_id_check = QCheckBox("Requires ID Proof")
+        self.req_id_check.setChecked(False)
+
         self.active_check = QCheckBox("Active")
         self.active_check.setChecked(True)
 
         form.addRow("Type Name", self.name_edit)
         form.addRow("Discount %", self.percent_spin)
         form.addRow("Legal Basis", self.legal_edit)
+        form.addRow("", self.req_id_check)
         form.addRow("", self.active_check)
 
         from PyQt6.QtWidgets import QDialogButtonBox
@@ -698,6 +709,7 @@ class _DiscountTypeDialog(QDialog):
             self.name_edit.setText(data.get("name", ""))
             self.percent_spin.setValue(data.get("percent", 0))
             self.legal_edit.setText(data.get("legal_basis", ""))
+            self.req_id_check.setChecked(data.get("requires_id_proof", False))
             self.active_check.setChecked(data.get("is_active", True))
 
     def get_data(self) -> dict:
@@ -705,5 +717,6 @@ class _DiscountTypeDialog(QDialog):
             "name": self.name_edit.text().strip(),
             "percent": self.percent_spin.value(),
             "legal_basis": self.legal_edit.text().strip(),
+            "requires_id_proof": self.req_id_check.isChecked(),
             "is_active": self.active_check.isChecked(),
         }

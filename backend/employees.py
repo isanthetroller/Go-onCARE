@@ -308,9 +308,10 @@ class EmployeeMixin:
         row = self.fetch("""
             SELECT e.employee_id 
             FROM employees e 
-            LEFT JOIN users u ON u.email = %s
             WHERE e.email = %s 
-               OR CONCAT(e.first_name, ' ', e.last_name) = u.full_name
+               OR CONCAT(e.first_name, ' ', e.last_name) = (
+                   SELECT full_name FROM users WHERE email = %s LIMIT 1
+               )
             LIMIT 1
         """, (email, email), one=True)
         return row["employee_id"] if row else None

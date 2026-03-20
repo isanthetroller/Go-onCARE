@@ -72,7 +72,7 @@ class EmployeeDialog(QDialog):
             from PyQt6.QtSvgWidgets import QSvgWidget
             icon_w = QSvgWidget(os.path.normpath(_icon_path))
             icon_w.setFixedSize(32, 32)
-            icon_w.setStyleSheet("background: transparent;")
+            icon_w.setObjectName("icon_w_no_bleed"); icon_w.setStyleSheet("#icon_w_no_bleed { background: transparent; }")
         except ImportError:
             icon_w = QLabel("\U0001F464")
             icon_w.setFixedSize(32, 32)
@@ -102,7 +102,7 @@ class EmployeeDialog(QDialog):
         scroll.setStyleSheet(
             "QScrollArea { background: #FFFFFF; border: none; }")
         scroll_inner = QWidget()
-        scroll_inner.setStyleSheet("background: #FFFFFF;")
+        scroll_inner.setObjectName("scroll_inner_no_bleed"); scroll_inner.setStyleSheet("#scroll_inner_no_bleed { background: #FFFFFF; }")
         content_lay = QVBoxLayout(scroll_inner)
         content_lay.setContentsMargins(32, 20, 32, 12)
         content_lay.setSpacing(0)
@@ -167,7 +167,7 @@ class EmployeeDialog(QDialog):
     # ── UI helpers ─────────────────────────────────────────────────
     def _section_label(self, text: str) -> QWidget:
         container = QWidget()
-        container.setStyleSheet("background: transparent; border: none;")
+        container.setObjectName("container_no_bleed"); container.setStyleSheet("#container_no_bleed { background: transparent; border: none; }")
         row = QHBoxLayout(container)
         row.setContentsMargins(0, 6, 0, 4)
         row.setSpacing(10)
@@ -294,8 +294,9 @@ class EmployeeDialog(QDialog):
         self.type_combo.addItems(["Full-time", "Part-time", "Contract"])
         self.type_combo.setMinimumHeight(40)
 
+        from ui.shared.modern_calendar import apply_modern_calendar
         self.hire_date = QDateEdit()
-        self.hire_date.setCalendarPopup(True)
+        apply_modern_calendar(self.hire_date)
         self.hire_date.setDate(QDate.currentDate())
         self.hire_date.setObjectName("formCombo")
         self.hire_date.setMaximumDate(QDate.currentDate())

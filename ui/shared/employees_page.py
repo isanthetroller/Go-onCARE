@@ -116,7 +116,7 @@ class EmployeesPage(QWidget):
                 f"background:{color}; border-radius:4px;")
             bar_lay.addWidget(bar_inner, pct)
             spacer = QFrame()
-            spacer.setStyleSheet("background:transparent;")
+            spacer.setObjectName("spacer_no_bleed"); spacer.setStyleSheet("#spacer_no_bleed { background:transparent; }")
             bar_lay.addWidget(spacer, 100 - pct)
             # count label
             cnt_lbl = QLabel(str(cnt))

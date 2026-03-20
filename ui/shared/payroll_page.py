@@ -1,4 +1,4 @@
-﻿# Payroll page - Finance approves paycheck requests, HR submits/disburses
+# Payroll page - Finance approves paycheck requests, HR submits/disburses
 
 from calendar import monthrange
 from datetime import date, timedelta
@@ -869,8 +869,9 @@ class _PaycheckRequestDialog(QDialog):
         form.addRow("Amount", self._amount)
 
         # Period
+        from ui.shared.modern_calendar import apply_modern_calendar
         self._from_date = QDateEdit()
-        self._from_date.setCalendarPopup(True)
+        apply_modern_calendar(self._from_date)
         self._from_date.setDate(QDate.currentDate().addMonths(-1))
         self._from_date.setObjectName("formCombo")
         self._from_date.setMinimumHeight(40)
@@ -878,7 +879,7 @@ class _PaycheckRequestDialog(QDialog):
         form.addRow("Period From", self._from_date)
 
         self._until_date = QDateEdit()
-        self._until_date.setCalendarPopup(True)
+        apply_modern_calendar(self._until_date)
         self._until_date.setDate(QDate.currentDate())
         self._until_date.setObjectName("formCombo")
         self._until_date.setMinimumHeight(40)
@@ -995,8 +996,9 @@ class _PartialPaycheckDialog(QDialog):
         form.addRow("Base Salary", self._salary_label)
 
         # Period
+        from ui.shared.modern_calendar import apply_modern_calendar
         self._from_date = QDateEdit()
-        self._from_date.setCalendarPopup(True)
+        apply_modern_calendar(self._from_date)
         self._from_date.setDate(QDate.currentDate().addMonths(-1))
         self._from_date.setObjectName("formCombo")
         self._from_date.setMinimumHeight(40)
@@ -1005,7 +1007,7 @@ class _PartialPaycheckDialog(QDialog):
         form.addRow("Period From", self._from_date)
 
         self._until_date = QDateEdit()
-        self._until_date.setCalendarPopup(True)
+        apply_modern_calendar(self._until_date)
         self._until_date.setDate(QDate.currentDate())
         self._until_date.setObjectName("formCombo")
         self._until_date.setMinimumHeight(40)

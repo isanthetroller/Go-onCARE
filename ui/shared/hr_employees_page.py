@@ -272,9 +272,10 @@ class HREmployeesPage(QWidget):
         hdr.addWidget(title)
         hdr.addStretch()
         
+        from ui.shared.modern_calendar import apply_modern_calendar
         self._att_date = QDateEdit()
         self._att_date.setObjectName("formCombo")
-        self._att_date.setCalendarPopup(True)
+        apply_modern_calendar(self._att_date)
         self._att_date.setDate(QDate.currentDate())
         self._att_date.setMinimumHeight(38)
         self._att_date.setFixedWidth(130)

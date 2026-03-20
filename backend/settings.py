@@ -141,24 +141,24 @@ class SettingsMixin:
 
     # ── Discount Types ─────────────────────────────────────────────────
     def get_discount_types(self, active_only=False):
-        sql = "SELECT discount_id, type_name, discount_percent, legal_basis, is_active FROM discount_types"
+        sql = "SELECT discount_id, type_name, discount_percent, legal_basis, requires_id_proof, is_active FROM discount_types"
         if active_only:
             sql += " WHERE is_active = 1"
         sql += " ORDER BY type_name"
         return self.fetch(sql)
 
-    def add_discount_type(self, name, percent, legal_basis=""):
+    def add_discount_type(self, name, percent, legal_basis="", requires_id_proof=0):
         ok = self.exec(
-            "INSERT INTO discount_types (type_name, discount_percent, legal_basis) VALUES (%s,%s,%s)",
-            (name, percent, legal_basis))
+            "INSERT INTO discount_types (type_name, discount_percent, legal_basis, requires_id_proof) VALUES (%s,%s,%s,%s)",
+            (name, percent, legal_basis, requires_id_proof))
         if ok:
             self.log_activity("Created", "Discount Type", f"{name} ({percent}%)")
         return ok
 
-    def update_discount_type(self, discount_id, name, percent, legal_basis="", is_active=1):
+    def update_discount_type(self, discount_id, name, percent, legal_basis="", requires_id_proof=0, is_active=1):
         ok = self.exec(
-            "UPDATE discount_types SET type_name=%s, discount_percent=%s, legal_basis=%s, is_active=%s WHERE discount_id=%s",
-            (name, percent, legal_basis, is_active, discount_id))
+            "UPDATE discount_types SET type_name=%s, discount_percent=%s, legal_basis=%s, requires_id_proof=%s, is_active=%s WHERE discount_id=%s",
+            (name, percent, legal_basis, requires_id_proof, is_active, discount_id))
         if ok:
             self.log_activity("Edited", "Discount Type", f"{name} ({percent}%)")
         return ok
