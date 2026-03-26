@@ -345,7 +345,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self._analytics_page)
 
         # 5 – Employees (Admin & HR used to get enhanced page, now ONLY HR)
-        if self._role == "HR":
+        if self._role in ("HR", "Admin"):
             self._employees_page = HREmployeesPage(backend=self._backend, role=self._role)
         else:
             self._employees_page = EmployeesPage(backend=self._backend, role=self._role)

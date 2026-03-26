@@ -557,10 +557,8 @@ class AppointmentDialog(QDialog):
             self._no_slots_label.setVisible(False)
             self.time_edit.setMinimumTime(effective_start)
             self.time_edit.setMaximumTime(t_end)
-            if self.time_edit.time() < effective_start:
-                self.time_edit.setTime(effective_start)
-            elif self.time_edit.time() > t_end:
-                self.time_edit.setTime(effective_start)
+            # Always snap time to the effective schedule start
+            self.time_edit.setTime(effective_start)
 
             self._today_sched_label.setText(
                 f"Available {day_label} ({target_day}):  "
@@ -585,9 +583,12 @@ class AppointmentDialog(QDialog):
             " border-radius: 6px;")
         self._sched_info.setText(
             f"This doctor has no schedule for {target_day}.\n"
-            "You can still create the appointment.")
-        self.time_edit.setEnabled(True)
-        self._no_slots_label.setVisible(False)
+            "Please select a date when the doctor is available.")
+        self.time_edit.setEnabled(False)
+        self._no_slots_label.setText(
+            f"\u26A0 The selected doctor does not work {day_label} ({target_day}).\n"
+            "Please choose a different date that matches the doctor\u2019s schedule.")
+        self._no_slots_label.setVisible(True)
         self.time_edit.clearMinimumTime()
         self.time_edit.clearMaximumTime()
 
@@ -716,6 +717,15 @@ class AppointmentDialog(QDialog):
         appt_date = self.date_edit.date().toString("yyyy-MM-dd")
         selected_time = self.time_edit.time()
         appt_d = self.date_edit.date().toPyDate()
+
+        # Block saving if the doctor has no schedule for this day
+        if not self._sched_start_hhmm or not self._sched_end_hhmm:
+            target_day = _DAY_NAMES[appt_d.weekday()]
+            QMessageBox.warning(
+                self, "No Schedule",
+                f"The selected doctor does not work on {target_day}.\n"
+                "Please choose a date that matches the doctor\u2019s schedule.")
+            return
 
         if appt_d == date.today() and not self._is_edit:
             now = QTime.currentTime()

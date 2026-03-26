@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Go-onCARE – System Features Reviewer</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    color: #2C3E50;
+    background: #fff;
+    line-height: 1.6;
+    font-size: 11pt;
+  }
+
+  @media print {
+    body { font-size: 10pt; }
+    .page-break { page-break-before: always; }
+    .no-print { display: none; }
+    section { page-break-inside: avoid; }
+    .feature-card { page-break-inside: avoid; }
+  }
+
+  .cover {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #388087 0%, #6FB3B8 50%, #BADFE7 100%);
+    color: #fff;
+    text-align: center;
+    padding: 60px 40px;
+  }
+  .cover h1 { font-size: 42pt; font-weight: 800; letter-spacing: -1px; margin-bottom: 8px; }
+  .cover .subtitle { font-size: 16pt; font-weight: 300; opacity: 0.9; margin-bottom: 40px; }
+  .cover .tagline { font-size: 12pt; font-weight: 400; opacity: 0.8; margin-bottom: 60px; max-width: 600px; }
+  .cover .meta { font-size: 10pt; opacity: 0.7; }
+  .cover .badge { display: inline-block; background: rgba(255,255,255,0.2); padding: 6px 20px; border-radius: 20px; font-size: 10pt; margin-top: 16px; }
+
+  .toc {
+    padding: 50px 60px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .toc h2 { font-size: 20pt; color: #388087; margin-bottom: 20px; border-bottom: 3px solid #BADFE7; padding-bottom: 8px; }
+  .toc ol { padding-left: 24px; }
+  .toc li { margin-bottom: 8px; font-size: 12pt; }
+  .toc a { color: #388087; text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+
+  .content { max-width: 900px; margin: 0 auto; padding: 0 60px 60px; }
+
+  h2.section-title {
+    font-size: 18pt; color: #388087; margin-top: 40px; margin-bottom: 8px;
+    border-bottom: 3px solid #BADFE7; padding-bottom: 6px;
+  }
+  h3 { font-size: 13pt; color: #2C3E50; margin-top: 20px; margin-bottom: 6px; }
+  h4 { font-size: 11pt; color: #555; margin-top: 14px; margin-bottom: 4px; }
+
+  p { margin-bottom: 8px; }
+
+  .feature-card {
+    background: #F8FAFA;
+    border-left: 4px solid #388087;
+    padding: 14px 18px;
+    margin: 12px 0;
+    border-radius: 0 8px 8px 0;
+  }
+  .feature-card h4 { margin-top: 0; color: #388087; font-size: 12pt; }
+
+  ul { padding-left: 22px; margin-bottom: 10px; }
+  li { margin-bottom: 4px; }
+
+  .role-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 9pt;
+    font-weight: 600;
+    margin-right: 4px;
+    margin-bottom: 4px;
+  }
+  .role-admin { background: #D5F5E3; color: #1E8449; }
+  .role-receptionist { background: #D4E6F1; color: #2471A3; }
+  .role-doctor { background: #FADBD8; color: #C0392B; }
+  .role-nurse { background: #F9E79F; color: #7D6608; }
+  .role-hr { background: #E8DAEF; color: #6C3483; }
+  .role-finance { background: #FDEBD0; color: #CA6F1E; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0 20px;
+    font-size: 10pt;
+  }
+  th, td {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    text-align: left;
+  }
+  th { background: #388087; color: #fff; font-weight: 600; }
+  tr:nth-child(even) { background: #f9f9f9; }
+
+  .tech-stack { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
+  .tech-item {
+    background: #E8F0F1;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 10pt;
+    font-weight: 500;
+    color: #2C3E50;
+  }
+
+  .footer { text-align: center; color: #999; font-size: 9pt; padding: 30px 0; border-top: 1px solid #eee; margin-top: 40px; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════ COVER PAGE ═══════════════════════════ -->
+<div class="cover">
+  <h1>Go-onCARE</h1>
+  <div class="subtitle">Healthcare Management & Scheduling System</div>
+  <div class="tagline">
+    A comprehensive, role-based clinic management platform covering patient care,
+    appointment scheduling, clinical operations, billing, HR management, payroll,
+    and data analytics — all in one integrated desktop application.
+  </div>
+  <div class="meta">System Features Reviewer</div>
+  <div class="badge">Presentation Reference Document — March 2026</div>
+</div>
+
+<!-- ═══════════════════════════ TABLE OF CONTENTS ═══════════════════════════ -->
+<div class="toc page-break">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li><a href="#tech">Technology Stack & Architecture</a></li>
+    <li><a href="#roles">User Roles & Access Control</a></li>
+    <li><a href="#auth">Authentication & Security</a></li>
+    <li><a href="#dashboard">Dashboard & KPI Overview</a></li>
+    <li><a href="#patients">Patient Management</a></li>
+    <li><a href="#appointments">Appointment Scheduling</a></li>
+    <li><a href="#clinical">Clinical Operations & Queue</a></li>
+    <li><a href="#invoicing">Billing & Invoicing</a></li>
+    <li><a href="#employees">Employee Management</a></li>
+    <li><a href="#hr">HR & Leave Management</a></li>
+    <li><a href="#payroll">Payroll & Paycheck Processing</a></li>
+    <li><a href="#analytics">Analytics & Reporting</a></li>
+    <li><a href="#settings">System Settings & Configuration</a></li>
+    <li><a href="#validation">Data Validation & Safeguards</a></li>
+    <li><a href="#activity">Activity Logging & Audit Trail</a></li>
+  </ol>
+</div>
+
+<!-- ═══════════════════════════ CONTENT ═══════════════════════════ -->
+<div class="content">
+
+<!-- 1. TECHNOLOGY STACK -->
+<h2 class="section-title page-break" id="tech">1. Technology Stack & Architecture</h2>
+
+<div class="feature-card">
+  <h4>Desktop Application</h4>
+  <div class="tech-stack">
+    <span class="tech-item">Python 3</span>
+    <span class="tech-item">PyQt6 (GUI Framework)</span>
+    <span class="tech-item">MySQL Database</span>
+    <span class="tech-item">Fusion Style Engine</span>
+  </div>
+  <ul>
+    <li><strong>Frontend:</strong> PyQt6 — cross-platform native desktop UI with custom QSS theming</li>
+    <li><strong>Backend:</strong> Python Mixin architecture — modular backend classes (AuthMixin, PatientMixin, EmployeeMixin, ClinicalMixin, etc.) composed into a single <code>AuthBackend</code> class</li>
+    <li><strong>Database:</strong> MySQL with parameterized queries for SQL injection prevention</li>
+    <li><strong>Design:</strong> Teal (#388087) / Soft Sage (#F6F6F2) / Accent (#BADFE7) color palette with consistent card-based layout, gradient headers, and modern form styling</li>
+    <li><strong>Error Handling:</strong> Global exception hook catches any unhandled errors and displays them to the user instead of silently crashing</li>
+  </ul>
+</div>
+
+<!-- 2. USER ROLES -->
+<h2 class="section-title page-break" id="roles">2. User Roles & Access Control</h2>
+<p>Go-onCARE uses role-based access control (RBAC). Each user account is assigned a role that determines which pages, features, and data they can access.</p>
+
+<table>
+  <tr>
+    <th>Role</th>
+    <th>Primary Responsibilities</th>
+    <th>Key Accessible Pages</th>
+  </tr>
+  <tr>
+    <td><span class="role-badge role-admin">Admin</span></td>
+    <td>Full system access — manages everything: patients, appointments, employees, services, settings, user accounts</td>
+    <td>Dashboard, Patients, Appointments, Clinical, Employees, HR, Payroll, Analytics, Settings, Activity Log</td>
+  </tr>
+  <tr>
+    <td><span class="role-badge role-receptionist">Receptionist</span></td>
+    <td>Front desk operations — registers patients, schedules appointments, creates invoices</td>
+    <td>Dashboard, Patients, Appointments, Clinical (Queue + Billing), Activity Log</td>
+  </tr>
+  <tr>
+    <td><span class="role-badge role-doctor">Doctor</span></td>
+    <td>Clinical care — views their own patients, completes queue entries, records consultations</td>
+    <td>Dashboard (doctor-specific), My Patients, Clinical Queue, My Analytics</td>
+  </tr>
+  <tr>
+    <td><span class="role-badge role-nurse">Nurse</span></td>
+    <td>Triage — calls waiting patients from the queue, records vital signs (BP, weight, height, temp)</td>
+    <td>Dashboard, Clinical Queue (triage-focused)</td>
+  </tr>
+  <tr>
+    <td><span class="role-badge role-hr">HR</span></td>
+    <td>Human resources — manages employee records, approves/declines leave requests, processes paychecks</td>
+    <td>Dashboard, Employee Management, Leave Requests, Payroll</td>
+  </tr>
+  <tr>
+    <td><span class="role-badge role-finance">Finance</span></td>
+    <td>Financial oversight — approves/rejects paycheck requests before disbursement</td>
+    <td>Dashboard, Payroll Approval Queue</td>
+  </tr>
+</table>
+
+<!-- 3. AUTHENTICATION -->
+<h2 class="section-title" id="auth">3. Authentication & Security</h2>
+
+<div class="feature-card">
+  <h4>Login System</h4>
+  <ul>
+    <li>Email + password authentication against the <code>users</code> table</li>
+    <li>Role-based redirection — each role sees a tailored interface upon login</li>
+    <li>Login activity is automatically logged in the audit trail</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>First-Login Password Change</h4>
+  <ul>
+    <li>Newly created accounts are flagged with <code>must_change_password = 1</code></li>
+    <li>The system forces the user to change their password on first login before granting access</li>
+    <li>This flag is cleared once the password is successfully changed</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>Account Management (Admin Only)</h4>
+  <ul>
+    <li><strong>Create accounts</strong> — Admin can create user accounts with name, email, password, and role assignment</li>
+    <li><strong>Reset passwords</strong> — Admin can reset any user's password; the user must change it on next login</li>
+    <li><strong>Delete accounts</strong> — Admin can remove user accounts from the system</li>
+    <li><strong>Change own password</strong> — Any user can change their own password (requires current password verification)</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>Auto Clock-In / Clock-Out</h4>
+  <ul>
+    <li>When an employee logs in, the system automatically records a <strong>clock-in</strong> in the attendance table</li>
+    <li>When they log out (or close the application), it records a <strong>clock-out</strong></li>
+    <li>This provides automatic time tracking without manual attendance entry</li>
+  </ul>
+</div>
+
+<!-- 4. DASHBOARD -->
+<h2 class="section-title page-break" id="dashboard">4. Dashboard & KPI Overview</h2>
+<p>The Dashboard is the first page every user sees after login. It dynamically adapts to the logged-in user's role.</p>
+
+<div class="feature-card">
+  <h4>KPI Cards (Admin/Receptionist View)</h4>
+  <ul>
+    <li><strong>Active Patients</strong> — total number of patients with "Active" status</li>
+    <li><strong>New Patients This Week</strong> — patients registered in the last 7 days</li>
+    <li><strong>Today's Appointments</strong> — total, with breakdown: Confirmed / Pending / Completed</li>
+    <li><strong>Today's Revenue</strong> — total paid invoices created today</li>
+    <li><strong>Total Revenue</strong> — all-time sum of paid invoices</li>
+    <li><strong>Active Staff</strong> — number of employees with "Active" status</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>KPI Cards (Doctor View)</h4>
+  <ul>
+    <li>Same structure, but filtered to show only the logged-in doctor's patients, appointments, and revenue</li>
+    <li>Provides a personalized performance snapshot</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>Month-over-Month Comparison</h4>
+  <ul>
+    <li>Revenue delta (%), appointment delta (%), patient delta (%), completed appointment delta (%)</li>
+    <li>Automatically compares current month vs. previous month</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>Financial Summary Panel</h4>
+  <ul>
+    <li>Total revenue collected, total payroll disbursed, net balance</li>
+    <li>Pending payroll amount, this month's revenue vs. disbursements</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>Additional Dashboard Sections</h4>
+  <ul>
+    <li><strong>Upcoming Appointments</strong> — next 10 confirmed/pending appointments with patient, doctor, service, and time</li>
+    <li><strong>Doctor Schedules</strong> — weekly schedule grid for all active doctors (day, start/end times)</li>
+    <li><strong>Patient Trends Chart</strong> — 6-month bar chart of monthly visit counts</li>
+    <li><strong>My Leave Requests</strong> — employees can view their own leave requests and submit new ones</li>
+    <li><strong>Notifications</strong> — unread notifications for the logged-in employee (e.g., leave decisions, paycheck updates)</li>
+  </ul>
+</div>
+
+<!-- 5. PATIENT MANAGEMENT -->
+<h2 class="section-title page-break" id="patients">5. Patient Management</h2>
+
+<div class="feature-card">
+  <h4>Add New Patient</h4>
+  <ul>
+    <li><strong>Required fields:</strong> Full Name, Phone, Address</li>
+    <li><strong>Validated fields:</strong> Phone (digits only, with +63 prefix), Email (format check), Name (min 2 characters)</li>
+    <li><strong>Personal info:</strong> Sex, Date of Birth (modern calendar picker), Civil Status, Emergency Contact</li>
+    <li><strong>Medical info:</strong> Blood Type (A+/−, B+/−, AB+/−, O+/−), Notes</li>
+    <li><strong>Conditions:</strong> Multi-select checkboxes from a configurable list of standard conditions</li>
+    <li><strong>Discount:</strong> Selectable discount type (e.g., PWD, Senior Citizen) with an associated discount percentage</li>
+    <li><strong>ID Proof:</strong> If the selected discount requires ID proof, the system requires an uploaded image before saving</li>
+    <li><strong>Duplicate Detection:</strong> Before saving, the system checks for existing patients with the same name, phone, or email</li>
+    <li><strong>Review & Confirm:</strong> A styled summary dialog shows all entered data for verification before final save</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>Edit Patient</h4>
+  <ul>
+    <li>Same form as Add, pre-populated with existing data</li>
+    <li>Updates all fields including conditions, discount, ID proof, and status</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>Patient Profile Viewer</h4>
+  <ul>
+    <li>Detailed profile dialog with tabbed sections:</li>
+    <li><strong>Information Tab:</strong> All personal, medical, and contact details in a card layout</li>
+    <li><strong>Appointments Tab:</strong> Full history of appointments with dates, doctors, services, and statuses</li>
+    <li><strong>Invoices Tab:</strong> All invoices with amounts, payment status, and payment methods</li>
+    <li><strong>Queue History Tab:</strong> Past queue entries with times, purposes, and statuses</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>Patient Table & Search</h4>
+  <ul>
+    <li>Searchable patient list with columns: Name, Phone, Email, Blood Type, Discount, Conditions, Status, Last Visit</li>
+    <li>Real-time search filtering by name, phone, or email</li>
+    <li>Delete and Merge functionality available</li>
+  </ul>
+</div>
+
+<!-- 6. APPOINTMENTS -->
+<h2 class="section-title page-break" id="appointments">6. Appointment Scheduling</h2>
+
+<div class="feature-card">
+  <h4>Create Appointment</h4>
+  <ul>
+    <li>Select patient (searchable dropdown), doctor, service, date, and time</li>
+    <li>Modern calendar popup for date selection (same widget system-wide)</li>
+    <li><strong>Walk-in support:</strong> Appointments scheduled for today are treated as walk-ins</li>
+    <li><strong>Date validation:</strong> Cannot schedule appointments in the past or more than 90 days ahead</li>
+    <li>Optional notes, cancellation and reschedule reasons</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>Appointment Confirmation</h4>
+  <ul>
+    <li>Pending appointments can be confirmed by receptionist or admin</li>
+    <li><strong>ID Proof validation:</strong> If the patient has a discount requiring ID proof (e.g., PWD) and no ID image has been uploaded, confirmation is blocked with a clear warning</li>
+    <li>Confirmed appointments are synced to the clinical queue on their appointment date</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>Appointment Status Flow</h4>
+  <ul>
+    <li><strong>Pending</strong> → <strong>Confirmed</strong> → <strong>In Progress</strong> → <strong>Completed</strong></li>
+    <li>Can also be <strong>Cancelled</strong> with a reason, or <strong>Rescheduled</strong></li>
+    <li>Appointments are automatically cancelled if the assigned doctor goes on approved leave</li>
+  </ul>
+</div>
+
+<!-- 7. CLINICAL OPERATIONS -->
+<h2 class="section-title page-break" id="clinical">7. Clinical Operations & Queue</h2>
+
+<div class="feature-card">
+  <h4>Clinical Queue Management</h4>
+  <ul>
+    <li><strong>Auto-sync:</strong> Today's confirmed appointments are automatically added to the queue each day</li>
+    <li><strong>Call Next:</strong> Doctors and nurses can call the next patient from the queue</li>
+    <li><strong>Priority system:</strong> Doctors prioritize "Triaged" patients (already seen by nurse) before "Waiting" patients</li>
+    <li><strong>Nurse triage:</strong> Nurses only pick "Waiting" patients; they record vitals and mark the patient as "Triaged"</li>
+    <li><strong>Status flow:</strong> Waiting → Triaged (by nurse) → In Progress (by doctor) → Completed</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>Vital Signs (Triage)</h4>
+  <ul>
+    <li><strong>Blood Pressure</strong> (required) — Systolic / Diastolic with real-time validation (anti-debug: systolic must be > diastolic)</li>
+    <li><strong>Weight</strong> (optional) — in kilograms</li>
+    <li><strong>Height</strong> (optional) — supports both cm and feet with automatic conversion between units</li>
+    <li><strong>Temperature</strong> (optional) — in degrees</li>
+    <li>Vitals are saved to the queue entry and displayed to the doctor when they see the patient</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>Doctor's Patient View</h4>
+  <ul>
+    <li>Doctors see their own assigned patients with triage results (vitals tab with dates)</li>
+    <li>Can view full patient profile, history of appointments, and previous vitals</li>
+    <li>Queue entries the nurse triaged appear in the doctor's queue for follow-up</li>
+  </ul>
+</div>
+
+<!-- 8. BILLING & INVOICING -->
+<h2 class="section-title page-break" id="invoicing">8. Billing & Invoicing</h2>
+
+<div class="feature-card">
+  <h4>Create Invoice</h4>
+  <ul>
+    <li><strong>Patient selection:</strong> Searchable dropdown of active patients</li>
+    <li><strong>Appointment link:</strong> Optional — link the invoice to a specific appointment</li>
+    <li><strong>Multi-item support:</strong> Add multiple services as line items, each with its own price</li>
+    <li><strong>Automatic discount:</strong> If the patient has a discount type (e.g., PWD 20%), it is automatically applied to all line items</li>
+    <li><strong>Admin override:</strong> Only Admin role can manually adjust the discount percentage; other roles see it locked</li>
+    <li><strong>Running totals:</strong> Live calculation of Subtotal, Discount amount, and Grand Total</li>
+    <li><strong>Remove items:</strong> Each line item has a remove button (✕)</li>
+    <li><strong>Payment method:</strong> Select from configured payment methods (Cash, GCash, etc.)</li>
+    <li><strong>Notes:</strong> Optional invoice notes</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>Auto-Invoice from Queue</h4>
+  <ul>
+    <li>When a queue entry is completed, the system can automatically create an unpaid invoice based on the appointment service and patient discount</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>Invoice Management</h4>
+  <ul>
+    <li><strong>Status tracking:</strong> Unpaid → Partial → Paid (or Voided)</li>
+    <li><strong>Payment recording:</strong> Record partial or full payments against an invoice</li>
+    <li><strong>Void invoices:</strong> Admin can void incorrect invoices</li>
+    <li><strong>Invoice detail view:</strong> Shows patient info, line items, payment method, and amounts</li>
+  </ul>
+</div>
+
+<!-- 9. EMPLOYEE MANAGEMENT -->
+<h2 class="section-title page-break" id="employees">9. Employee Management</h2>
+
+<div class="feature-card">
+  <h4>Add / Edit Employee</h4>
+  <ul>
+    <li><strong>Personal info:</strong> Full name, phone, email, address, emergency contact</li>
+    <li><strong>Employment info:</strong> Role (Doctor, Nurse, HR, Finance, etc.), Department, Employment Type (Full-time, Part-time, Contract), Salary</li>
+    <li><strong>Status:</strong> Active, Inactive, On Leave</li>
+    <li><strong>Leave dates:</strong> Leave From and Leave Until (when on approved leave)</li>
+    <li><strong>Hire date:</strong> Tracked for tenure calculation</li>
+    <li><strong>Auto-account creation:</strong> If the employee has an email, a user account is automatically created with role-based default password (e.g., <code>doctor123</code>) and forced password change on first login</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>Doctor Schedules</h4>
+  <ul>
+    <li>Set weekly schedules for each doctor (day of week, start time, end time)</li>
+    <li>Schedules are displayed on the dashboard calendar grid for all staff to see</li>
+    <li>Used for availability planning when scheduling appointments</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>Attendance Tracking</h4>
+  <ul>
+    <li>Automatic clock-in/clock-out via login/logout</li>
+    <li>Manual clock-in/clock-out for specific date recording</li>
+    <li>Attendance history viewable per employee</li>
+    <li>Statistics: total active, present today, absent today, by department</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>Employee Table</h4>
+  <ul>
+    <li>Searchable list with columns: Name, Role, Department, Type, Status, Phone, Email</li>
+    <li>Delete employee (cascading: removes linked invoices, appointments, and user account)</li>
+  </ul>
+</div>
+
+<!-- 10. HR & LEAVE MANAGEMENT -->
+<h2 class="section-title page-break" id="hr">10. HR & Leave Management</h2>
+
+<div class="feature-card">
+  <h4>Request Leave (All Employees)</h4>
+  <ul>
+    <li>Any employee can submit a leave request from their dashboard</li>
+    <li>Specify Leave From date, Leave Until date, and Reason</li>
+    <li>Modern calendar date picker (same widget as DOB and appointment date pickers)</li>
+    <li><strong>Validation:</strong> Leave From must be at least tomorrow; Leave Until must be after Leave From</li>
+    <li>Requests start with "Pending" status</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>HR Leave Administration</h4>
+  <ul>
+    <li>HR sees all pending leave requests in a management queue</li>
+    <li><strong>Approve:</strong> Sets employee status to "On Leave," records leave dates, and auto-cancels all the doctor's confirmed appointments during the leave period</li>
+    <li><strong>Decline:</strong> HR provides a decline reason/note</li>
+    <li><strong>Notifications:</strong> The employee receives an in-app notification about the decision</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>My Leave Requests</h4>
+  <ul>
+    <li>Employees can view their own leave history with status (Pending, Approved, Declined), HR notes, and timestamps</li>
+  </ul>
+</div>
+
+<!-- 11. PAYROLL -->
+<h2 class="section-title page-break" id="payroll">11. Payroll & Paycheck Processing</h2>
+
+<div class="feature-card">
+  <h4>Paycheck Request Lifecycle</h4>
+  <ol>
+    <li><strong>HR creates paycheck request</strong> — selects employee, period (from/to), gross amount; system auto-calculates deductions</li>
+    <li><strong>Finance reviews</strong> — Approve (with optional note) or Reject (with reason)</li>
+    <li><strong>HR disburses</strong> — marks approved paycheck as disbursed</li>
+    <li><strong>Employee notified</strong> — in-app notification at each stage</li>
+  </ol>
+</div>
+
+<div class="feature-card">
+  <h4>Deduction Calculation</h4>
+  <ul>
+    <li>System automatically calculates standard deductions based on gross salary</li>
+    <li>Net amount = Gross - Deductions</li>
+    <li>Full paycheck history maintained per employee</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>Paycheck Statuses</h4>
+  <ul>
+    <li><strong>Pending</strong> → awaiting finance review</li>
+    <li><strong>Approved</strong> → approved by finance, awaiting HR disbursement</li>
+    <li><strong>Rejected</strong> → declined by finance with reason</li>
+    <li><strong>Disbursed</strong> → payment released to employee</li>
+  </ul>
+</div>
+
+<!-- 12. ANALYTICS -->
+<h2 class="section-title page-break" id="analytics">12. Analytics & Reporting</h2>
+
+<div class="feature-card">
+  <h4>Revenue Analytics</h4>
+  <ul>
+    <li><strong>Monthly Revenue Chart</strong> — 6-month trend of paid invoices with appointment counts</li>
+    <li><strong>Revenue by Department</strong> — breakdown of revenue generated per department</li>
+    <li><strong>Period Revenue</strong> — filterable by custom date range</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>Appointment Analytics</h4>
+  <ul>
+    <li><strong>Monthly Appointment Stats</strong> — total visits, completed, and cancelled per month</li>
+    <li><strong>Appointment Status Distribution</strong> — pie/bar chart of Pending, Confirmed, Completed, Cancelled</li>
+    <li><strong>Cancellation Rate Trend</strong> — monthly cancellation percentage over 6 months</li>
+    <li><strong>Average Consultation Time</strong> — derived from queue entry timestamps (queue_time to completion)</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>Patient Analytics</h4>
+  <ul>
+    <li><strong>Patient Demographics</strong> — age group distribution (0–17, 18–35, 36–50, 51–65, 65+)</li>
+    <li><strong>Patient Conditions</strong> — top 3 conditions + "Others" category</li>
+    <li><strong>Patient Retention</strong> — new vs. returning patients per month</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>Doctor Performance</h4>
+  <ul>
+    <li><strong>All Doctors:</strong> Table of each doctor's total appointments, completed, and revenue generated</li>
+    <li><strong>Doctor Own Stats:</strong> Individual doctor's performance card with department, employment type, and 6-month trend chart</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>Employee Attendance Stats</h4>
+  <ul>
+    <li>Total active employees, present today, absent today</li>
+    <li>Department-level attendance breakdown</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>Summary Statistics</h4>
+  <ul>
+    <li>Period-based summary: revenue, total appointments, completed, cancelled, total patients, today's appointments, average per day</li>
+    <li>Filterable by custom date range</li>
+  </ul>
+</div>
+
+<!-- 13. SETTINGS -->
+<h2 class="section-title page-break" id="settings">13. System Settings & Configuration</h2>
+
+<div class="feature-card">
+  <h4>Services Management</h4>
+  <ul>
+    <li>Add, edit, and deactivate medical services</li>
+    <li>Each service has: name, price, category, active/inactive status</li>
+    <li>Services can be linked to specific departments</li>
+    <li>Bulk price update feature for mass adjustments</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>Discount Types</h4>
+  <ul>
+    <li>Configure discount categories (e.g., PWD, Senior Citizen, Employee)</li>
+    <li>Each type has: name, discount percentage (%), and "requires ID proof" flag</li>
+    <li>Can be activated/deactivated</li>
+    <li>When a patient is assigned a discount with ID proof required, the system blocks confirmation and saving until proof is uploaded</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>Standard Conditions</h4>
+  <ul>
+    <li>Configurable list of medical conditions (e.g., Diabetes, Hypertension, Asthma)</li>
+    <li>Appear as checkboxes when adding/editing patients</li>
+    <li>Used in analytics for patient condition distribution charts</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>Data Cleanup Tools (Admin Only)</h4>
+  <ul>
+    <li><strong>Cleanup completed appointments</strong> — remove completed appointments before a specified date</li>
+    <li><strong>Cleanup cancelled appointments</strong> — remove all cancelled appointments</li>
+    <li><strong>Cleanup inactive patients</strong> — remove patients with "Inactive" status (cascading: linked invoices, appointments, conditions)</li>
+    <li><strong>Truncate tables</strong> — reset specific tables (queue_entries, invoices, appointments, etc.)</li>
+    <li><strong>Table row counts</strong> — view current record counts in all database tables</li>
+  </ul>
+</div>
+
+<!-- 14. VALIDATION -->
+<h2 class="section-title" id="validation">14. Data Validation & Safeguards</h2>
+
+<div class="feature-card">
+  <h4>Input Validation</h4>
+  <ul>
+    <li><strong>Patient Name:</strong> Minimum 2 characters</li>
+    <li><strong>Phone:</strong> Digits only, validated format with +63 prefix</li>
+    <li><strong>Email:</strong> Regex format validation</li>
+    <li><strong>Address:</strong> Required field for new patients</li>
+    <li><strong>Blood Pressure:</strong> Systolic must be greater than diastolic (anti-debug validation)</li>
+    <li><strong>Appointment Date:</strong> Must be today or within 90 days; cannot be in the past</li>
+    <li><strong>Leave Dates:</strong> Leave From ≥ tomorrow; Leave Until ≥ Leave From + 1 day</li>
+    <li><strong>Service Prices:</strong> Custom price validator for numeric input</li>
+  </ul>
+</div>
+
+<div class="feature-card">
+  <h4>Business Logic Safeguards</h4>
+  <ul>
+    <li><strong>Discount ID Proof:</strong> If a discount type requires ID proof and no image is uploaded, the system blocks both new patient saves and appointment confirmations</li>
+    <li><strong>Duplicate Patient Detection:</strong> Alerts the user when adding a patient with a matching name, phone, or email</li>
+    <li><strong>Leave Auto-Cancellation:</strong> When a doctor's leave is approved, all their confirmed/pending appointments during the leave period are automatically cancelled</li>
+    <li><strong>Invoice Discount Enforcement:</strong> Discount percentages are resolved from the database at invoice creation time — not trusted from the UI — preventing manipulation</li>
+    <li><strong>Paycheck Approval Workflow:</strong> Paychecks require finance approval before HR can disburse, ensuring dual authorization</li>
+  </ul>
+</div>
+
+<!-- 15. ACTIVITY LOG -->
+<h2 class="section-title" id="activity">15. Activity Logging & Audit Trail</h2>
+
+<div class="feature-card">
+  <h4>Comprehensive Audit Log</h4>
+  <ul>
+    <li>Every significant action is logged with: user, timestamp, action type, category, and details</li>
+    <li><strong>Action types:</strong> Login, Created, Edited, Deleted, Approved, Declined, Voided, Merged</li>
+    <li><strong>Categories:</strong> User, Patient, Appointment, Invoice, Employee, Leave, Paycheck, Schedule, Queue, Service, Condition, System</li>
+    <li>Searchable activity log page available to Admin role</li>
+    <li>Provides a full history of who did what and when — critical for accountability and compliance</li>
+  </ul>
+</div>
+
+</div><!-- .content -->
+
+<div class="footer">
+  Go-onCARE: Healthcare Management & Scheduling System — System Features Reviewer<br>
+  Generated March 2026
+</div>
+
+</body>
+</html>

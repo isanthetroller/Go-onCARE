@@ -255,4 +255,21 @@ class AppointmentMixin:
                               f"Appt #{appointment_id} for {data.get('patient_name','')} with Dr. {doctor_name}")
         return ok
 
+    def check_appointment_id_proof(self, appointment_id):
+        """Check if the patient for this appointment needs ID proof for their discount.
+
+        Returns the discount type name if ID is required but missing, or None if OK.
+        """
+        row = self.fetch("""
+            SELECT dt.type_name, dt.requires_id_proof, p.id_proof_path
+            FROM appointments a
+            INNER JOIN patients p ON a.patient_id = p.patient_id
+            LEFT JOIN discount_types dt ON p.discount_type_id = dt.discount_id AND dt.is_active = 1
+            WHERE a.appointment_id = %s
+        """, (appointment_id,), one=True)
+        if not row:
+            return None
+        if row.get("requires_id_proof") and not row.get("id_proof_path"):
+            return row.get("type_name", "Unknown")
+        return None
 

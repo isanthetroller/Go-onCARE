@@ -159,6 +159,9 @@ class EmployeeMixin:
             except Exception:
                 pass
             return str(e)
+        finally:
+            if conn:
+                conn.close()
 
     def update_employee(self, employee_id, data, old_email=""):
         first, last = self._split_name(data["name"])
@@ -222,6 +225,9 @@ class EmployeeMixin:
             except Exception:
                 pass
             return str(e)
+        finally:
+            if conn:
+                conn.close()
 
     def delete_employee(self, employee_id):
         row = self.fetch("SELECT email, CONCAT(first_name,' ',last_name) AS n FROM employees WHERE employee_id=%s",
@@ -422,6 +428,9 @@ class EmployeeMixin:
             except Exception:
                 pass
             return str(e)
+        finally:
+            if conn:
+                conn.close()
 
     def decline_leave_request(self, request_id, hr_employee_id, hr_note):
         """HR declines a leave request with a reason/note."""
@@ -456,6 +465,9 @@ class EmployeeMixin:
             except Exception:
                 pass
             return str(e)
+        finally:
+            if conn:
+                conn.close()
 
     def get_unread_notifications(self, employee_id):
         """Get unread notifications for an employee."""
@@ -514,6 +526,9 @@ class EmployeeMixin:
             except Exception:
                 pass
             return False
+        finally:
+            if conn:
+                conn.close()
 
     def get_all_doctor_schedules(self):
         """Return all active doctors' weekly schedules for dashboard display."""
@@ -645,6 +660,9 @@ class EmployeeMixin:
             except Exception:
                 pass
             return str(e)
+        finally:
+            if conn:
+                conn.close()
 
     def reject_paycheck_request(self, request_id, finance_employee_id, note):
         """Finance rejects a paycheck request with a reason."""
@@ -676,6 +694,9 @@ class EmployeeMixin:
             except Exception:
                 pass
             return str(e)
+        finally:
+            if conn:
+                conn.close()
 
     def disburse_paycheck(self, request_id):
         """HR marks an approved paycheck as disbursed."""
@@ -708,6 +729,9 @@ class EmployeeMixin:
             except Exception:
                 pass
             return str(e)
+        finally:
+            if conn:
+                conn.close()
 
     def get_paycheck_history(self, employee_id):
         """Return all paycheck requests for a specific employee, newest first."""

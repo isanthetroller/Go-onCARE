@@ -905,14 +905,30 @@ class DashboardPage(QWidget):
         form.setFieldGrowthPolicy(
             QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
 
-        from ui.shared.modern_calendar import ModernDateInput
-        from_date = ModernDateInput(QDate.currentDate().addDays(1))
+        from ui.shared.modern_calendar import apply_modern_calendar
+        from_date = QDateEdit()
+        from_date.setObjectName("formCombo")
+        apply_modern_calendar(from_date)
+        from_date.setDate(QDate.currentDate().addDays(1))
         from_date.setMinimumDate(QDate.currentDate().addDays(1))
-        from_date.setDisplayFormat("M/d/yyyy")
+        from_date.setDisplayFormat("MMMM d, yyyy")
+        from_date.setMinimumHeight(40)
 
-        until_date = ModernDateInput(QDate.currentDate().addDays(7))
-        until_date.setMinimumDate(QDate.currentDate().addDays(1))
-        until_date.setDisplayFormat("M/d/yyyy")
+        until_date = QDateEdit()
+        until_date.setObjectName("formCombo")
+        apply_modern_calendar(until_date)
+        until_date.setDate(QDate.currentDate().addDays(7))
+        until_date.setDisplayFormat("MMMM d, yyyy")
+        until_date.setMinimumHeight(40)
+
+        def _update_until_min():
+            min_end = from_date.date().addDays(1)
+            until_date.setMinimumDate(min_end)
+            if until_date.date() < min_end:
+                until_date.setDate(min_end)
+                
+        from_date.dateChanged.connect(lambda _: _update_until_min())
+        _update_until_min()
 
         reason_edit = QTextEdit()
         reason_edit.setMaximumHeight(90)

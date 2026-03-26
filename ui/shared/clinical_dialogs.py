@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox, QTableWidget, QTableWidgetItem, QHeaderView,
     QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSpinBox,
     QDoubleSpinBox, QCheckBox, QFrame, QMessageBox, QWidget,
+    QSizePolicy, QScrollArea,
 )
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
@@ -352,7 +353,8 @@ class NewInvoiceDialog(QDialog):
                  patients=None, backend=None, role="Admin"):
         super().__init__(parent)
         self.setWindowTitle("Create Invoice")
-        self.setMinimumWidth(700)
+        self.setMinimumWidth(720)
+        self.resize(750, 620)
 
         self._services = services or []
         self._payment_methods = payment_methods or []
@@ -387,8 +389,6 @@ class NewInvoiceDialog(QDialog):
         for p in self._patients:
             self.patient_combo.addItem(p["name"], p.get("patient_id"))
         self.patient_combo.currentTextChanged.connect(self._on_patient_changed)
-        if self.patient_combo.count() > 0:
-            self._on_patient_changed(self.patient_combo.currentText())
         pt_col.addWidget(self.patient_combo)
         top_form.addLayout(pt_col, 1)
 
@@ -475,18 +475,26 @@ class NewInvoiceDialog(QDialog):
         self._items_table.setHorizontalHeaderLabels(
             ["Service", "Unit Price", "Discount", "Subtotal", ""])
         h = self._items_table.horizontalHeader()
-        h.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        # Give Service the most space, others proportional
+        h.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        h.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
+        h.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
+        h.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
         h.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
-        self._items_table.setColumnWidth(4, 50)
+        self._items_table.setColumnWidth(1, 120)
+        self._items_table.setColumnWidth(2, 90)
+        self._items_table.setColumnWidth(3, 120)
+        self._items_table.setColumnWidth(4, 40)
         h.setStretchLastSection(False)
         self._items_table.verticalHeader().setVisible(False)
         self._items_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._items_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
         self._items_table.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self._items_table.setAlternatingRowColors(True)
-        self._items_table.setMinimumHeight(50)
-        self._items_table.setMaximumHeight(200)
-        self._items_table.verticalHeader().setDefaultSectionSize(34)
+        self._items_table.setMinimumHeight(60)
+        self._items_table.verticalHeader().setDefaultSectionSize(36)
+        self._items_table.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         configure_table(self._items_table)
         items_lay.addWidget(self._items_table)
 
@@ -566,6 +574,10 @@ class NewInvoiceDialog(QDialog):
         btn_row.addWidget(cancel_btn); btn_row.addWidget(save_btn)
         lay.addLayout(btn_row)
 
+        # ── Trigger initial patient load (MUST be last, after all widgets exist)
+        if self.patient_combo.count() > 0:
+            self._on_patient_changed(self.patient_combo.currentText())
+
     # ── helpers ────────────────────────────────────────────────────
     def _on_patient_changed(self, text: str):
         self.appt_combo.clear()
@@ -615,8 +627,9 @@ class NewInvoiceDialog(QDialog):
                     t = f"{h:02d}:{m:02d}"
                 doc = a.get("doctor_name", "")
                 doc_part = f" – Dr. {doc.split()[-1]}" if doc else ""
+                appt_date = str(a.get("appointment_date", ""))
                 self.appt_combo.addItem(
-                    f"#{a['appointment_id']} – {a['service_name']}{doc_part} @ {t}",
+                    f"#{a['appointment_id']} – {a['service_name']}{doc_part} @ {t}  ({appt_date})",
                     a["appointment_id"],
                 )
 

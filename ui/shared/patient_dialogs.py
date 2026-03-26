@@ -591,6 +591,25 @@ class PatientDialog(QDialog):
         if err:
             QMessageBox.warning(self, "Validation", err); return
 
+        # Address is required
+        if not self.address_edit.text().strip():
+            QMessageBox.warning(self, "Validation",
+                                "Address is required. Please enter the patient's address.")
+            self.address_edit.setFocus()
+            return
+
+        # If discount requires ID proof, image must be uploaded
+        idx = self.discount_combo.currentIndex()
+        if idx > 0:
+            dt = self._discount_types[idx - 1]
+            if bool(dt.get("requires_id_proof", 0)) and not self._id_proof_path:
+                disc_name = dt.get("type_name", "selected discount")
+                QMessageBox.warning(
+                    self, "ID Proof Required",
+                    f"The \"{disc_name}\" discount requires a valid ID image.\n\n"
+                    f"Please upload the patient's ID proof before saving.")
+                return
+
         if not self._show_review():
             return
         super().accept()
@@ -602,66 +621,161 @@ class PatientDialog(QDialog):
         cond_str = conds if conds else "\u2014"
         disc_str = self.discount_combo.currentText()
 
-        ROW = ("<tr>"
-               "<td style='padding:4px 12px 4px 0; color:#7F8C8D;"
-               " white-space:nowrap;'>{}</td>"
-               "<td style='padding:4px 0;'><b>{}</b></td></tr>")
-        SEP = ("<tr><td colspan='2'><hr style='border:none;"
-               " border-top:1px solid #E8F0F1;'></td></tr>")
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Review Patient Details")
+        dlg.setMinimumWidth(480)
+        dlg.setMaximumWidth(540)
+        outer = QVBoxLayout(dlg)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
 
-        rows = [
-            ROW.format("Name",       d["name"]),
-            ROW.format("Sex",        d["sex"]),
-            ROW.format("Phone",      d["phone"]),
-            ROW.format("Email",      d.get("email") or "\u2014"),
-            ROW.format("Address",    d.get("address") or "\u2014"),
-            ROW.format("Civil",      d.get("civil_status") or "\u2014"),
-            ROW.format("Emergency",
-                        d.get("emergency_contact") or "\u2014"),
-            SEP,
-            ROW.format("Blood Type", d.get("blood_type", "Unknown")),
-            ROW.format("Discount",   disc_str),
-            ROW.format("ID Proof",   "Uploaded" if d.get("id_proof_path") else "\u2014"),
-            ROW.format("Conditions", cond_str),
-            ROW.format("Status",     d["status"]),
+        # ── Gradient header ────────────────────────────────────
+        hdr = QFrame()
+        hdr.setFixedHeight(60)
+        hdr.setStyleSheet(
+            "QFrame { background: qlineargradient(x1:0,y1:0,x2:1,y2:0,"
+            " stop:0 #388087, stop:1 #6FB3B8); }")
+        hdr_lay = QHBoxLayout(hdr)
+        hdr_lay.setContentsMargins(24, 0, 24, 0)
+        hdr_col = QVBoxLayout(); hdr_col.setSpacing(2)
+        h_title = QLabel("Review Patient Details")
+        h_title.setStyleSheet(
+            "font-size: 17px; font-weight: bold; color: #FFFFFF;"
+            " background: transparent;")
+        h_sub = QLabel("Please verify all information before saving")
+        h_sub.setStyleSheet(
+            "font-size: 11px; color: rgba(255,255,255,0.8);"
+            " background: transparent;")
+        hdr_col.addWidget(h_title); hdr_col.addWidget(h_sub)
+        hdr_lay.addLayout(hdr_col); hdr_lay.addStretch()
+        outer.addWidget(hdr)
+
+        # ── Content area ───────────────────────────────────────
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setStyleSheet(
+            "QScrollArea { border: none; background: #FAFBFB; }"
+            "QScrollBar:vertical { width: 6px; background: transparent; }"
+            "QScrollBar::handle:vertical { background: #CBD5E0; border-radius: 3px; }")
+        content = QWidget()
+        content.setStyleSheet("background: #FAFBFB;")
+        c_lay = QVBoxLayout(content)
+        c_lay.setContentsMargins(24, 20, 24, 16)
+        c_lay.setSpacing(16)
+
+        def _make_section(title, items):
+            """Build a grouped card with a section label and field rows."""
+            card = QFrame()
+            card.setStyleSheet(
+                "QFrame { background: #FFFFFF; border: 1px solid #E8F0F1;"
+                " border-radius: 10px; }")
+            card_lay = QVBoxLayout(card)
+            card_lay.setContentsMargins(20, 16, 20, 16)
+            card_lay.setSpacing(0)
+
+            sec_lbl = QLabel(title)
+            sec_lbl.setStyleSheet(
+                "font-size: 11px; font-weight: bold; color: #388087;"
+                " text-transform: uppercase; letter-spacing: 1px;"
+                " border: none; margin-bottom: 4px;")
+            card_lay.addWidget(sec_lbl)
+
+            sep = QFrame()
+            sep.setFixedHeight(1)
+            sep.setStyleSheet("background: #E8F0F1; border: none; margin-bottom: 2px;")
+            card_lay.addWidget(sep)
+
+            for label_text, value_text in items:
+                row_w = QWidget()
+                row_w.setStyleSheet("border: none; background: transparent;")
+                row_lay = QHBoxLayout(row_w)
+                row_lay.setContentsMargins(0, 8, 0, 8)
+                row_lay.setSpacing(12)
+
+                lbl = QLabel(label_text)
+                lbl.setFixedWidth(110)
+                lbl.setStyleSheet(
+                    "font-size: 12px; color: #7F8C8D; border: none;"
+                    " background: transparent;")
+                val = QLabel(str(value_text))
+                val.setWordWrap(True)
+                val.setStyleSheet(
+                    "font-size: 13px; font-weight: 600; color: #2C3E50;"
+                    " border: none; background: transparent;")
+                row_lay.addWidget(lbl)
+                row_lay.addWidget(val, 1)
+                card_lay.addWidget(row_w)
+
+            return card
+
+        # Personal Info section
+        personal_items = [
+            ("Full Name", d["name"]),
+            ("Sex", d["sex"]),
+            ("Phone", d["phone"]),
+            ("Email", d.get("email") or "\u2014"),
+            ("Address", d.get("address") or "\u2014"),
+            ("Civil Status", d.get("civil_status") or "\u2014"),
+            ("Emergency", d.get("emergency_contact") or "\u2014"),
+        ]
+        c_lay.addWidget(_make_section("Personal Information", personal_items))
+
+        # Medical & Discount section
+        medical_items = [
+            ("Blood Type", d.get("blood_type", "Unknown")),
+            ("Discount", disc_str),
+            ("ID Proof", "✓  Uploaded" if d.get("id_proof_path") else "\u2014"),
+            ("Conditions", cond_str),
+            ("Status", d["status"]),
         ]
         if d.get("notes", "").strip():
             note_preview = (d["notes"][:80]
                             + ("\u2026" if len(d["notes"]) > 80 else ""))
-            rows.append(ROW.format("Notes", note_preview))
+            medical_items.append(("Notes", note_preview))
+        c_lay.addWidget(_make_section("Medical & Discount", medical_items))
 
-        html = ("<div style='font-size:13px; color:#2C3E50;'>"
-                "<table cellpadding='0' cellspacing='0'>"
-                + "".join(rows)
-                + "</table></div>")
+        c_lay.addStretch()
+        scroll_area.setWidget(content)
+        outer.addWidget(scroll_area, 1)
 
-        dlg = QMessageBox(self)
-        dlg.setWindowTitle("Review Patient Details")
-        dlg.setIcon(QMessageBox.Icon.Question)
-        dlg.setText(
-            "<b style='font-size:15px; color:#388087;'>"
-            "Please review before saving</b>")
-        dlg.setInformativeText(html)
-        confirm_btn = dlg.addButton(
-            "Confirm && Save", QMessageBox.ButtonRole.AcceptRole)
-        back_btn = dlg.addButton(
-            "Go Back", QMessageBox.ButtonRole.RejectRole)
-        confirm_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        # ── Footer buttons ─────────────────────────────────────
+        btn_sep = QFrame()
+        btn_sep.setFixedHeight(1)
+        btn_sep.setStyleSheet("background: #E8F0F1;")
+        outer.addWidget(btn_sep)
+
+        btn_bar = QWidget()
+        btn_bar.setStyleSheet("background: #F6F6F2;")
+        btn_row = QHBoxLayout(btn_bar)
+        btn_row.setContentsMargins(24, 12, 24, 12)
+        btn_row.setSpacing(12)
+        btn_row.addStretch()
+
+        back_btn = QPushButton("Go Back")
+        back_btn.setMinimumHeight(42); back_btn.setMinimumWidth(130)
         back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        confirm_btn.setStyleSheet(
-            "QPushButton { background-color: #388087; color: #FFF;"
-            " border: none; border-radius: 8px; padding: 8px 24px;"
-            " font-size: 13px; font-weight: bold; min-height: 38px; }"
-            " QPushButton:hover { background-color: #2C6A70; }")
         back_btn.setStyleSheet(
-            "QPushButton { background-color: #F6F6F2; color: #2C3E50;"
-            " border: 2px solid #BADFE7; border-radius: 8px;"
-            " padding: 8px 24px; font-size: 13px; font-weight: bold;"
-            " min-height: 38px; }"
-            " QPushButton:hover { background-color: #E8F4F5;"
-            " border-color: #388087; }")
-        dlg.exec()
-        return dlg.clickedButton() == confirm_btn
+            "QPushButton { background: #F8D7DA; color: #C0392B;"
+            " border: none; border-radius: 8px; padding: 8px 24px;"
+            " font-size: 13px; font-weight: bold; }"
+            " QPushButton:hover { background: #F1B0B7; }")
+        back_btn.clicked.connect(dlg.reject)
+
+        confirm_btn = QPushButton("Confirm & Save")
+        confirm_btn.setMinimumHeight(42); confirm_btn.setMinimumWidth(150)
+        confirm_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        confirm_btn.setStyleSheet(
+            "QPushButton { background: #388087; color: #FFFFFF;"
+            " border: none; border-radius: 8px; padding: 8px 24px;"
+            " font-size: 13px; font-weight: bold; }"
+            " QPushButton:hover { background: #2C6A70; }")
+        confirm_btn.clicked.connect(dlg.accept)
+
+        btn_row.addWidget(back_btn)
+        btn_row.addWidget(confirm_btn)
+        outer.addWidget(btn_bar)
+
+        return dlg.exec() == QDialog.DialogCode.Accepted
 
     # ── Data out ───────────────────────────────────────────────────
     def get_data(self) -> dict:
@@ -854,10 +968,10 @@ class PatientProfileDialog(QDialog):
         close_btn.clicked.connect(self.accept)
         close_btn.setStyleSheet("""
             QPushButton {
-                background-color: #E8F0F1; color: #2C3E50; border: none;
+                background-color: #388087; color: #FFFFFF; border: none;
                 border-radius: 8px; font-weight: bold; font-size: 14px;
             }
-            QPushButton:hover { background-color: #D0E5E8; }
+            QPushButton:hover { background-color: #2C6A70; }
         """)
         lay.addWidget(close_btn, alignment=Qt.AlignmentFlag.AlignRight)
 

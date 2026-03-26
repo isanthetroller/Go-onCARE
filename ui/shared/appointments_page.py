@@ -430,6 +430,18 @@ class AppointmentsPage(QWidget):
         patient = appt.get("patient_name", "")
         if not self._backend or not appt_id:
             return
+
+        # Check if the patient's discount type requires ID proof
+        missing_type = self._backend.check_appointment_id_proof(appt_id)
+        if missing_type:
+            QMessageBox.warning(
+                self, "ID Proof Required",
+                f"Cannot confirm appointment for {patient}.\n\n"
+                f"This patient has a \"{missing_type}\" discount which requires "
+                f"a valid ID image.\n\n"
+                f"Please upload the patient's ID proof in the Patient record first.")
+            return
+
         reply = QMessageBox.question(
             self, "Confirm Appointment",
             f"Confirm appointment for {patient}?",

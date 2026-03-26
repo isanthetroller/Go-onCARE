@@ -88,35 +88,39 @@ class HREmployeesPage(QWidget):
             else:
                 lbl.setText(str(val))
 
-        # Department payroll
-        dept_payroll = self._backend.get_payroll_summary()
-        self._dept_table.setRowCount(len(dept_payroll))
-        for r, d in enumerate(dept_payroll):
-            self._dept_table.setItem(r, 0, QTableWidgetItem(d.get("department_name", "")))
-            self._dept_table.setItem(r, 1, QTableWidgetItem(str(d.get("headcount", 0))))
-            total_sal = float(d.get("total_salary", 0) or 0)
-            avg_sal = float(d.get("avg_salary", 0) or 0)
-            self._dept_table.setItem(r, 2, QTableWidgetItem(f"₱{total_sal:,.0f}"))
-            self._dept_table.setItem(r, 3, QTableWidgetItem(f"₱{avg_sal:,.0f}"))
+        # Department payroll (only built for HR)
+        if hasattr(self, "_dept_table"):
+            dept_payroll = self._backend.get_payroll_summary()
+            self._dept_table.setRowCount(len(dept_payroll))
+            for r, d in enumerate(dept_payroll):
+                self._dept_table.setItem(r, 0, QTableWidgetItem(d.get("department_name", "")))
+                self._dept_table.setItem(r, 1, QTableWidgetItem(str(d.get("headcount", 0))))
+                total_sal = float(d.get("total_salary", 0) or 0)
+                avg_sal = float(d.get("avg_salary", 0) or 0)
+                self._dept_table.setItem(r, 2, QTableWidgetItem(f"₱{total_sal:,.0f}"))
+                self._dept_table.setItem(r, 3, QTableWidgetItem(f"₱{avg_sal:,.0f}"))
 
-        # Leave tracker
-        leave_emps = self._backend.get_leave_employees()
-        self._leave_table.setRowCount(len(leave_emps))
-        for r, le in enumerate(leave_emps):
-            self._leave_table.setItem(r, 0, QTableWidgetItem(le.get("full_name", "")))
-            self._leave_table.setItem(r, 1, QTableWidgetItem(le.get("department_name", "")))
-            self._leave_table.setItem(r, 2, QTableWidgetItem(str(le.get("leave_from", "") or "—")))
-            self._leave_table.setItem(r, 3, QTableWidgetItem(str(le.get("leave_until", "") or "—")))
+        # Leave tracker (only built for HR)
+        if hasattr(self, "_leave_table"):
+            leave_emps = self._backend.get_leave_employees()
+            self._leave_table.setRowCount(len(leave_emps))
+            for r, le in enumerate(leave_emps):
+                self._leave_table.setItem(r, 0, QTableWidgetItem(le.get("full_name", "")))
+                self._leave_table.setItem(r, 1, QTableWidgetItem(le.get("department_name", "")))
+                self._leave_table.setItem(r, 2, QTableWidgetItem(str(le.get("leave_from", "") or "—")))
+                self._leave_table.setItem(r, 3, QTableWidgetItem(str(le.get("leave_until", "") or "—")))
 
-        # Employment type counts
-        type_counts = self._backend.get_employment_type_counts()
-        self._type_table.setRowCount(len(type_counts))
-        for r, tc in enumerate(type_counts):
-            self._type_table.setItem(r, 0, QTableWidgetItem(tc.get("employment_type", "")))
-            self._type_table.setItem(r, 1, QTableWidgetItem(str(tc.get("cnt", 0))))
+        # Employment type counts (only built for HR)
+        if hasattr(self, "_type_table"):
+            type_counts = self._backend.get_employment_type_counts()
+            self._type_table.setRowCount(len(type_counts))
+            for r, tc in enumerate(type_counts):
+                self._type_table.setItem(r, 0, QTableWidgetItem(tc.get("employment_type", "")))
+                self._type_table.setItem(r, 1, QTableWidgetItem(str(tc.get("cnt", 0))))
 
-        # Leave requests
-        self._load_leave_requests()
+        # Leave requests (only built for HR)
+        if hasattr(self, "_lr_table"):
+            self._load_leave_requests()
 
         # Attendance tracking
         if hasattr(self, "_attendance_table"):
@@ -146,10 +150,16 @@ class HREmployeesPage(QWidget):
         lay.setSpacing(14)
 
         # ── Banner ────────────────────────────────────────────────
-        banner = make_banner(
-            "HR Employee Management",
-            "Comprehensive staff management \u2013 salary, leave, performance",
-            btn_text="\uff0b  Add Employee", btn_slot=self._on_add)
+        if self._role == "Admin":
+            banner = make_banner(
+                "Admin Employee Management",
+                "Manage staff, doctors, and personnel",
+                btn_text="\uff0b  Add Employee", btn_slot=self._on_add)
+        else:
+            banner = make_banner(
+                "HR Employee Management",
+                "Comprehensive staff management \u2013 salary, leave, performance",
+                btn_text="\uff0b  Add Employee", btn_slot=self._on_add)
         lay.addWidget(banner)
 
         # ── Tab row ───────────────────────────────────────────────
@@ -159,14 +169,20 @@ class HREmployeesPage(QWidget):
         tab_row.setSpacing(8)
         tab_row.setContentsMargins(0, 4, 0, 0)
 
-        tab_labels = ["Employees", "Attendance Logs", "Leave Management", "Payroll & Staffing"]
-        self._stack.addWidget(self._build_employees_tab())
-        self._stack.addWidget(self._build_attendance_tab())
-        self._stack.addWidget(self._build_leave_tab())
-        self._stack.addWidget(self._build_payroll_tab())
         if self._role == "Admin":
+            # Admin: only Employees, Attendance Logs, User Accounts
+            tab_labels = ["Employees", "Attendance Logs"]
+            self._stack.addWidget(self._build_employees_tab())
+            self._stack.addWidget(self._build_attendance_tab())
             tab_labels.append("User Accounts")
             self._stack.addWidget(self._build_accounts_tab())
+        else:
+            # HR: full set of tabs
+            tab_labels = ["Employees", "Attendance Logs", "Leave Management", "Payroll & Staffing"]
+            self._stack.addWidget(self._build_employees_tab())
+            self._stack.addWidget(self._build_attendance_tab())
+            self._stack.addWidget(self._build_leave_tab())
+            self._stack.addWidget(self._build_payroll_tab())
 
         for i, label in enumerate(tab_labels):
             btn = QPushButton(label)

@@ -155,7 +155,7 @@ class ClinicalPage(QWidget):
         status_row.addWidget(wait_card)
         lay.addLayout(status_row)
 
-        # Toolbar: call next, doctor filter
+        # Toolbar: call next (left), doctor filter (right)
         toolbar = QHBoxLayout(); toolbar.setSpacing(10)
 
         self._call_btn = QPushButton("Start Triage" if self._role == "Nurse" else "Call Next")
@@ -408,7 +408,7 @@ class ClinicalPage(QWidget):
         hdr.setFixedHeight(56)
         hdr_lay = QHBoxLayout(hdr)
         hdr_lay.setContentsMargins(20, 0, 20, 0)
-        hdr_lbl = QLabel(f"\u2764  Vitals \u2013 {patient}")
+        hdr_lbl = QLabel(f"Vitals \u2013 {patient}")
         hdr_lbl.setStyleSheet("font-size: 16px; font-weight: bold; color: #FFFFFF; border: none;")
         hdr_lay.addWidget(hdr_lbl)
         main_lay.addWidget(hdr)
@@ -441,7 +441,7 @@ class ClinicalPage(QWidget):
         bp_row.addWidget(bp_edit, 1)
         bp_unit = QLabel("mmHg"); bp_unit.setStyleSheet(_UNIT_SS)
         bp_row.addWidget(bp_unit)
-        bp_lbl = QLabel("Blood Pressure"); bp_lbl.setStyleSheet(_LABEL_SS)
+        bp_lbl = QLabel("Blood Pressure <span style='color:#E74C3C;'>*</span>"); bp_lbl.setTextFormat(Qt.TextFormat.RichText); bp_lbl.setStyleSheet(_LABEL_SS)
         fl.addRow(bp_lbl, bp_row)
 
         # Height with Feet/CM toggle
@@ -462,17 +462,32 @@ class ClinicalPage(QWidget):
         _height_is_feet = [False]  # mutable flag
 
         def _toggle_height_unit(checked):
+            current_text = height_edit.text().strip()
+            current_val = None
+            if current_text:
+                try:
+                    current_val = float(current_text)
+                except ValueError:
+                    pass
+
             if checked:
                 height_unit_btn.setText("Feet")
                 height_edit.setPlaceholderText("e.g. 5.6  (feet)")
                 height_edit.setValidator(QDoubleValidator(0.0, 10.0, 2))
                 _height_is_feet[0] = True
+                # Convert CM → Feet
+                if current_val is not None and current_val > 0:
+                    converted = round(current_val / 30.48, 2)
+                    height_edit.setText(str(converted))
             else:
                 height_unit_btn.setText("CM")
                 height_edit.setPlaceholderText("e.g. 165.5")
                 height_edit.setValidator(QDoubleValidator(0.0, 999.9, 1))
                 _height_is_feet[0] = False
-            height_edit.clear()
+                # Convert Feet → CM
+                if current_val is not None and current_val > 0:
+                    converted = round(current_val * 30.48, 1)
+                    height_edit.setText(str(converted))
 
         height_unit_btn.toggled.connect(_toggle_height_unit)
         height_edit.setPlaceholderText("e.g. 165.5")
@@ -544,7 +559,7 @@ class ClinicalPage(QWidget):
             if nn:
                 notes_edit.setPlainText(nn)
 
-        hint = QLabel("All vitals are optional. Fill in what\u2019s available.")
+        hint = QLabel("Blood pressure is required. Other vitals are optional.")
         hint.setStyleSheet("font-size: 11px; color: #7F8C8D; font-style: italic;")
         fl.addRow(hint)
 
@@ -554,16 +569,20 @@ class ClinicalPage(QWidget):
         btn_frame = QFrame()
         btn_frame.setStyleSheet("background: #F0F7F8; border-top: 1px solid #BADFE7;")
         btn_row = QHBoxLayout(btn_frame)
-        btn_row.setContentsMargins(20, 12, 20, 12); btn_row.setSpacing(10); btn_row.addStretch()
-        cancel_btn = QPushButton("Cancel"); cancel_btn.setMinimumHeight(36)
+        btn_row.setContentsMargins(20, 12, 20, 12); btn_row.setSpacing(12); btn_row.addStretch()
+        cancel_btn = QPushButton("Cancel"); cancel_btn.setMinimumHeight(42)
         cancel_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        cancel_btn.setObjectName("dialogCancelBtn")
+        cancel_btn.setStyleSheet(
+            "QPushButton { background: #F8D7DA; color: #C0392B; font-size: 13px;"
+            " font-weight: bold; border-radius: 8px; padding: 8px 24px; border: none; }"
+            "QPushButton:hover { background: #F1B0B7; }")
         cancel_btn.clicked.connect(dlg.reject)
-        save_btn = QPushButton("Save Vitals"); save_btn.setMinimumHeight(36)
-        save_btn.setIcon(get_icon("save_vitals"))
-        save_btn.setIconSize(QSize(18, 18))
+        save_btn = QPushButton("Save Vitals"); save_btn.setMinimumHeight(42)
         save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        save_btn.setObjectName("dialogSaveBtn")
+        save_btn.setStyleSheet(
+            "QPushButton { background: #388087; color: white; font-size: 13px;"
+            " font-weight: bold; border-radius: 8px; padding: 8px 24px; border: none; }"
+            "QPushButton:hover { background: #2C6A70; }")
         save_btn.clicked.connect(dlg.accept)
         btn_row.addWidget(cancel_btn); btn_row.addWidget(save_btn)
         main_lay.addWidget(btn_frame)
@@ -574,6 +593,36 @@ class ClinicalPage(QWidget):
             wt_text = weight_edit.text().strip()
             temp_text = temp_edit.text().strip()
             notes = notes_edit.toPlainText().strip()
+
+            # Blood pressure is REQUIRED and must be formatted as systolic/diastolic
+            if not bp:
+                QMessageBox.warning(self, "Validation",
+                    "Blood Pressure is required.\nPlease enter a value like 120/80.")
+                return
+            import re
+            bp_match = re.match(r'^(\d{2,3})/(\d{2,3})$', bp)
+            if not bp_match:
+                QMessageBox.warning(self, "Validation",
+                    "Blood Pressure must be in the format systolic/diastolic.\n"
+                    "Example: 120/80")
+                return
+            systolic = int(bp_match.group(1))
+            diastolic = int(bp_match.group(2))
+            if systolic < 50 or systolic > 300:
+                QMessageBox.warning(self, "Validation",
+                    f"Systolic pressure ({systolic}) is out of range.\n"
+                    "Expected: 50 – 300 mmHg.")
+                return
+            if diastolic < 20 or diastolic > 200:
+                QMessageBox.warning(self, "Validation",
+                    f"Diastolic pressure ({diastolic}) is out of range.\n"
+                    "Expected: 20 – 200 mmHg.")
+                return
+            if diastolic >= systolic:
+                QMessageBox.warning(self, "Validation",
+                    "Diastolic pressure must be lower than systolic.\n"
+                    f"You entered: {systolic}/{diastolic}")
+                return
 
             # Convert height from feet to cm if needed
             ht = None
@@ -617,10 +666,7 @@ class ClinicalPage(QWidget):
                         "Temperature must be a number.")
                     return
 
-            if not bp and ht is None and wt is None and temp is None and not notes:
-                QMessageBox.warning(self, "Validation",
-                    "Please enter at least one vital sign or a note.")
-                return
+            # BP is already validated as required above
 
             ok = self._backend.record_vitals(qid, bp, ht, wt, temp, notes)
             if ok:
